@@ -9,6 +9,7 @@ pub struct ShotPlan {
     pub path: PathBuf,
     pub focus: Option<String>,
     pub entry: Option<String>,
+    pub settings: bool,
 }
 
 pub struct Shot {

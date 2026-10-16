@@ -7,5 +7,7 @@ pub mod minimap;
 pub mod panels;
 pub mod reach;
 pub mod search;
+pub mod settings_window;
 pub mod shot;
 pub mod style;
+pub mod view;

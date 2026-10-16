@@ -17,13 +17,18 @@ cargo run --release -p srcrelief                           # start screen with "
 Point it at the project folder. Every module under it is discovered and linked by itself:
 
 - **Gradle**: modules from `settings.gradle(.kts)`, links from `project(':x')` dependencies (test-scope links are
-  kept apart and hidden by default, toggle *test deps* in the status bar).
+  kept apart and hidden by default, tick **View ▸ Test dependencies**).
 - **Go**: modules from `go.work`, or every `go.mod` under the folder; a module depends on another when its
   `require` names it.
 - Other build roots found inside (`package.json`, `pom.xml`, …) are listed in the status bar as not indexed.
 
 Nothing is written into the project. The index lives in the user cache folder
-(`~/.cache/srcrelief/<hash>.relief` on Linux) and is rebuilt when sources or detection rules change.
+(`~/.cache/srcrelief/<hash>.relief` on Linux) and is rebuilt when sources, detection rules or index settings
+change.
+
+The menu bar sits at the top left: **File** (Open Folder… `Ctrl+O`, Open Recent, Re-index, Project Settings…
+`Ctrl+,`, Close Project) and **View** (what to show, one item per filter, the legend, Jump to… `Ctrl+K`). What you
+tick in View is remembered for each project.
 
 ### Navigating
 
@@ -49,24 +54,25 @@ enough to read.
   top row, alphabetically, so a project looks the same from one day to the next. Everything else layers below by
   dependency; red arrows point upward (a layering violation), amber ones join two boxes of the same layer.
 - **Box colours by kind:** interface (teal), class/struct (blue), enum/record (violet), function/method (grey),
-  constructor (dim blue). A legend sits above the minimap.
+  constructor (dim blue). A legend sits in the bottom-left corner; close it with its × or **View ▸ Legend**.
 - **Implements / inherits** arrows are dotted with a hollow triangle at the interface, like UML.
 - **Constructors live inside their type.** A Go `func NewX(...) *X` is shown inside `X`, not as a box of its own.
 - **Dependency injection is set aside.** Code recognised as wiring (Google Wire's generated injectors and provider
-  sets, Dagger components/modules) is hidden with its arrows, so it never changes the layering. Tick **wiring** in
-  the status bar to show it muted, with faint dotted arrows. Highlighting an entry point still follows wiring.
+  sets, Dagger components/modules) is hidden with its arrows, so it never changes the layering. Tick **View ▸ Wiring**
+  to show it muted, with faint dotted arrows. Highlighting an entry point still follows wiring.
 - **Architecture first.** Only architectural types are drawn by default: handlers, services, repositories,
   interfaces, entry-point owners, what the DI framework assembles (Wire/Dagger, Spring `@Component`/`@Service`,
   `@Inject` constructors) and types used from two or more other packages. Data types (structs without methods,
   records, enums, getter/setter classes, `*Request`/`*Response`/models), nested types and helpers in
-  `util`/`common` packages are *details*: an open box shows `+ N details`; click it or tick **details** to show them.
+  `util`/`common` packages are *details*: an open box shows `+ N details`; click it or tick **View ▸ Details** to show them.
   The `significance` pack holds these rules.
 - **Implementations live inside their interface.** At first glance you see the interface; open it to see the
   structs or classes that implement it.
 - **Error and exception types are set aside** (Java `*Exception` and subclasses of Exception/Throwable/Error, Go
-  types with an `Error()` method or named `*Error`); tick **errors** to show them in their own row.
+  types with an `Error()` method or named `*Error`); tick **View ▸ Errors** to show them in their own row.
 - **Test code is out:** test sources, test helpers (files importing `testing`/testify or JUnit/Mockito, folders such
-  as `testutil`/`testdata`) and test mains are not drawn or listed. Tick **test deps** to see test-only dependencies.
+  as `testutil`/`testdata`, globs under `[test] paths`) and test mains are not drawn or listed. Tick **View ▸ Tests**
+  to draw them and **View ▸ Test dependencies** to see test-only dependencies.
 
 ### Index from the command line
 
@@ -79,15 +85,22 @@ Prints modules, their links, entry points grouped as in the viewer, the call-res
 ### Screenshots without a person at the window
 
 ```sh
-srcrelief <dir> --screenshot out.png [--focus NAME] [--entry LABEL]
+srcrelief <dir> --screenshot out.png [--focus NAME] [--entry LABEL] [--settings]
 ```
 
-Renders one frame after zooming to the first node matching `NAME` and/or selecting an entry point, writes a PNG
-and exits.
+Renders one frame after zooming to the first node matching `NAME`, selecting an entry point and/or opening the
+settings window, writes a PNG and exits.
 
 ## Project settings (optional)
 
-A `srcrelief.toml` at the project root, or passed with `--config`:
+Settings come from four layers; a later one overrides an earlier one:
+
+1. built-in defaults (tests, test deps, details, errors and wiring hidden; build output, `vendor`, dot folders left out),
+2. your defaults for every project: `~/.config/srcrelief/settings.toml`,
+3. the project's `srcrelief.toml` (or `--config FILE`), shared with the team,
+4. your settings for this project: `~/.config/srcrelief/projects/<hash>.toml`, written by the viewer.
+
+All four files take the same keys:
 
 ```toml
 name = "Sample"
@@ -98,10 +111,41 @@ index = "/somewhere/else.relief"
 disable = ["libgdx"]
 dirs = ["../my-rule-packs"]
 
+[test]
+paths = ["**/it/**"]           # also test code, on top of the packs' test detection
+
 [[category]]
 glob = "**/cmd/migrate/**"
 category = "dev-tool"          # application, dev-tool or test
+
+[[filter]]
+name = "migrations"
+paths = ["**/migrations/**"]   # globs on the file path
+names = ["Migration$"]         # regexes on type and function names
+shown = false                  # default for View ▸ migrations
+
+[view]
+details = true                 # tests, test_deps, details, errors, wiring, legend
+filters = { migrations = true }
+
+[remove]                       # drop entries inherited from an earlier layer
+exclude = ["**/vendor/**"]
+category = []
+test_paths = []
+filter = []
 ```
+
+Single values take the latest layer that sets them. Lists add up across layers; a filter or category with the
+same name or glob replaces the earlier one, and `[remove]` drops one. A file or function matched by any path or
+name of a filter is tagged `filter:<name>`, with its members and any package or module holding nothing else, and
+hidden while the filter is unticked in **View**. Relative paths resolve against the folder of the file that
+names them (the project folder for the two files under `~/.config`).
+
+**File ▸ Project Settings…** shows every value with the layer it comes from. Display values apply at once and land
+in your file for this project; index values (left out, test code, packs, categories, filters) wait for **Apply
+and re-index**. For a value of yours, *reset* falls back to the layer below, *use for all projects* moves it to
+your defaults and *save to srcrelief.toml* moves it to the shared file, keeping that file's comments. The viewer
+writes nothing into the project unless you press that last button.
 
 ## Rule packs
 
@@ -150,7 +194,7 @@ Each rule has exactly one matcher:
 | `name_tag = { kinds, pattern, tag }` | tags on modules, packages, types or members |
 | `query = { language, file, capture, kind, label }` | entry points from a tree-sitter query |
 | `wiring = { file_markers, file_imports, calls, annotations, type_prefixes }` | marks dependency-injection code as wiring |
-| `test_code = { file_imports, dir_names }` | marks test helpers as test code |
+| `test_code = { file_imports, dir_names, paths }` | marks test helpers as test code |
 
 Lifecycles: `once`, `repeating`, `on-event`, `later`, `unknown`. Visual rules (`tag_style`, `frame` with
 `auto_prefix` or `pattern`, `hide_tags`, `fold_tags`, `entry_group`) apply without re-indexing; detection rules

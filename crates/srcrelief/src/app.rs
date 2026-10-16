@@ -5,18 +5,23 @@ use crate::focus::{Focus, FocusMode, History, Mark, UsageIndex, focus};
 use crate::search::SearchIndex;
 use crate::shot::{Shot, ShotPlan, ShotStep};
 use crate::input::{Nav, interpret};
+use crate::settings_window::{self, SettingsForm};
+use crate::view::{layout_options, toggle, view_items};
 use crate::{minimap, style};
-use egui::{Align2, Color32, FontId, Key, Pos2, Sense, Shape, Stroke, StrokeKind};
+use egui::{Align2, Color32, FontId, Key, KeyboardShortcut, Modifiers, Pos2, Sense, Shape, Stroke, StrokeKind};
 use srcrelief_format::*;
-use srcrelief_index::{ProjectConfig, Progress, SettingsPaths, SettingsStore, index_path, index_project, needs_reindex, project_packs};
-use srcrelief_layout::{Direction, LayoutCache, LayoutOptions, Rect};
-use srcrelief_rules::VisualRules;
+use srcrelief_index::{Key as SettingKey, ProjectConfig, Progress, SettingsPaths, SettingsStore, View, index_path, index_project, needs_reindex, project_packs};
+use srcrelief_layout::{Direction, LayoutCache, Rect};
+use srcrelief_rules::{PackSelection, VisualRules, load_packs, user_rules_dir};
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::mpsc::{Receiver, channel};
 use std::time::Instant;
 
 const RECENT_LIMIT: usize = 8;
+const OPEN: KeyboardShortcut = KeyboardShortcut::new(Modifiers::COMMAND, Key::O);
+const SETTINGS: KeyboardShortcut = KeyboardShortcut::new(Modifiers::COMMAND, Key::Comma);
+const JUMP: KeyboardShortcut = KeyboardShortcut::new(Modifiers::COMMAND, Key::K);
 
 enum Msg {
     Progress(Progress),
@@ -25,7 +30,7 @@ enum Msg {
 
 enum State {
     Start { error: Option<String> },
-    Indexing { dir: PathBuf, visual: VisualRules, rx: Receiver<Msg>, stage: String, started: Instant },
+    Indexing { dir: PathBuf, visual: VisualRules, settings: Box<SettingsStore>, packs: Vec<String>, rx: Receiver<Msg>, stage: String, started: Instant },
     Open(Box<Project>),
 }
 
@@ -75,13 +80,15 @@ impl ReliefApp {
         self.recent.insert(0, dir.clone());
         self.recent.truncate(RECENT_LIMIT);
         save_recent(&self.recent);
-        let prepared = (|| -> anyhow::Result<(ProjectConfig, srcrelief_rules::Packs, PathBuf)> {
-            let cfg = SettingsStore::load(SettingsPaths::new(&dir, self.config.as_deref()))?.config();
+        let prepared = (|| -> anyhow::Result<(SettingsStore, ProjectConfig, srcrelief_rules::Packs, PathBuf, Vec<String>)> {
+            let settings = SettingsStore::load(SettingsPaths::new(&dir, self.config.as_deref()))?;
+            let cfg = settings.config();
             let packs = project_packs(&dir, &cfg)?;
             let path = index_path(&dir, &cfg);
-            Ok((cfg, packs, path))
+            let available = load_packs(Some(&dir), user_rules_dir().as_deref(), &PackSelection { extra_dirs: cfg.packs.extra_dirs.clone(), ..Default::default() })?;
+            Ok((settings, cfg, packs, path, available.names().into_iter().map(String::from).collect()))
         })();
-        let (cfg, packs, path) = match prepared {
+        let (settings, cfg, packs, path, available) = match prepared {
             Ok(p) => p,
             Err(e) => {
                 self.state = State::Start { error: Some(format!("{e:#}")) };
@@ -90,7 +97,7 @@ impl ReliefApp {
         };
         let visual = packs.visual();
         if !needs_reindex(&dir, &path, &cfg, &packs) {
-            self.state = match Project::open(dir, &path, visual) {
+            self.state = match Project::open(dir, &path, visual, settings, available) {
                 Ok(p) => State::Open(Box::new(p)),
                 Err(e) => State::Start { error: Some(e) },
             };
@@ -105,11 +112,80 @@ impl ReliefApp {
             });
             let _ = tx.send(Msg::Done(result.map(|o| o.path).map_err(|e| format!("{e:#}"))));
         });
-        self.state = State::Indexing { dir, visual, rx, stage: "Starting".into(), started: Instant::now() };
+        self.state = State::Indexing { dir, visual, settings: Box::new(settings), packs: available, rx, stage: "Starting".into(), started: Instant::now() };
+    }
+
+    fn file_menu(&self, ui: &mut egui::Ui, project: bool) -> Option<Action> {
+        let mut action = None;
+        let shortcut = |s: &KeyboardShortcut| ui.ctx().format_shortcut(s);
+        let (open, settings) = (shortcut(&OPEN), shortcut(&SETTINGS));
+        ui.menu_button("File", |ui| {
+            if ui.add(egui::Button::new("Open Folder…").shortcut_text(open)).clicked() {
+                action = Some(Action::OpenFolder);
+            }
+            ui.add_enabled_ui(!self.recent.is_empty(), |ui| {
+                ui.menu_button("Open Recent", |ui| {
+                    for r in &self.recent {
+                        if ui.button(r.display().to_string()).clicked() {
+                            action = Some(Action::OpenRecent(r.clone()));
+                        }
+                    }
+                });
+            });
+            if project {
+                ui.separator();
+                if ui.button("Re-index").clicked() {
+                    action = Some(Action::Reindex);
+                }
+                if ui.add(egui::Button::new("Project Settings…").shortcut_text(settings)).clicked() {
+                    action = Some(Action::Settings);
+                }
+                ui.separator();
+                if ui.button("Close Project").clicked() {
+                    action = Some(Action::Close);
+                }
+            }
+        });
+        action
+    }
+
+    fn act(&mut self, action: Action) {
+        match action {
+            Action::OpenFolder => {
+                if let Some(d) = rfd::FileDialog::new().pick_folder() {
+                    self.open(d);
+                }
+            }
+            Action::OpenRecent(d) => self.open(d),
+            Action::Reindex => {
+                if let State::Open(p) = &self.state {
+                    let dir = p.dir.clone();
+                    let _ = std::fs::remove_file(&p.index_path);
+                    self.open(dir);
+                }
+            }
+            Action::Close => self.state = State::Start { error: None },
+            Action::Settings => {
+                if let State::Open(p) = &mut self.state {
+                    p.settings_open = true;
+                }
+            }
+        }
     }
 
     fn start_screen(&mut self, ui: &mut egui::Ui, error: Option<String>) {
         let mut chosen: Option<PathBuf> = None;
+        let mut action = None;
+        if ui.input_mut(|i| i.consume_shortcut(&OPEN)) {
+            action = Some(Action::OpenFolder);
+        }
+        egui::Panel::top("top").show(ui, |ui| {
+            egui::MenuBar::new().ui(ui, |ui| {
+                if let Some(a) = self.file_menu(ui, false) {
+                    action = Some(a);
+                }
+            });
+        });
         egui::CentralPanel::default().show(ui, |ui| {
             ui.add_space(80.0);
             ui.vertical_centered(|ui| {
@@ -136,6 +212,8 @@ impl ReliefApp {
         });
         if let Some(d) = chosen {
             self.open(d);
+        } else if let Some(a) = action {
+            self.act(a);
         }
     }
 }
@@ -150,7 +228,7 @@ impl eframe::App for ReliefApp {
                     self.state = State::Start { error };
                 }
             }
-            State::Indexing { dir, visual, rx, mut stage, started } => {
+            State::Indexing { dir, visual, settings, packs, rx, mut stage, started } => {
                 let mut done = None;
                 while let Ok(msg) = rx.try_recv() {
                     match msg {
@@ -160,7 +238,7 @@ impl eframe::App for ReliefApp {
                 }
                 match done {
                     Some(Ok(path)) => {
-                        self.state = match Project::open(dir, &path, visual) {
+                        self.state = match Project::open(dir, &path, visual, *settings, packs) {
                             Ok(p) => State::Open(Box::new(p)),
                             Err(e) => State::Start { error: Some(e) },
                         }
@@ -175,12 +253,19 @@ impl eframe::App for ReliefApp {
                             });
                         });
                         ui.ctx().request_repaint_after(std::time::Duration::from_millis(100));
-                        self.state = State::Indexing { dir, visual, rx, stage, started };
+                        self.state = State::Indexing { dir, visual, settings, packs, rx, stage, started };
                     }
                 }
             }
             State::Open(mut project) => {
-                let action = project.ui(ui);
+                let menu = egui::Panel::top("top").show(ui, |ui| egui::MenuBar::new().ui(ui, |ui| {
+                    let file = self.file_menu(ui, true);
+                    project.view_menu(ui);
+                    ui.separator();
+                    project.breadcrumb(ui);
+                    file
+                }).inner).inner;
+                let action = project.ui(ui).or(menu);
                 if let Some(shot) = &mut self.shot {
                     match shot.step(project.target.is_some()) {
                         ShotStep::Setup => project.apply_plan(&shot.plan),
@@ -191,21 +276,8 @@ impl eframe::App for ReliefApp {
                     ui.ctx().request_repaint();
                 }
                 self.state = State::Open(project);
-                match action {
-                    Some(Action::OpenOther) => {
-                        if let Some(d) = rfd::FileDialog::new().pick_folder() {
-                            self.open(d);
-                        }
-                    }
-                    Some(Action::Reindex(dir)) => {
-                        let path = match &self.state {
-                            State::Open(p) => p.index_path.clone(),
-                            _ => return,
-                        };
-                        let _ = std::fs::remove_file(&path);
-                        self.open(dir);
-                    }
-                    None => {}
+                if let Some(a) = action {
+                    self.act(a);
                 }
             }
         }
@@ -213,8 +285,11 @@ impl eframe::App for ReliefApp {
 }
 
 enum Action {
-    OpenOther,
-    Reindex(PathBuf),
+    OpenFolder,
+    OpenRecent(PathBuf),
+    Reindex,
+    Settings,
+    Close,
 }
 
 struct Totals {
@@ -253,7 +328,10 @@ struct Project {
     search_text: String,
     search_open: bool,
     search_hits: Vec<NodeId>,
-    include_test_edges: bool,
+    settings: SettingsStore,
+    packs: Vec<String>,
+    settings_open: bool,
+    form: SettingsForm,
     app_counts: HashMap<NodeId, usize>,
     totals: Totals,
     scene_ms: f32,
@@ -273,6 +351,7 @@ fn pos(p: [f32; 2]) -> Pos2 {
 }
 
 const LIST_LIMIT: usize = 60;
+const LEGEND_ROW: f32 = 14.0;
 
 fn chip_rect(r: Rect) -> Rect {
     Rect::new(r.right() - 100.0, r.y + 6.0, 92.0, 18.0)
@@ -299,7 +378,7 @@ fn lifecycle_badge(l: Lifecycle) -> &'static str {
 }
 
 impl Project {
-    fn open(dir: PathBuf, path: &Path, visual: VisualRules) -> Result<Project, String> {
+    fn open(dir: PathBuf, path: &Path, visual: VisualRules, settings: SettingsStore, packs: Vec<String>) -> Result<Project, String> {
         let file = ReliefFile::open(path).map_err(|e| format!("{e}"))?;
         let g = file.graph();
         let groups = group_entries(g, &visual);
@@ -333,7 +412,7 @@ impl Project {
                 _ => {}
             }
         }
-        let cache = LayoutCache::new(visual.frames.clone(), LayoutOptions::default());
+        let cache = LayoutCache::new(visual.frames.clone(), layout_options(settings.settings(), &visual));
         Ok(Project {
             dir,
             index_path: path.to_path_buf(),
@@ -360,7 +439,10 @@ impl Project {
             search_text: String::new(),
             search_open: false,
             search_hits: Vec::new(),
-            include_test_edges: false,
+            settings,
+            packs,
+            settings_open: false,
+            form: SettingsForm::default(),
             app_counts,
             totals,
             scene_ms: 0.0,
@@ -387,6 +469,42 @@ impl Project {
         if let Some(n) = focus {
             self.selected = Some(n);
             self.fly_to(n);
+        }
+        self.settings_open |= plan.settings;
+    }
+
+    fn set_display(&mut self, key: &SettingKey, on: bool) {
+        toggle(&mut self.settings, key, on);
+        self.apply_display();
+    }
+
+    fn apply_display(&mut self) {
+        self.cache.set_options(layout_options(self.settings.settings(), &self.visual));
+        self.form.error = self.settings.save_view().err().map(|e| format!("{e:#}"));
+    }
+
+    fn view_menu(&mut self, ui: &mut egui::Ui) {
+        let jump = ui.ctx().format_shortcut(&JUMP);
+        let mut changed = None;
+        ui.menu_button("View", |ui| {
+            let items = view_items(self.settings.settings());
+            for (i, item) in items.iter().enumerate() {
+                let filter = |k: &SettingKey| matches!(k, SettingKey::FilterShown(_));
+                if (filter(&item.key) && !filter(&items[i - 1].key)) || item.key == SettingKey::View(View::Legend) {
+                    ui.separator();
+                }
+                let mut on = item.checked;
+                if ui.checkbox(&mut on, &item.label).clicked() {
+                    changed = Some((item.key.clone(), on));
+                }
+            }
+            ui.separator();
+            if ui.add(egui::Button::new("Jump to…").shortcut_text(jump)).clicked() {
+                self.search_open = true;
+            }
+        });
+        if let Some((key, on)) = changed {
+            self.set_display(&key, on);
         }
     }
 
@@ -431,8 +549,11 @@ impl Project {
 
     fn ui(&mut self, ui: &mut egui::Ui) -> Option<Action> {
         let mut action = None;
-        if ui.input(|i| i.modifiers.command && i.key_pressed(Key::K)) {
-            self.search_open = true;
+        let (jump, open, settings) = ui.input_mut(|i| (i.consume_shortcut(&JUMP), i.consume_shortcut(&OPEN), i.consume_shortcut(&SETTINGS)));
+        self.search_open |= jump;
+        self.settings_open |= settings;
+        if open {
+            action = Some(Action::OpenFolder);
         }
         if ui.input(|i| i.key_pressed(Key::Escape)) {
             self.search_open = false;
@@ -440,24 +561,6 @@ impl Project {
         if ui.input(|i| i.modifiers.alt && i.key_pressed(Key::ArrowLeft)) {
             self.go_back();
         }
-        egui::Panel::top("top").show(ui, |ui| {
-            ui.horizontal(|ui| {
-                ui.label(egui::RichText::new("SrcRelief").color(style::ACCENT).strong());
-                ui.separator();
-                self.breadcrumb(ui);
-                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                    if ui.button("Open…").clicked() {
-                        action = Some(Action::OpenOther);
-                    }
-                    if ui.button("Re-index").clicked() {
-                        action = Some(Action::Reindex(self.dir.clone()));
-                    }
-                    if ui.button("Jump to… (Ctrl+K)").clicked() {
-                        self.search_open = true;
-                    }
-                });
-            });
-        });
         egui::Panel::bottom("status").show(ui, |ui| self.status_bar(ui));
         egui::Panel::left("entries").resizable(true).default_size(270.0).show(ui, |ui| self.entries_panel(ui));
         egui::Panel::right("inspector").resizable(true).default_size(290.0).show(ui, |ui| self.inspector(ui));
@@ -465,10 +568,22 @@ impl Project {
         if self.search_open {
             self.search_window(ui.ctx());
         }
+        if self.settings_open {
+            let out = settings_window::show(ui.ctx(), &mut self.settings_open, &mut self.settings, &self.packs, &mut self.form);
+            if out.view_changed {
+                self.apply_display();
+            }
+            if out.apply {
+                match self.settings.apply() {
+                    Ok(()) => action = Some(Action::Reindex),
+                    Err(e) => self.form.error = Some(format!("{e:#}")),
+                }
+            }
+        }
         action
     }
 
-    fn breadcrumb(&mut self, ui: &mut egui::Ui) {
+    pub(crate) fn breadcrumb(&mut self, ui: &mut egui::Ui) {
         let g = self.file.graph();
         let deepest = self.scene.deepest_open_at(self.view.center()).unwrap_or(g.root());
         let mut fly = None;
@@ -515,31 +630,6 @@ impl Project {
                 ui.label(egui::RichText::new(format!("not indexed: {}", skipped.join(", "))).color(style::MUTED));
             }
             ui.separator();
-            let mut tests = self.include_test_edges;
-            if ui.checkbox(&mut tests, "test deps").changed() {
-                self.include_test_edges = tests;
-                let mut opts = self.cache.options().clone();
-                opts.include_test_edges = tests;
-                self.cache.set_options(opts);
-            }
-            let mut details = self.cache.options().show_details;
-            if ui.checkbox(&mut details, "details").on_hover_text("show data types, helpers and other non-architectural types").changed() {
-                let mut opts = self.cache.options().clone();
-                opts.show_details = details;
-                self.cache.set_options(opts);
-            }
-            let mut errors = self.cache.options().show_noise;
-            if ui.checkbox(&mut errors, "errors").on_hover_text("show exception and error types").changed() {
-                let mut opts = self.cache.options().clone();
-                opts.show_noise = errors;
-                self.cache.set_options(opts);
-            }
-            let mut wiring = self.cache.options().show_wiring;
-            if ui.checkbox(&mut wiring, "wiring").on_hover_text("show dependency-injection code and its arrows").changed() {
-                let mut opts = self.cache.options().clone();
-                opts.show_wiring = wiring;
-                self.cache.set_options(opts);
-            }
             ui.label(egui::RichText::new(format!("{:.1} ms · {} boxes", self.scene_ms, self.scene.stats.drawn)).color(style::MUTED));
         });
     }
@@ -827,15 +917,19 @@ impl Project {
             }
         }
         let mut clicked_box = None;
+        let mut display = None;
         if resp.clicked() {
             if let Some(p) = resp.interact_pointer_pos() {
                 let root = self.cache.shared(g, g.root());
-                if let Some(w) = minimap::world_at(&root, self.view, [p.x, p.y]) {
+                let (legend, legend_toggle) = self.legend_rects();
+                if legend_toggle.contains(Pos2::new(p.x, p.y)) {
+                    let shown = self.settings.settings().view(View::Legend).value;
+                    display = Some((View::Legend, !shown));
+                } else if legend.contains(Pos2::new(p.x, p.y)) {
+                } else if let Some(w) = minimap::world_at(&root, self.view, [p.x, p.y]) {
                     self.target = Some(Camera { center: w, zoom: self.cam.zoom });
                 } else if self.scene.boxes.iter().any(|b| b.hidden_details > 0 && chip_rect(b.rect).contains([p.x, p.y])) {
-                    let mut opts = self.cache.options().clone();
-                    opts.show_details = true;
-                    self.cache.set_options(opts);
+                    display = Some((View::Details, true));
                 } else {
                     clicked_box = self.scene.box_at([p.x, p.y]);
                 }
@@ -865,6 +959,9 @@ impl Project {
         self.paint_legend(&painter);
         if let Some(n) = clicked_box {
             self.set_focus(n, None, false, true);
+        }
+        if let Some((v, on)) = display {
+            self.set_display(&SettingKey::View(v), on);
         }
         if let Some(n) = fly {
             self.set_focus(n, None, true, true);
@@ -988,16 +1085,33 @@ impl Project {
         }
     }
 
+    fn legend_rects(&self) -> (egui::Rect, egui::Rect) {
+        let corner = Pos2::new(self.view.x + 10.0, self.view.bottom() - 10.0);
+        if !self.settings.settings().view(View::Legend).value {
+            let chip = egui::Rect::from_min_size(corner - egui::vec2(0.0, 22.0), egui::vec2(70.0, 22.0));
+            return (chip, chip);
+        }
+        let opts = self.cache.options();
+        let rows = style::legend(opts.show_wiring, opts.show_noise).len().div_ceil(2);
+        let size = egui::vec2(minimap::area(self.view).w * 2.0 + 8.0, rows as f32 * LEGEND_ROW + 10.0);
+        let rect = egui::Rect::from_min_size(corner - egui::vec2(0.0, size.y), size);
+        (rect, egui::Rect::from_min_size(rect.right_top() - egui::vec2(18.0, 0.0), egui::vec2(18.0, 18.0)))
+    }
+
     fn paint_legend(&self, painter: &egui::Painter) {
+        let (top, close) = self.legend_rects();
+        if !self.settings.settings().view(View::Legend).value {
+            painter.rect_filled(top, 4.0, style::BAR);
+            painter.text(top.center(), Align2::CENTER_CENTER, "Legend ▴", FontId::proportional(11.0), style::MUTED);
+            return;
+        }
         let opts = self.cache.options();
         let items = style::legend(opts.show_wiring, opts.show_noise);
-        let area = minimap::area(self.view);
-        let row = 14.0;
+        let row = LEGEND_ROW;
         let half = items.len().div_ceil(2);
-        let width = area.w * 2.0 + 8.0;
-        let h = half as f32 * row + 10.0;
-        let top = egui::Rect::from_min_size(Pos2::new(area.right() - width, area.y - h - 6.0), egui::vec2(width, h));
+        let width = top.width();
         painter.rect_filled(top, 4.0, style::BAR);
+        painter.text(close.center(), Align2::CENTER_CENTER, "×", FontId::proportional(14.0), style::MUTED);
         for (i, it) in items.iter().enumerate() {
             let col = (i / half) as f32;
             let x = top.min.x + 8.0 + col * (width / 2.0);
