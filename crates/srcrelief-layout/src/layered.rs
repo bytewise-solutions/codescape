@@ -1,7 +1,8 @@
+use crate::fold::{display_children, folded_into};
 use crate::order::{Ordering, minimize};
 use crate::{ChildBox, ContainerLayout, Direction, FrameBox, LaidEdge, LayoutOptions, Rect, box_size};
 use globset::Glob;
-use srcrelief_format::{ArchivedGraph, Category, NodeId, SCOPE_MAIN, SCOPE_TEST, SubKind};
+use srcrelief_format::{ArchivedGraph, Category, NodeFlags, NodeId, SCOPE_MAIN, SCOPE_TEST, SubKind};
 use std::collections::HashSet;
 use srcrelief_rules::FrameRule;
 use std::collections::HashMap;
@@ -44,8 +45,14 @@ fn entry_owners(g: &ArchivedGraph) -> HashSet<NodeId> {
 }
 
 pub fn layout_container(g: &ArchivedGraph, node: NodeId, frames: &[FrameRule], opts: &LayoutOptions) -> ContainerLayout {
-    let base = layout_structure(g, node, frames, &LayoutOptions { show_wiring: false, show_noise: false, ..*opts });
-    if !opts.show_wiring && !opts.show_noise {
+    let mut base = layout_structure(g, node, frames, &LayoutOptions { show_wiring: false, show_noise: false, show_details: false, ..*opts });
+    let other = NodeFlags(opts.hidden.0 & !NodeFlags::DETAIL.0);
+    base.hidden_details = if opts.show_details {
+        0
+    } else {
+        display_children(g, node).into_iter().filter(|&c| g.flags(c).contains(NodeFlags::DETAIL) && !g.flags(c).intersects(other)).count()
+    };
+    if !opts.show_wiring && !opts.show_noise && !opts.show_details {
         return base;
     }
     add_wiring(g, node, base, opts)
@@ -53,9 +60,9 @@ pub fn layout_container(g: &ArchivedGraph, node: NodeId, frames: &[FrameRule], o
 
 fn add_wiring(g: &ArchivedGraph, node: NodeId, mut l: ContainerLayout, opts: &LayoutOptions) -> ContainerLayout {
     let hidden = opts.effective_hidden();
-    let extra: Vec<NodeId> = g
-        .children(node)
-        .filter(|&c| g.flags(c).intersects(srcrelief_format::NodeFlags::WIRING | srcrelief_format::NodeFlags::NOISE) && !g.flags(c).intersects(hidden))
+    let extra: Vec<NodeId> = display_children(g, node)
+        .into_iter()
+        .filter(|&c| g.flags(c).intersects(NodeFlags::WIRING | NodeFlags::NOISE | NodeFlags::DETAIL) && !g.flags(c).intersects(hidden))
         .collect();
     let top = if l.children.is_empty() { HEADER + PAD } else { l.size[1] - PAD + GAP_Y };
     let layer = l.children.iter().map(|c| c.layer + 1).max().unwrap_or(0);
@@ -90,17 +97,25 @@ fn add_wiring(g: &ArchivedGraph, node: NodeId, mut l: ContainerLayout, opts: &La
 
 fn layout_structure(g: &ArchivedGraph, node: NodeId, frames: &[FrameRule], opts: &LayoutOptions) -> ContainerLayout {
     let hidden = opts.effective_hidden();
-    let kids: Vec<NodeId> = g.children(node).filter(|&c| !g.flags(c).intersects(hidden)).collect();
+    let kids: Vec<NodeId> = display_children(g, node).into_iter().filter(|&c| !g.flags(c).intersects(hidden)).collect();
     let n = kids.len();
     if n == 0 {
         return ContainerLayout { size: [0.0, 0.0], header: HEADER, ..Default::default() };
     }
     let owners = entry_owners(g);
     let pinned: Vec<bool> = kids.iter().map(|k| owners.contains(k)).collect();
-    let index: HashMap<NodeId, usize> = kids.iter().enumerate().map(|(i, &k)| (k, i)).collect();
+    let mut index: HashMap<NodeId, usize> = kids.iter().enumerate().map(|(i, &k)| (k, i)).collect();
+    for c in g.children(node) {
+        if let Some(i) = folded_into(g, c).and_then(|i| index.get(&i).copied()) {
+            index.insert(c, i);
+        }
+    }
     let mut edges: Vec<SibEdge> = Vec::new();
     for agg in g.aggregates(node) {
         let (Some(&a), Some(&b)) = (index.get(&agg.a.to_native()), index.get(&agg.b.to_native())) else { continue };
+        if a == b {
+            continue;
+        }
         let test_only = agg.scope_mask & SCOPE_MAIN == 0 && agg.scope_mask & SCOPE_TEST != 0;
         if test_only && !opts.include_test_edges {
             continue;
@@ -317,6 +332,7 @@ fn layout_structure(g: &ArchivedGraph, node: NodeId, frames: &[FrameRule], opts:
         children: (0..n).map(|v| ChildBox { node: kids[v], rect: rects[v], layer: layer[v], pinned: pinned[v] }).collect(),
         edges: laid_edges,
         frames: frame_boxes,
+        hidden_details: 0,
     }
 }
 

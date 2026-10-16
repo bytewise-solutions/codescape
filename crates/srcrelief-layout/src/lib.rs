@@ -1,7 +1,9 @@
+mod fold;
 mod layered;
 pub mod order;
 mod size;
 
+pub use fold::{display_children, display_path, folded_into};
 pub use layered::{count_crossings, layout_container};
 pub use size::box_size;
 
@@ -71,15 +73,17 @@ pub struct LayoutOptions {
     pub hidden: NodeFlags,
     pub show_wiring: bool,
     pub show_noise: bool,
+    pub show_details: bool,
 }
 
 impl Default for LayoutOptions {
     fn default() -> Self {
         LayoutOptions {
             include_test_edges: false,
-            hidden: NodeFlags::EXTERNAL | NodeFlags::MOCK | NodeFlags::TEST | NodeFlags::WIRING | NodeFlags::NOISE,
+            hidden: NodeFlags::EXTERNAL | NodeFlags::MOCK | NodeFlags::TEST | NodeFlags::WIRING | NodeFlags::NOISE | NodeFlags::DETAIL,
             show_wiring: false,
             show_noise: false,
+            show_details: false,
         }
     }
 }
@@ -92,6 +96,9 @@ impl LayoutOptions {
         }
         if self.show_noise {
             keep |= NodeFlags::NOISE.0;
+        }
+        if self.show_details {
+            keep |= NodeFlags::DETAIL.0;
         }
         NodeFlags(self.hidden.0 & !keep)
     }
@@ -132,6 +139,7 @@ pub struct ContainerLayout {
     pub children: Vec<ChildBox>,
     pub edges: Vec<LaidEdge>,
     pub frames: Vec<FrameBox>,
+    pub hidden_details: usize,
 }
 
 impl ContainerLayout {

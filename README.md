@@ -55,6 +55,14 @@ enough to read.
 - **Dependency injection is set aside.** Code recognised as wiring (Google Wire's generated injectors and provider
   sets, Dagger components/modules) is hidden with its arrows, so it never changes the layering. Tick **wiring** in
   the status bar to show it muted, with faint dotted arrows. Highlighting an entry point still follows wiring.
+- **Architecture first.** Only architectural types are drawn by default: handlers, services, repositories,
+  interfaces, entry-point owners, what the DI framework assembles (Wire/Dagger, Spring `@Component`/`@Service`,
+  `@Inject` constructors) and types used from two or more other packages. Data types (structs without methods,
+  records, enums, getter/setter classes, `*Request`/`*Response`/models), nested types and helpers in
+  `util`/`common` packages are *details*: an open box shows `+ N details`; click it or tick **details** to show them.
+  The `significance` pack holds these rules.
+- **Implementations live inside their interface.** At first glance you see the interface; open it to see the
+  structs or classes that implement it.
 - **Error and exception types are set aside** (Java `*Exception` and subclasses of Exception/Throwable/Error, Go
   types with an `Error()` method or named `*Error`); tick **errors** to show them in their own row.
 - **Test code is out:** test sources, test helpers (files importing `testing`/testify or JUnit/Mockito, folders such

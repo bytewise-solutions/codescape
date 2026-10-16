@@ -235,8 +235,41 @@ fn scene_marks_implements_and_kinds() {
     let pkg = g.children(g.root()).start;
     let cam = Camera::fit(world_rect(g, &mut cache, pkg).unwrap(), VIEW);
     let s = scene(g, &mut cache, &cam);
-    let e = s.edges.iter().find(|e| g.name(e.a) == "ViewManagerImpl").expect("implements edge drawn");
-    assert!(e.implements > 0 && e.weight == 0);
-    let kinds: Vec<SubKind> = s.boxes.iter().filter(|b| b.kind == NodeKind::Type).map(|b| b.sub).collect();
-    assert!(kinds.contains(&SubKind::Interface) && kinds.contains(&SubKind::Class));
+    let iface = s.boxes.iter().find(|b| g.name(b.node) == "ViewManager").expect("interface drawn");
+    assert_eq!(iface.sub, SubKind::Interface);
+    let imp = s.boxes.iter().find(|b| g.name(b.node) == "ViewManagerImpl").expect("implementation drawn inside its interface");
+    assert!(imp.rect.x >= iface.rect.x && imp.rect.y >= iface.rect.y && imp.depth > iface.depth);
+    assert!(s.edges.iter().all(|e| g.name(e.a) != "ViewManagerImpl"), "no separate implements arrow once folded");
+}
+
+#[test]
+fn folded_implementations_are_reachable_and_details_counted() {
+    let mut b = GraphBuilder::new("p");
+    let pkg = b.add_node(b.root(), NodeKind::Package, SubKind::None, "billing", Lang::Go);
+    let port = b.add_node(pkg, NodeKind::Type, SubKind::Interface, "Repository", Lang::Go);
+    let adapter = b.add_node(pkg, NodeKind::Type, SubKind::Struct, "pgRepository", Lang::Go);
+    let price = b.add_node(pkg, NodeKind::Type, SubKind::Struct, "Price", Lang::Go);
+    for t in [port, adapter, price] {
+        b.set_span(t, "f", 1, 60);
+    }
+    let get = b.add_node(adapter, NodeKind::Member, SubKind::Method, "Get", Lang::Go);
+    b.set_span(get, "f", 2, 9);
+    b.add_flags(price, NodeFlags::DETAIL);
+    b.add_edge(adapter, port, EdgeKind::Implements, Scope::Main, Confidence::Resolved, EdgeFlags::NONE);
+    let dir = tempfile::tempdir().unwrap();
+    write_graph(&b.finish(), &dir.path().join("g")).unwrap();
+    let f = ReliefFile::open(&dir.path().join("g")).unwrap();
+    let g = f.graph();
+    let mut cache = LayoutCache::new(Vec::new(), LayoutOptions::default());
+    let pkg = g.children(g.root()).start;
+    let adapter = g.children(pkg).find(|&c| g.name(c) == "pgRepository").unwrap();
+    let port = g.children(pkg).find(|&c| g.name(c) == "Repository").unwrap();
+    let inner = world_rect(g, &mut cache, adapter).expect("folded implementation has a place on the map");
+    let outer = world_rect(g, &mut cache, port).unwrap();
+    assert!(inner.x >= outer.x && inner.y >= outer.y && inner.x + inner.w <= outer.x + outer.w + 0.01, "inside its interface");
+    let cam = Camera::fit(world_rect(g, &mut cache, pkg).unwrap(), VIEW);
+    let s = scene(g, &mut cache, &cam);
+    let pkg_box = s.boxes.iter().find(|b| b.node == pkg).unwrap();
+    assert_eq!(pkg_box.hidden_details, 1);
+    assert!(s.boxes.iter().all(|b| b.node != adapter || g.parent(b.node) == Some(pkg)));
 }

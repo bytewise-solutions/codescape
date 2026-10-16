@@ -7,6 +7,7 @@ use srcrelief_format::*;
 use std::collections::{HashMap, HashSet, VecDeque};
 
 pub const FALLBACK_RULE: &str = "builtin.fallback-callback";
+const COMPONENT_ROLES: [&str; 3] = ["layer:handler", "layer:service", "layer:repository"];
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct DetectStats {
@@ -64,6 +65,7 @@ pub fn apply_detection(packs: &Packs, facts: &ProjectFacts, sources: &dyn Fn(&st
     cx.call_rules(b);
     cx.queries(sources, b);
     cx.role_tags(b);
+    cx.significance(b);
     cx.stats.entries = b.entries().len() - before;
     cx.stats
 }
@@ -243,6 +245,103 @@ impl<'a> Ctx<'a> {
                     }
                 }
             }
+        }
+    }
+
+    fn significance(&mut self, b: &mut GraphBuilder) {
+        let Some((annotations, ctor_annotations, accessor, detail_pkgs, hub_min)) = self.packs.rules().find_map(|(_, r)| match r {
+            Rule::Significance { component_annotations, constructor_annotations, accessor_pattern, detail_packages, hub_min_packages } => {
+                Some((component_annotations.clone(), constructor_annotations.clone(), accessor_pattern.clone(), detail_packages.clone(), *hub_min_packages))
+            }
+            _ => None,
+        }) else {
+            return;
+        };
+        let accessor = regex::Regex::new(&accessor).ok().filter(|_| !accessor.is_empty());
+        let detail_pkgs = regex::Regex::new(&detail_pkgs).ok().filter(|_| !detail_pkgs.is_empty());
+        let owner_type = |b: &GraphBuilder, n: NodeId| -> Option<NodeId> {
+            let mut cur = Some(n);
+            while let Some(c) = cur {
+                if b.node_kind(c) == NodeKind::Type {
+                    return Some(c);
+                }
+                cur = b.parent(c);
+            }
+            None
+        };
+        let package_of = |b: &GraphBuilder, n: NodeId| -> Option<NodeId> {
+            let mut cur = Some(n);
+            while let Some(c) = cur {
+                if b.node_kind(c) == NodeKind::Package {
+                    return Some(c);
+                }
+                cur = b.parent(c);
+            }
+            None
+        };
+        let set_aside = NodeFlags::TEST | NodeFlags::MOCK | NodeFlags::WIRING | NodeFlags::NOISE | NodeFlags::EXTERNAL;
+        let mut di_built: HashSet<NodeId> = HashSet::new();
+        let mut users: HashMap<NodeId, HashSet<NodeId>> = HashMap::new();
+        for e in b.edges() {
+            let Some(target_type) = owner_type(b, e.to).or_else(|| (b.node_kind(e.to) == NodeKind::Member).then_some(e.to)) else { continue };
+            if b.flags(e.from).contains(NodeFlags::WIRING) {
+                di_built.insert(target_type);
+                continue;
+            }
+            if let (Some(from_pkg), Some(to_pkg)) = (package_of(b, e.from), package_of(b, e.to)) {
+                if from_pkg != to_pkg {
+                    users.entry(target_type).or_default().insert(from_pkg);
+                }
+            }
+        }
+        let entry_nodes: Vec<NodeId> = b.entries().iter().map(|e| e.node).collect();
+        let mut details: Vec<NodeId> = Vec::new();
+        for file in &self.facts.files {
+            for t in &file.types {
+                let n = t.node;
+                if b.flags(n).intersects(set_aside) {
+                    continue;
+                }
+                let sub = b.sub_kind(n);
+                let fns: Vec<&FnFacts> = file.functions.iter().filter(|f| f.owner == Some(n)).collect();
+                let all_fns: Vec<&FnFacts> = self.facts.files.iter().flat_map(|f| f.functions.iter()).filter(|f| f.owner == Some(n)).collect();
+                let methods: Vec<&str> = b.children(n).iter().filter(|&&c| b.sub_kind(c) == SubKind::Method).map(|&c| b.name(c)).collect();
+                let model = b.has_tag(n, "layer:model");
+                let strong = !model && (COMPONENT_ROLES.iter().any(|r| b.has_tag(n, r))
+                    || sub == SubKind::Interface
+                    || entry_nodes.iter().any(|&e| e == n || b.parent(e) == Some(n))
+                    || t.annotations.iter().any(|a| annotations.contains(&a.name))
+                    || all_fns.iter().chain(fns.iter()).any(|f| f.annotations.iter().any(|a| ctor_annotations.contains(&a.name)))
+                    || di_built.contains(&n));
+                if strong {
+                    continue;
+                }
+                let nested = b.parent(n).is_some_and(|p| b.node_kind(p) == NodeKind::Type);
+                let data_kind = matches!(sub, SubKind::Record | SubKind::Enum | SubKind::Annotation);
+                let no_methods = methods.is_empty();
+                let accessors_only = accessor.as_ref().is_some_and(|re| methods.iter().all(|m| re.is_match(m)));
+                let helper_pkg = detail_pkgs.as_ref().is_some_and(|re| package_of(b, n).is_some_and(|p| re.is_match(b.name(p))));
+                let hub = users.get(&n).is_some_and(|u| u.len() >= hub_min);
+                if model || nested || data_kind || no_methods || accessors_only || helper_pkg || !hub {
+                    details.push(n);
+                }
+            }
+        }
+        for file in &self.facts.files {
+            for f in file.functions.iter().filter(|f| f.owner.is_none()) {
+                let n = f.node;
+                if b.flags(n).intersects(set_aside) || b.parent(n).is_none_or(|p| b.node_kind(p) != NodeKind::Package) {
+                    continue;
+                }
+                let entry = entry_nodes.contains(&n);
+                let shared = users.get(&n).is_some_and(|u| u.len() >= hub_min);
+                if !entry && !shared && !f.is_main {
+                    details.push(n);
+                }
+            }
+        }
+        for n in details {
+            b.add_flags(n, NodeFlags::DETAIL);
         }
     }
 

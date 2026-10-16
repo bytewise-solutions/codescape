@@ -121,7 +121,7 @@ macro_rules! flag_set {
     };
 }
 
-flag_set!(NodeFlags { EXTERNAL = 1, TEST = 2, MOCK = 4, GENERATED = 8, WIRING = 16, NOISE = 32 });
+flag_set!(NodeFlags { EXTERNAL = 1, TEST = 2, MOCK = 4, GENERATED = 8, WIRING = 16, NOISE = 32, DETAIL = 64 });
 flag_set!(EdgeFlags { UNDECLARED = 1, WIRING = 2, NOISE = 4 });
 
 #[derive(Clone, Debug, PartialEq)]

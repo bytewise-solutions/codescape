@@ -212,3 +212,13 @@ fn unsupported_include_setting_is_an_error() {
     let err = ProjectConfig::load(&fixture("go-resolve"), Some(&cfg_path)).unwrap_err().to_string();
     assert!(err.contains("include"), "{err}");
 }
+
+#[test]
+fn index_records_the_indexer_build() {
+    let tmp = tempfile::tempdir().unwrap();
+    let out = index_project(&fixture("go-resolve"), &cfg_with_index(tmp.path()), &|_| {}).unwrap();
+    let file = ReliefFile::open(&out.path).unwrap();
+    let stamp = engine_stamp();
+    assert!(!stamp.is_empty());
+    assert!(file.graph().provenance().any(|(n, _, h)| n == "(engine)" && h == stamp));
+}

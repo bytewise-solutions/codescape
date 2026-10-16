@@ -7,6 +7,11 @@ use std::time::SystemTime;
 
 pub const DETECTION_STAMP: &str = "(detection)";
 pub const INPUTS_STAMP: &str = "(inputs)";
+pub const ENGINE_STAMP: &str = "(engine)";
+
+pub fn engine_stamp() -> &'static str {
+    env!("SRCRELIEF_ENGINE_BUILD")
+}
 
 pub fn cache_path(project_dir: &Path) -> PathBuf {
     let canonical = project_dir.canonicalize().unwrap_or_else(|_| project_dir.to_path_buf());
@@ -49,6 +54,9 @@ pub fn needs_reindex(project_dir: &Path, index: &Path, cfg: &ProjectConfig, pack
     let g = file.graph();
     let current = detection_hash(packs);
     if !g.provenance().any(|(n, _, h)| n == DETECTION_STAMP && h == current) {
+        return true;
+    }
+    if !g.provenance().any(|(n, _, h)| n == ENGINE_STAMP && h == engine_stamp()) {
         return true;
     }
     let dir = project_dir.canonicalize().unwrap_or_else(|_| project_dir.to_path_buf());

@@ -1,7 +1,7 @@
 use crate::camera::{Camera, WRect};
 use crate::focus::{Mark, Marks};
 use srcrelief_format::{ArchivedGraph, NodeFlags, NodeId, NodeKind, SubKind};
-use srcrelief_layout::{ContainerLayout, Direction, LayoutCache, Rect};
+use srcrelief_layout::{ContainerLayout, Direction, LayoutCache, Rect, display_children, display_path};
 use srcrelief_rules::VisualRules;
 
 pub const OPEN_THRESHOLD_PX: f32 = 220.0;
@@ -21,6 +21,7 @@ pub struct SceneBox {
     pub mark: Mark,
     pub dimmed: bool,
     pub tag_color: Option<[u8; 3]>,
+    pub hidden_details: usize,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -114,7 +115,7 @@ pub fn root_world(cache: &mut LayoutCache, g: &ArchivedGraph) -> WRect {
 }
 
 pub fn world_rect(g: &ArchivedGraph, cache: &mut LayoutCache, node: NodeId) -> Option<WRect> {
-    let path = g.path(node);
+    let path = display_path(g, node);
     let mut world = root_world(cache, g);
     for pair in path.windows(2) {
         let layout = cache.shared(g, pair[0]);
@@ -232,10 +233,10 @@ impl Builder<'_> {
         self.scene.stats.visited += 1;
         let g = self.g;
         let hidden = self.cache.options().effective_hidden();
-        let has_children = g.children(node).any(|c| !g.flags(c).intersects(hidden));
+        let has_children = display_children(g, node).into_iter().any(|c| !g.flags(c).intersects(hidden));
         let open = has_children && rect.w >= OPEN_THRESHOLD_PX;
         let tag_color = g.tags(node).find_map(|t| self.vis.style_for(t).map(|s| s.color));
-        self.scene.boxes.push(SceneBox { node, rect, open, depth, kind: g.kind(node), sub: g.sub_kind(node), flags: g.flags(node), mark: self.mark(node), dimmed: self.marks.is_some() && self.mark(node) == Mark::None, tag_color });
+        self.scene.boxes.push(SceneBox { node, rect, open, depth, kind: g.kind(node), sub: g.sub_kind(node), flags: g.flags(node), mark: self.mark(node), dimmed: self.marks.is_some() && self.mark(node) == Mark::None, tag_color, hidden_details: 0 });
         self.scene.stats.drawn += 1;
         if rect.h >= MIN_LABEL_PX * 1.6 {
             let size = if open { 13.0 } else { (rect.h * 0.2).clamp(MIN_LABEL_PX, 16.0) };
@@ -249,6 +250,8 @@ impl Builder<'_> {
             self.scene.labels.push(SceneLabel { depth, node, pos, text, detail, size, centered });
         }
         if open {
+            let idx = self.scene.boxes.len() - 1;
+            self.scene.boxes[idx].hidden_details = self.cache.shared(g, node).hidden_details;
             self.open_container(node, world, depth);
         }
     }

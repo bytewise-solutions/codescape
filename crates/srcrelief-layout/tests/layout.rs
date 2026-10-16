@@ -551,3 +551,60 @@ fn calls_against_the_role_order_point_up() {
     let down = l.edges.iter().find(|e| e.a == g.ids["orderService"]).unwrap();
     assert_eq!(down.dir, Direction::Down);
 }
+
+fn ports() -> G {
+    let mut b = GraphBuilder::new("p");
+    let pkg = b.add_node(b.root(), NodeKind::Package, SubKind::None, "billing", Lang::Go);
+    let mk = |b: &mut GraphBuilder, name: &str, sub: SubKind| {
+        let t = b.add_node(pkg, NodeKind::Type, sub, name, Lang::Go);
+        b.set_span(t, "f", 1, 40);
+        let m = b.add_node(t, NodeKind::Member, SubKind::Method, "Do", Lang::Go);
+        b.set_span(m, "f", 2, 10);
+        (t, m)
+    };
+    let (handler, hm) = mk(&mut b, "Handler", SubKind::Struct);
+    let (port, _) = mk(&mut b, "Repository", SubKind::Interface);
+    let (adapter, am) = mk(&mut b, "pgRepository", SubKind::Struct);
+    let (price, _) = mk(&mut b, "Price", SubKind::Struct);
+    b.add_flags(price, NodeFlags::DETAIL);
+    b.add_edge(adapter, port, EdgeKind::Implements, Scope::Main, Confidence::Resolved, EdgeFlags::NONE);
+    b.add_edge(hm, am, EdgeKind::Calls, Scope::Main, Confidence::Resolved, EdgeFlags::NONE);
+    let _ = handler;
+    let dir = tempfile::tempdir().unwrap();
+    write_graph(&b.finish(), &dir.path().join("g")).unwrap();
+    let file = ReliefFile::open(&dir.path().join("g")).unwrap();
+    let g = file.graph();
+    let pkg = g.children(g.root()).start;
+    let ids = g.children(pkg).map(|c| (g.name(c).to_string(), c)).collect();
+    G { _dir: dir, file, ids }
+}
+
+#[test]
+fn details_hidden_counted_and_shown_without_moving() {
+    let g = ports();
+    let gr = g.file.graph();
+    let pkg = gr.children(gr.root()).start;
+    let off = layout_container(gr, pkg, &[], &LayoutOptions::default());
+    assert!(off.child(g.ids["Price"]).is_none());
+    assert_eq!(off.hidden_details, 1);
+    let on = layout_container(gr, pkg, &[], &LayoutOptions { show_details: true, ..Default::default() });
+    assert!(on.child(g.ids["Price"]).is_some());
+    assert_eq!(on.hidden_details, 0);
+    for c in &off.children {
+        assert_eq!(on.child(c.node).unwrap().rect, c.rect);
+    }
+}
+
+#[test]
+fn implementations_fold_into_their_interface() {
+    let g = ports();
+    let gr = g.file.graph();
+    let pkg = gr.children(gr.root()).start;
+    let l = layout_container(gr, pkg, &[], &LayoutOptions::default());
+    assert!(l.child(g.ids["pgRepository"]).is_none(), "the implementation is not a box of its own");
+    assert!(l.edges.iter().any(|e| e.a == g.ids["Handler"] && e.b == g.ids["Repository"]), "calls into the implementation point at the interface");
+    assert_eq!(folded_into(gr, g.ids["pgRepository"]), Some(g.ids["Repository"]));
+    let inside = layout_container(gr, g.ids["Repository"], &[], &LayoutOptions::default());
+    assert!(inside.child(g.ids["pgRepository"]).is_some(), "opening the interface shows its implementation");
+    assert_eq!(display_path(gr, gr.children(g.ids["pgRepository"]).start), vec![gr.root(), pkg, g.ids["Repository"], g.ids["pgRepository"], gr.children(g.ids["pgRepository"]).start]);
+}

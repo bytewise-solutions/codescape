@@ -1,0 +1,6 @@
+name = "significance"
+version = "0.1.0"
+
+[[rule]]
+id = "significance.default"
+significance = { component_annotations = ["Component", "Service", "Repository", "Controller", "RestController", "Configuration", "Singleton"], constructor_annotations = ["Inject", "Autowired"], accessor_pattern = "^((get|set|is|has|with)[A-Z_].*|equals|hashCode|toString|<init>|<clinit>|compareTo|String|GoString|MarshalJSON|UnmarshalJSON|Scan|Value)$", detail_packages = "(^|[./])(utils?|common|helpers?|constants?)$", hub_min_packages = 2 }

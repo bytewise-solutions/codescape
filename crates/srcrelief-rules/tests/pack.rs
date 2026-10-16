@@ -87,5 +87,5 @@ fn visual_rules_merge() {
 #[test]
 fn builtin_packs_parse() {
     let p = load_packs(None, None, &PackSelection::default()).unwrap();
-    assert_eq!(p.names(), ["java-core", "libgdx", "spring-boot", "dagger", "go-core", "fiber", "rabbitmq-amqp091", "google-wire", "layers", "default-visuals"]);
+    assert_eq!(p.names(), ["java-core", "libgdx", "spring-boot", "dagger", "go-core", "fiber", "rabbitmq-amqp091", "google-wire", "layers", "significance", "default-visuals"]);
 }

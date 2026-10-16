@@ -274,6 +274,10 @@ fn pos(p: [f32; 2]) -> Pos2 {
 
 const LIST_LIMIT: usize = 60;
 
+fn chip_rect(r: Rect) -> Rect {
+    Rect::new(r.right() - 100.0, r.y + 6.0, 92.0, 18.0)
+}
+
 fn short_path(g: &ArchivedGraph, n: NodeId) -> String {
     let path = g.path(n);
     let tail: Vec<&str> = path.iter().skip(1).rev().take(2).map(|&p| g.name(p)).collect();
@@ -516,6 +520,12 @@ impl Project {
                 self.include_test_edges = tests;
                 let mut opts = *self.cache.options();
                 opts.include_test_edges = tests;
+                self.cache.set_options(opts);
+            }
+            let mut details = self.cache.options().show_details;
+            if ui.checkbox(&mut details, "details").on_hover_text("show data types, helpers and other non-architectural types").changed() {
+                let mut opts = *self.cache.options();
+                opts.show_details = details;
                 self.cache.set_options(opts);
             }
             let mut errors = self.cache.options().show_noise;
@@ -822,6 +832,10 @@ impl Project {
                 let root = self.cache.shared(g, g.root());
                 if let Some(w) = minimap::world_at(&root, self.view, [p.x, p.y]) {
                     self.target = Some(Camera { center: w, zoom: self.cam.zoom });
+                } else if self.scene.boxes.iter().any(|b| b.hidden_details > 0 && chip_rect(b.rect).contains([p.x, p.y])) {
+                    let mut opts = *self.cache.options();
+                    opts.show_details = true;
+                    self.cache.set_options(opts);
                 } else {
                     clicked_box = self.scene.box_at([p.x, p.y]);
                 }
@@ -911,6 +925,12 @@ impl Project {
             stroke = Stroke::new(2.5, style::ACCENT);
         }
         painter.rect_stroke(r, 3.0, stroke, StrokeKind::Inside);
+        if b.open && b.hidden_details > 0 && b.rect.w > 140.0 {
+            let chip = erect(chip_rect(b.rect));
+            painter.rect_filled(chip, 8.0, style::BAR);
+            painter.rect_stroke(chip, 8.0, Stroke::new(1.0, style::FRAME), StrokeKind::Inside);
+            painter.text(chip.center(), Align2::CENTER_CENTER, format!("+ {} details", b.hidden_details), FontId::proportional(10.5), style::MUTED);
+        }
         if self.app_counts.contains_key(&b.node) && b.rect.w > 24.0 {
             painter.circle_filled(Pos2::new(b.rect.right() - 9.0, b.rect.y + 9.0), 4.0, style::ENTRY);
         }

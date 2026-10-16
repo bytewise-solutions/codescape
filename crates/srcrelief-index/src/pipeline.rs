@@ -1,4 +1,4 @@
-use crate::cache::{DETECTION_STAMP, INPUTS_STAMP, index_path, inputs_fingerprint};
+use crate::cache::{DETECTION_STAMP, ENGINE_STAMP, INPUTS_STAMP, engine_stamp, index_path, inputs_fingerprint};
 use crate::config::ProjectConfig;
 use crate::summary::Summary;
 use anyhow::{Context, Result};
@@ -69,6 +69,7 @@ pub fn index_project(dir: &Path, cfg: &ProjectConfig, progress: &dyn Fn(Progress
     }
     b.add_provenance(DETECTION_STAMP, "", &detection_hash(&packs));
     b.add_provenance(INPUTS_STAMP, "", &inputs);
+    b.add_provenance(ENGINE_STAMP, "", engine_stamp());
     b.set_stats(Stats {
         files: stats.files,
         lines: stats.lines,

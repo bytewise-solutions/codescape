@@ -15,6 +15,7 @@ const BUILTINS: &[(&str, &str)] = &[
     ("rabbitmq-amqp091", include_str!("../../../rules/rabbitmq-amqp091/pack.toml")),
     ("google-wire", include_str!("../../../rules/google-wire/pack.toml")),
     ("layers", include_str!("../../../rules/layers/pack.toml")),
+    ("significance", include_str!("../../../rules/significance/pack.toml")),
     ("default-visuals", include_str!("../../../rules/default-visuals/pack.toml")),
 ];
 
@@ -43,6 +44,7 @@ pub enum Rule {
     Noise { name_suffixes: Vec<String>, supertype_suffixes: Vec<String>, methods: Vec<String> },
     AnnotationTag { names: Vec<String>, tag: String },
     EntryOwnerTag { kinds: Vec<String>, tag: String },
+    Significance { component_annotations: Vec<String>, constructor_annotations: Vec<String>, accessor_pattern: String, detail_packages: String, hub_min_packages: usize },
 }
 
 #[derive(Clone, Debug)]
@@ -102,6 +104,26 @@ struct RuleFile {
     noise: Option<NoiseFile>,
     annotation_tag: Option<AnnotationTagFile>,
     entry_owner_tag: Option<EntryOwnerTagFile>,
+    significance: Option<SignificanceFile>,
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct SignificanceFile {
+    #[serde(default)]
+    component_annotations: Vec<String>,
+    #[serde(default)]
+    constructor_annotations: Vec<String>,
+    #[serde(default)]
+    accessor_pattern: String,
+    #[serde(default)]
+    detail_packages: String,
+    #[serde(default = "two")]
+    hub_min_packages: usize,
+}
+
+fn two() -> usize {
+    2
 }
 
 #[derive(Deserialize)]
@@ -365,6 +387,7 @@ impl RuleFile {
             self.noise.is_some(),
             self.annotation_tag.is_some(),
             self.entry_owner_tag.is_some(),
+            self.significance.is_some(),
         ]
         .iter()
         .filter(|b| **b)
@@ -422,6 +445,18 @@ impl RuleFile {
         }
         if let Some(w) = self.wiring {
             return Ok(Rule::Wiring { file_markers: w.file_markers, file_imports: w.file_imports, calls: w.calls, annotations: w.annotations, type_prefixes: w.type_prefixes, requires_imports: w.requires_imports });
+        }
+        if let Some(s) = self.significance {
+            for p in [&s.accessor_pattern, &s.detail_packages] {
+                regex::Regex::new(p).with_context(|| format!("bad pattern in rule `{}`", self.id))?;
+            }
+            return Ok(Rule::Significance {
+                component_annotations: s.component_annotations,
+                constructor_annotations: s.constructor_annotations,
+                accessor_pattern: s.accessor_pattern,
+                detail_packages: s.detail_packages,
+                hub_min_packages: s.hub_min_packages,
+            });
         }
         if let Some(a) = self.annotation_tag {
             return Ok(Rule::AnnotationTag { names: a.names, tag: a.tag });
