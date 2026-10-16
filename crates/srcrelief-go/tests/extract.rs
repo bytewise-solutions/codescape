@@ -44,7 +44,7 @@ fn packages_are_directories() {
     assert_eq!(r.b.node_kind(at(&r.b, &["svc-a", "internal/handler", "H", "Serve"])), NodeKind::Member);
     assert_eq!(r.b.node_kind(at(&r.b, &["svc-a", "internal/handler", "New"])), NodeKind::Member);
     assert_eq!(r.b.node_kind(at(&r.b, &["shared", "(root)"])), NodeKind::Package);
-    assert_eq!(r.stats.files, 6);
+    assert_eq!(r.stats.files, 7);
 }
 
 #[test]
@@ -117,5 +117,23 @@ fn receiver_type_from_param() {
 #[test]
 fn builtins_not_counted_unresolved() {
     let r = run();
-    assert_eq!(r.stats.unresolved, 0, "{:?}", r.stats);
+    assert_eq!(r.stats.unresolved, 1, "only shared's chained call stays unresolved: {:?}", r.stats);
+}
+
+#[test]
+fn guesses_never_cross_into_invisible_modules() {
+    let r = run();
+    let log = at(&r.b, &["shared", "(root)", "Log"]);
+    let only = at(&r.b, &["svc-a", "internal/handler", "H", "OnlyInSvc"]);
+    assert!(edge(&r.b, log, only, EdgeKind::Calls).is_none(), "shared cannot see svc-a");
+}
+
+#[test]
+fn single_impl_not_followed_into_invisible_module() {
+    let r = run();
+    let run_fn = at(&r.b, &["shared", "(root)", "Bus", "Run"]);
+    let iface = at(&r.b, &["shared", "(root)", "Hook", "Fire"]);
+    let imp = at(&r.b, &["svc-a", "internal/handler", "myHook", "Fire"]);
+    assert!(edge(&r.b, run_fn, iface, EdgeKind::Calls).is_some());
+    assert!(edge(&r.b, run_fn, imp, EdgeKind::Calls).is_none(), "shared cannot see svc-a");
 }

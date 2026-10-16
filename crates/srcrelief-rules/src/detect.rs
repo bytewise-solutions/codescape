@@ -197,21 +197,27 @@ impl<'a> Ctx<'a> {
                 adj.entry(e.from).or_default().push(e.to);
             }
         }
+        let mut best: HashMap<NodeId, (u32, usize)> = HashMap::new();
         for (mi, m) in self.mains.iter().enumerate() {
-            let mut q = VecDeque::from([m.node]);
-            while let Some(n) = q.pop_front() {
-                if self.reach.contains_key(&n) {
+            let mut seen: HashSet<NodeId> = HashSet::new();
+            let mut q = VecDeque::from([(m.node, 0u32)]);
+            while let Some((n, dist)) = q.pop_front() {
+                if !seen.insert(n) {
                     continue;
                 }
-                self.reach.insert(n, mi);
+                let slot = best.entry(n).or_insert((dist, mi));
+                if dist < slot.0 {
+                    *slot = (dist, mi);
+                }
                 if let Some(next) = adj.get(&n) {
-                    q.extend(next.iter().copied());
+                    q.extend(next.iter().map(|&x| (x, dist + 1)));
                 }
                 if b.node_kind(n) == NodeKind::Type {
-                    q.extend(b.children(n).iter().copied().filter(|&c| b.node_kind(c) == NodeKind::Member));
+                    q.extend(b.children(n).iter().copied().filter(|&c| b.node_kind(c) == NodeKind::Member).map(|c| (c, dist + 1)));
                 }
             }
         }
+        self.reach = best.into_iter().map(|(n, (_, mi))| (n, mi)).collect();
     }
 
     fn main_for(&self, b: &GraphBuilder, node: NodeId, module: NodeId) -> Option<usize> {
@@ -226,6 +232,9 @@ impl<'a> Ctx<'a> {
     }
 
     fn add_child(&mut self, b: &mut GraphBuilder, node: NodeId, module: NodeId, kind: &str, label: String, lifecycle: Lifecycle, order: u32, rule: &str) {
+        if b.flags(node).intersects(NodeFlags::TEST | NodeFlags::MOCK) {
+            return;
+        }
         let main = self.main_for(b, node, module);
         let (parent, category) = match main {
             Some(m) => (Some(self.mains[m].entry), self.mains[m].category),
@@ -378,6 +387,9 @@ impl<'a> Ctx<'a> {
                     let flow = PrefixFlow::compute(facts, &is_group);
                     for file in files_sorted(facts) {
                         for c in &file.calls {
+                            if b.flags(c.caller).intersects(NodeFlags::TEST | NodeFlags::MOCK) {
+                                continue;
+                            }
                             if !methods.contains(&c.method) || !Self::receiver_ok(file, c, &receiver_types, &file_imports) || c.string_args.len() < 2 {
                                 continue;
                             }

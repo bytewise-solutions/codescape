@@ -1,0 +1,27 @@
+[package]
+name = "srcrelief-index"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[[bin]]
+name = "srcrelief-index"
+path = "src/main.rs"
+
+[dependencies]
+srcrelief-format.workspace = true
+srcrelief-facts.workspace = true
+srcrelief-build.workspace = true
+srcrelief-java.workspace = true
+srcrelief-go.workspace = true
+srcrelief-rules.workspace = true
+serde.workspace = true
+toml.workspace = true
+globset.workspace = true
+clap.workspace = true
+dirs.workspace = true
+blake3.workspace = true
+anyhow.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true

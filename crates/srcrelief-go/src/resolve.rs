@@ -77,6 +77,15 @@ pub fn extract_go(d: &Discovery, module_nodes: &[NodeId], excludes: &GlobSet, b:
         })
         .collect();
     let mut r = Resolver::new(d, module_nodes, b, &parsed);
+    r.visible = r
+        .declared_reach()
+        .into_iter()
+        .enumerate()
+        .map(|(i, mut v)| {
+            v.insert(i);
+            v
+        })
+        .collect();
     r.declare();
     r.module_edges();
     r.package_edges();
@@ -122,8 +131,9 @@ struct Resolver<'a> {
     pkg_by_path: HashMap<String, usize>,
     file_pkg: Vec<usize>,
     types: Vec<TypeInfo>,
-    method_names: HashMap<String, Vec<NodeId>>,
-    impl_cache: HashMap<usize, Option<usize>>,
+    method_names: HashMap<String, Vec<(NodeId, usize)>>,
+    visible: Vec<HashSet<usize>>,
+    impl_cache: HashMap<(usize, usize), Option<usize>>,
     stats: ExtractStats,
 }
 
@@ -140,6 +150,7 @@ impl<'a> Resolver<'a> {
             file_pkg: Vec::new(),
             types: Vec::new(),
             method_names: HashMap::new(),
+            visible: Vec::new(),
             impl_cache: HashMap::new(),
             stats: ExtractStats::default(),
         }
@@ -225,7 +236,7 @@ impl<'a> Resolver<'a> {
                     }
                 }
                 if !f.is_test && !f.is_mock {
-                    self.method_names.entry(func.name.clone()).or_default().push(id);
+                    self.method_names.entry(func.name.clone()).or_default().push((id, f.module));
                 }
             }
         }
@@ -389,8 +400,8 @@ impl<'a> Resolver<'a> {
         None
     }
 
-    fn single_impl(&mut self, iface: usize) -> Option<usize> {
-        if let Some(&c) = self.impl_cache.get(&iface) {
+    fn single_impl(&mut self, iface: usize, from_module: usize) -> Option<usize> {
+        if let Some(&c) = self.impl_cache.get(&(iface, from_module)) {
             return c;
         }
         let wanted = &self.types[iface].iface_methods;
@@ -400,12 +411,12 @@ impl<'a> Resolver<'a> {
             (0..self.types.len())
                 .filter(|&t| {
                     let ty = &self.types[t];
-                    ty.kind == SubKind::Struct && !ty.excluded && wanted.iter().all(|m| ty.methods.contains_key(m))
+                    ty.kind == SubKind::Struct && !ty.excluded && self.visible[from_module].contains(&self.pkgs[ty.pkg].module) && wanted.iter().all(|m| ty.methods.contains_key(m))
                 })
                 .collect()
         };
         let res = (found.len() == 1).then(|| found[0]);
-        self.impl_cache.insert(iface, res);
+        self.impl_cache.insert((iface, from_module), res);
         res
     }
 
@@ -492,7 +503,7 @@ impl<'a> Resolver<'a> {
             return cf;
         };
         if recv == CHAIN {
-            self.guess(caller, scope, &call.method, &mut cf);
+            self.guess(fi, caller, scope, &call.method, &mut cf);
             return cf;
         }
         let mut segs = recv.split('.');
@@ -535,7 +546,7 @@ impl<'a> Resolver<'a> {
                         self.b.add_edge(caller, target, EdgeKind::Calls, scope, Confidence::Resolved, EdgeFlags::NONE);
                         cf.target = Some(target);
                         if self.types[owner].kind == SubKind::Interface {
-                            if let Some(imp) = self.single_impl(owner) {
+                            if let Some(imp) = self.single_impl(owner, self.files[fi].module) {
                                 if let Some(&m) = self.types[imp].methods.get(&call.method) {
                                     self.b.add_edge(caller, m, EdgeKind::Calls, scope, Confidence::Resolved, EdgeFlags::NONE);
                                 }
@@ -543,22 +554,28 @@ impl<'a> Resolver<'a> {
                         }
                         self.stats.resolved += 1;
                     }
-                    None => self.guess(caller, scope, &call.method, &mut cf),
+                    None => self.guess(fi, caller, scope, &call.method, &mut cf),
                 }
             }
             Some(TypeRef::External(name)) => {
                 cf.receiver_type = Some(name);
                 self.stats.resolved += 1;
             }
-            None => self.guess(caller, scope, &call.method, &mut cf),
+            None => self.guess(fi, caller, scope, &call.method, &mut cf),
         }
         cf
     }
 
-    fn guess(&mut self, caller: NodeId, scope: Scope, name: &str, cf: &mut CallFacts) {
-        match self.method_names.get(name) {
-            Some(list) if list.len() == 1 => {
-                let target = list[0];
+    fn guess(&mut self, fi: usize, caller: NodeId, scope: Scope, name: &str, cf: &mut CallFacts) {
+        let module = self.files[fi].module;
+        let candidates: Vec<NodeId> = self
+            .method_names
+            .get(name)
+            .map(|v| v.iter().filter(|(_, m)| self.visible[module].contains(m)).map(|(n, _)| *n).collect())
+            .unwrap_or_default();
+        match candidates.as_slice() {
+            [target] => {
+                let target = *target;
                 self.b.add_edge(caller, target, EdgeKind::Calls, scope, Confidence::Guessed, EdgeFlags::NONE);
                 cf.target = Some(target);
                 self.stats.guessed += 1;

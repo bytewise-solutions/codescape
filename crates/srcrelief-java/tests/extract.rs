@@ -44,7 +44,7 @@ fn packages_types_members_nested_under_modules() {
     assert_eq!(r.b.file(main), Some("app/src/main/java/com/example/app/Main.java"));
     let fx = r.facts.files.iter().find(|f| f.rel_path.ends_with("Main.java")).unwrap();
     assert!(fx.functions.iter().any(|f| f.name == "main" && f.is_main && f.node == main));
-    assert_eq!(r.stats.files, 11);
+    assert_eq!(r.stats.files, 15);
 }
 
 #[test]
@@ -127,4 +127,38 @@ fn test_files_flagged() {
     let r = run();
     let fx = r.facts.files.iter().find(|f| f.rel_path.ends_with("FakeViewManager.java")).unwrap();
     assert!(fx.is_test);
+}
+
+#[test]
+fn guesses_never_cross_into_invisible_modules() {
+    let r = run();
+    let leak = at(&r.b, &["util", "com.example.util", "Leak", "use"]);
+    let only = at(&r.b, &["app", "com.example.app", "ViewUser", "onlyInApp"]);
+    assert!(has_edge(&r.b, leak, only, EdgeKind::Calls).is_none(), "util cannot see app");
+}
+
+#[test]
+fn same_package_names_resolve_only_into_visible_modules() {
+    let r = run();
+    let leak = at(&r.b, &["util", "com.example.util", "Leak", "use"]);
+    let shadow = at(&r.b, &["app", "com.example.util", "Shadow"]);
+    assert!(has_edge(&r.b, leak, shadow, EdgeKind::Instantiates).is_none(), "util cannot see app's com.example.util.Shadow");
+}
+
+#[test]
+fn single_impl_not_followed_into_invisible_module() {
+    let r = run();
+    let fire = at(&r.b, &["core", "com.example.core", "Bus", "fire"]);
+    let iface = at(&r.b, &["core", "com.example.core", "Listener", "onEvent"]);
+    let imp = at(&r.b, &["app", "com.example.app", "AppListener", "onEvent"]);
+    assert!(has_edge(&r.b, fire, iface, EdgeKind::Calls).is_some());
+    assert!(has_edge(&r.b, fire, imp, EdgeKind::Calls).is_none(), "core cannot see app");
+}
+
+#[test]
+fn main_code_does_not_see_test_scope_dependencies() {
+    let r = run();
+    let fire = at(&r.b, &["core", "com.example.core", "Bus", "fire"]);
+    let only = at(&r.b, &["app", "com.example.app", "ViewUser", "onlyInApp"]);
+    assert!(has_edge(&r.b, fire, only, EdgeKind::Calls).is_none(), "core -> app is a test-only dependency");
 }

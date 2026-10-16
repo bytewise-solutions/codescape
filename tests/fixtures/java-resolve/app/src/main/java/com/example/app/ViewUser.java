@@ -7,6 +7,8 @@ import com.example.util.Strings;
 public class ViewUser {
     private ViewManager viewManager;
 
+    void onlyInApp() {}
+
     void go() {
         viewManager.setCurrentView();
         MessageQueue q = new MessageQueue();

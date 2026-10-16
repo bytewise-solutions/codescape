@@ -317,3 +317,36 @@ query = { language = "java", file = "q.scm", capture = "entry", kind = "custom",
     assert_eq!(e.kind, "custom");
     assert!(fx.b.entries().iter().all(|e| e.node != other));
 }
+
+#[test]
+fn callbacks_go_to_the_nearest_main() {
+    let mut fx = Fx::new();
+    let fb = fx.file("bot", "bot/src/b/ToolLauncher.java", Lang::Java, false, &[]);
+    let bot_t = fx.ty(fb, "b.ToolLauncher", &[], &[]);
+    let bot_main = fx.func(fb, Some(bot_t), "main", true, None, &[]);
+    let fbc = fx.file("bot", "bot/src/b/BotApp.java", Lang::Java, false, &[]);
+    let bot_app = fx.ty(fbc, "b.BotApp", &["c.ClientApp"], &[]);
+    let bot_render = fx.func(fbc, Some(bot_app), "render", false, None, &[]);
+    let (_, client_app, client_render) = gdx_app(&mut fx);
+    fx.b.add_edge(bot_render, client_app, EdgeKind::Instantiates, Scope::Main, Confidence::Resolved, EdgeFlags::NONE);
+    fx.b.add_edge(bot_main, bot_app, EdgeKind::Instantiates, Scope::Main, Confidence::Resolved, EdgeFlags::NONE);
+    fx.b.add_edge(bot_render, client_render, EdgeKind::Calls, Scope::Main, Confidence::Resolved, EdgeFlags::NONE);
+    fx.run(&builtins());
+    assert_eq!(fx.entry("ClientApp.create()").parent, Some(fx.entry_index("Desktop")));
+    assert_eq!(fx.entry("BotApp.render()").parent, Some(fx.entry_index("ToolLauncher")));
+}
+
+#[test]
+fn routes_in_test_and_mock_code_are_ignored() {
+    let mut fx = Fx::new();
+    let f = fx.file("api", "api/server_test.go", Lang::Go, true, &["github.com/gofiber/fiber/v2"]);
+    let helper = fx.func(f, None, "TestServer", false, None, &[]);
+    fx.b.add_flags(helper, NodeFlags::TEST);
+    fx.call(f, CallFacts { caller: helper, method: "Get".into(), receiver_var: Some("app".into()), string_args: str_args(&[Some("/x"), None]), ..Default::default() });
+    let g = fx.file("api", "api/mocks/m.go", Lang::Go, false, &["github.com/gofiber/fiber/v2"]);
+    let mock = fx.func(g, None, "Mock", false, None, &[]);
+    fx.b.add_flags(mock, NodeFlags::MOCK);
+    fx.call(g, CallFacts { caller: mock, method: "Post".into(), receiver_var: Some("app".into()), string_args: str_args(&[Some("/y"), None]), ..Default::default() });
+    fx.run(&builtins());
+    assert!(fx.b.entries().is_empty(), "{:?}", fx.labels());
+}

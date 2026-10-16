@@ -1,3 +1,4 @@
 dependencies {
     api project(':util')
+    testImplementation project(':app')
 }

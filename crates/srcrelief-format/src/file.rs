@@ -6,7 +6,7 @@ use std::ops::Range;
 use std::path::Path;
 
 pub const MAGIC: &[u8; 8] = b"SRCRLF01";
-pub const FORMAT_VERSION: u32 = 1;
+pub const FORMAT_VERSION: u32 = 2;
 const HEADER: usize = 16;
 
 #[derive(Debug, thiserror::Error)]
@@ -111,11 +111,13 @@ impl ArchivedGraph {
     }
 
     pub fn lines(&self, id: NodeId) -> u32 {
-        self.node(id).lines.to_native()
+        let n = self.node(id);
+        let (s, e) = (n.start_line.to_native(), n.end_line.to_native());
+        if n.file.to_native() == NONE || e < s { 0 } else { e - s + 1 }
     }
 
     pub fn subtree_lines(&self, id: NodeId) -> u64 {
-        self.node(id).subtree_lines.to_native()
+        self.node(id).subtree_lines.to_native() as u64
     }
 
     pub fn children(&self, id: NodeId) -> Range<NodeId> {

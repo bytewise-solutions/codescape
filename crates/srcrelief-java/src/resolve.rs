@@ -68,6 +68,17 @@ pub fn extract_java(
         })
         .collect();
     let mut r = Resolver::new(d, module_nodes, b, &parsed);
+    let with_self = |v: Vec<HashSet<usize>>| -> Vec<HashSet<usize>> {
+        v.into_iter()
+            .enumerate()
+            .map(|(i, mut s)| {
+                s.insert(i);
+                s
+            })
+            .collect()
+    };
+    r.visible = with_self(r.declared_reach_scoped(true));
+    r.visible_test = with_self(r.declared_reach_scoped(false));
     r.declare();
     r.link_supertypes();
     r.module_edges();
@@ -107,14 +118,16 @@ struct Resolver<'a> {
     b: &'a mut GraphBuilder,
     files: &'a [ParsedFile],
     types: Vec<TypeInfo>,
-    by_fqn: HashMap<String, usize>,
+    by_fqn: HashMap<String, Vec<usize>>,
+    visible: Vec<HashSet<usize>>,
+    visible_test: Vec<HashSet<usize>>,
     file_types: Vec<Vec<usize>>,
     packages: HashMap<(usize, String), NodeId>,
     package_module: HashMap<String, usize>,
     externals: HashMap<String, NodeId>,
     external_module: Option<NodeId>,
     subtypes: HashMap<usize, Vec<usize>>,
-    method_names: HashMap<String, Vec<NodeId>>,
+    method_names: HashMap<String, Vec<(NodeId, usize)>>,
     stats: ExtractStats,
 }
 
@@ -127,6 +140,8 @@ impl<'a> Resolver<'a> {
             files,
             types: Vec::new(),
             by_fqn: HashMap::new(),
+            visible: Vec::new(),
+            visible_test: Vec::new(),
             file_types: vec![Vec::new(); files.len()],
             packages: HashMap::new(),
             package_module: HashMap::new(),
@@ -177,7 +192,7 @@ impl<'a> Resolver<'a> {
                 id
             });
             if !f.is_test && m.name != "<init>" && m.name != "<clinit>" {
-                self.method_names.entry(m.name.clone()).or_default().push(id);
+                self.method_names.entry(m.name.clone()).or_default().push((id, f.module));
             }
         }
         let idx = self.types.len();
@@ -196,13 +211,30 @@ impl<'a> Resolver<'a> {
             decl: decl.clone(),
             is_test: f.is_test,
         });
-        self.by_fqn.insert(fqn.clone(), idx);
+        self.by_fqn.entry(fqn.clone()).or_default().push(idx);
         self.file_types[fi].push(idx);
         for (ni, inner) in t.nested.iter().enumerate() {
             let mut path = decl.1.clone();
             path.push(ni);
             self.declare_type(fi, node, &fqn, Some(idx), inner, (decl.0, path));
         }
+    }
+
+    fn fqn_visible(&self, name: &str, fi: usize) -> Option<usize> {
+        let visible = self.visible_from(fi);
+        self.by_fqn.get(name)?.iter().copied().find(|t| visible.contains(&self.files[self.types[*t].file].module))
+    }
+
+    fn fqn(&self, name: &str, fi: usize) -> Option<usize> {
+        let candidates = self.by_fqn.get(name)?;
+        let module = self.files[fi].module;
+        let module_of = |t: &usize| self.files[self.types[*t].file].module;
+        candidates
+            .iter()
+            .find(|t| module_of(t) == module)
+            .or_else(|| candidates.iter().find(|t| self.visible_from(fi).contains(&module_of(t))))
+            .or(candidates.first())
+            .copied()
     }
 
     fn jtype(&self, ti: usize) -> &'a JType {
@@ -220,14 +252,14 @@ impl<'a> Resolver<'a> {
         }
         let f = &self.files[fi];
         if raw.contains('.') {
-            if let Some(&i) = self.by_fqn.get(raw) {
+            if let Some(i) = self.fqn(raw, fi) {
                 return Some(TypeRef::Project(i));
             }
             let (head, rest) = raw.split_once('.').unwrap();
             if head.chars().next().is_some_and(|c| c.is_uppercase()) {
                 if let Some(TypeRef::Project(h)) = self.resolve_type(head, fi, enclosing) {
                     let full = format!("{}.{rest}", self.types[h].fqn);
-                    if let Some(&i) = self.by_fqn.get(&full) {
+                    if let Some(i) = self.fqn(&full, fi) {
                         return Some(TypeRef::Project(i));
                     }
                 }
@@ -238,27 +270,27 @@ impl<'a> Resolver<'a> {
         let mut e = enclosing;
         while let Some(ti) = e {
             let candidate = format!("{}.{raw}", self.types[ti].fqn);
-            if let Some(&i) = self.by_fqn.get(&candidate) {
+            if let Some(i) = self.fqn_visible(&candidate, fi) {
                 return Some(TypeRef::Project(i));
             }
             e = self.types[ti].outer;
         }
         for imp in f.jf.imports.iter().filter(|i| !i.wildcard && !i.is_static) {
             if imp.path.rsplit('.').next() == Some(raw) {
-                return Some(match self.by_fqn.get(&imp.path) {
-                    Some(&i) => TypeRef::Project(i),
+                return Some(match self.fqn(&imp.path, fi) {
+                    Some(i) => TypeRef::Project(i),
                     None => TypeRef::External(imp.path.clone()),
                 });
             }
         }
         let same_pkg = if f.jf.package.is_empty() { raw.to_string() } else { format!("{}.{raw}", f.jf.package) };
-        if let Some(&i) = self.by_fqn.get(&same_pkg) {
+        if let Some(i) = self.fqn_visible(&same_pkg, fi) {
             return Some(TypeRef::Project(i));
         }
         let mut external_wildcards = Vec::new();
         for imp in f.jf.imports.iter().filter(|i| i.wildcard && !i.is_static) {
             let candidate = format!("{}.{raw}", imp.path);
-            if let Some(&i) = self.by_fqn.get(&candidate) {
+            if let Some(i) = self.fqn_visible(&candidate, fi) {
                 return Some(TypeRef::Project(i));
             }
             if !self.package_module.contains_key(&imp.path) {
@@ -326,6 +358,29 @@ impl<'a> Resolver<'a> {
         }
     }
 
+    fn visible_from(&self, fi: usize) -> &HashSet<usize> {
+        let f = &self.files[fi];
+        if f.is_test { &self.visible_test[f.module] } else { &self.visible[f.module] }
+    }
+
+    fn declared_reach_scoped(&self, main_only: bool) -> Vec<HashSet<usize>> {
+        let n = self.d.modules.len();
+        let mut out = vec![HashSet::new(); n];
+        for (start, set) in out.iter_mut().enumerate() {
+            let mut q = VecDeque::from([start]);
+            let mut first = true;
+            while let Some(m) = q.pop_front() {
+                for l in self.d.links.iter().filter(|l| l.from == m && (!main_only && first || l.scope == Scope::Main)) {
+                    if set.insert(l.to) {
+                        q.push_back(l.to);
+                    }
+                }
+                first = false;
+            }
+        }
+        out
+    }
+
     fn declared_reach(&self) -> Vec<HashSet<usize>> {
         let n = self.d.modules.len();
         let mut out = vec![HashSet::new(); n];
@@ -363,7 +418,7 @@ impl<'a> Resolver<'a> {
                     if let Some(&m) = self.package_module.get(&imp.path) {
                         targets.push((m, imp.path.clone()));
                     }
-                } else if let Some(&ti) = self.by_fqn.get(&imp.path) {
+                } else if let Some(&ti) = self.by_fqn.get(&imp.path).and_then(|v| v.iter().find(|&&t| self.files[self.types[t].file].module == f.module).or(v.first())) {
                     let tf = &self.files[self.types[ti].file];
                     targets.push((tf.module, tf.jf.package.clone()));
                 }
@@ -419,7 +474,8 @@ impl<'a> Resolver<'a> {
         self.types[ti].supers.iter().any(|s| matches!(s, TypeRef::Project(p) if self.lookup_method(*p, name).is_some()))
     }
 
-    fn single_impl(&self, ti: usize, name: &str) -> Option<NodeId> {
+    fn single_impl(&self, ti: usize, name: &str, fi: usize) -> Option<NodeId> {
+        let visible = self.visible_from(fi);
         let abstract_like = self.types[ti].kind == SubKind::Interface;
         if !abstract_like {
             return None;
@@ -432,7 +488,7 @@ impl<'a> Resolver<'a> {
                 if !seen.insert(s) || self.types[s].is_test {
                     continue;
                 }
-                if self.types[s].kind != SubKind::Interface {
+                if self.types[s].kind != SubKind::Interface && visible.contains(&self.files[self.types[s].file].module) {
                     impls.push(s);
                 }
                 q.push_back(s);
@@ -573,7 +629,7 @@ impl<'a> Resolver<'a> {
                 if let Some((owner, target)) = self.lookup_method(t, &call.method) {
                     self.b.add_edge(caller, target, EdgeKind::Calls, scope, Confidence::Resolved, EdgeFlags::NONE);
                     cf.target = Some(target);
-                    if let Some(imp) = self.single_impl(owner, &call.method) {
+                    if let Some(imp) = self.single_impl(owner, &call.method, fi) {
                         self.b.add_edge(caller, imp, EdgeKind::Calls, scope, Confidence::Resolved, EdgeFlags::NONE);
                     }
                     self.stats.resolved += 1;
@@ -584,15 +640,21 @@ impl<'a> Resolver<'a> {
                 }
             }
             Some(TypeRef::External(_)) => self.stats.resolved += 1,
-            None => self.guess(caller, scope, &call.method, &mut cf),
+            None => self.guess(fi, caller, scope, &call.method, &mut cf),
         }
         cf
     }
 
-    fn guess(&mut self, caller: NodeId, scope: Scope, name: &str, cf: &mut CallFacts) {
-        match self.method_names.get(name) {
-            Some(list) if list.len() == 1 => {
-                let target = list[0];
+    fn guess(&mut self, fi: usize, caller: NodeId, scope: Scope, name: &str, cf: &mut CallFacts) {
+        let visible = self.visible_from(fi);
+        let candidates: Vec<NodeId> = self
+            .method_names
+            .get(name)
+            .map(|v| v.iter().filter(|(_, m)| visible.contains(m)).map(|(n, _)| *n).collect())
+            .unwrap_or_default();
+        match candidates.as_slice() {
+            [target] => {
+                let target = *target;
                 self.b.add_edge(caller, target, EdgeKind::Calls, scope, Confidence::Guessed, EdgeFlags::NONE);
                 cf.target = Some(target);
                 self.stats.guessed += 1;
@@ -618,8 +680,8 @@ impl<'a> Resolver<'a> {
             if member != name {
                 continue;
             }
-            return Some(match self.by_fqn.get(owner) {
-                Some(&i) => TypeRef::Project(i),
+            return Some(match self.fqn(owner, fi) {
+                Some(i) => TypeRef::Project(i),
                 None => TypeRef::External(owner.to_string()),
             });
         }

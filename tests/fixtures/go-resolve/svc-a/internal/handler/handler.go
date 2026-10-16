@@ -29,3 +29,9 @@ func (h *H) Serve() {
 func (h *H) RegisterRoutes(r fiber.Router) {
 	r.Get("/x", h.Serve)
 }
+
+func (h *H) OnlyInSvc() {}
+
+type myHook struct{}
+
+func (m *myHook) Fire() {}
