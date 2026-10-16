@@ -68,6 +68,16 @@ enough to read.
 - **Test code is out:** test sources, test helpers (files importing `testing`/testify or JUnit/Mockito, folders such
   as `testutil`/`testdata`) and test mains are not drawn or listed. Tick **test deps** to see test-only dependencies.
 
+### Overview (experimental)
+
+**Overview** in the top bar swaps the map for a runtime picture: each application with its components (one per type
+that owns message handlers or framework callbacks, plus one *HTTP API* box for its routes), the channels between them
+and the external systems they use. Solid lines are read from the code: a component publishes to a channel or uses a
+system when its code reaches the publishing call or a file that imports the system's client library. Dashed lines are
+inferred from names: a consumer is linked to the channel whose publisher name it shares (`jobEventProducer` →
+`email_event` → `jobEventConsumer`). Click a component to open it in the map. Channels and systems come from the
+`rabbitmq-amqp091` and `externals` packs.
+
 ### Index from the command line
 
 ```sh
@@ -79,7 +89,7 @@ Prints modules, their links, entry points grouped as in the viewer, the call-res
 ### Screenshots without a person at the window
 
 ```sh
-srcrelief <dir> --screenshot out.png [--focus NAME] [--entry LABEL]
+srcrelief <dir> --screenshot out.png [--focus NAME] [--entry LABEL] [--overview]
 ```
 
 Renders one frame after zooming to the first node matching `NAME` and/or selecting an entry point, writes a PNG
@@ -108,7 +118,7 @@ category = "dev-tool"          # application, dev-tool or test
 Framework knowledge (which methods a framework calls back, what registers an HTTP route, how things are coloured)
 lives in **rule packs**, not in SrcRelief's code. The built-in packs in `rules/` use exactly the format you would
 write yourself: `java-core`, `libgdx`, `spring-boot`, `dagger`, `go-core`, `fiber`, `rabbitmq-amqp091`,
-`google-wire`, `default-visuals`.
+`google-wire`, `externals`, `layers`, `significance`, `default-visuals`.
 
 Packs load in this order, later ones overriding earlier rules with the same `id`:
 built-in → `~/.config/srcrelief/rules/<pack>/` → `<project>/.srcrelief/rules/<pack>/` → `[packs] dirs`.
@@ -151,6 +161,9 @@ Each rule has exactly one matcher:
 | `query = { language, file, capture, kind, label }` | entry points from a tree-sitter query |
 | `wiring = { file_markers, file_imports, calls, annotations, type_prefixes }` | marks dependency-injection code as wiring |
 | `test_code = { file_imports, dir_names }` | marks test helpers as test code |
+| `channel_publisher = { methods, receiver_types, file_imports }` | tags the types that publish to a channel; through a wrapper whose caller picks the destination, its callers |
+| `channel_consumer = { kinds }` | tags the types owning entry points of these kinds as channel consumers |
+| `external_system = { file_imports, name, project_imports }` | tags code in files importing a client library as using that system, optionally only when some file of the project imports one of `project_imports` |
 
 Lifecycles: `once`, `repeating`, `on-event`, `later`, `unknown`. Visual rules (`tag_style`, `frame` with
 `auto_prefix` or `pattern`, `hide_tags`, `fold_tags`, `entry_group`) apply without re-indexing; detection rules

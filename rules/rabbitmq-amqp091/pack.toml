@@ -5,3 +5,11 @@ languages = ["go"]
 [[rule]]
 id = "rabbitmq-amqp091.consume"
 call_handler = { methods = ["Consume", "ConsumeWithContext"], receiver_types = ["*amqp.Channel", "amqp.Channel", "*amqp091.Channel"], file_imports = "github.com/rabbitmq/amqp091-go", kind = "message-handler", label = "consume {arg0} in {caller}" }
+
+[[rule]]
+id = "rabbitmq-amqp091.publish"
+channel_publisher = { methods = ["Publish", "PublishWithContext", "PublishWithDeferredConfirmWithContext"], receiver_types = ["*amqp.Channel", "amqp.Channel"], file_imports = "github.com/rabbitmq/amqp091-go" }
+
+[[rule]]
+id = "rabbitmq-amqp091.consumers"
+channel_consumer = { kinds = ["message-handler"] }

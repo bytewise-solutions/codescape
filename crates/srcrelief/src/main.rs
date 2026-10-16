@@ -13,6 +13,8 @@ struct Args {
     focus: Option<String>,
     #[arg(long, help = "With --screenshot: select the entry point with this label")]
     entry: Option<String>,
+    #[arg(long, help = "With --screenshot: show the overview")]
+    overview: bool,
 }
 
 fn main() -> eframe::Result {
@@ -22,6 +24,6 @@ fn main() -> eframe::Result {
         renderer: eframe::Renderer::Wgpu,
         ..Default::default()
     };
-    let shot = args.screenshot.map(|path| srcrelief::shot::ShotPlan { path, focus: args.focus, entry: args.entry });
+    let shot = args.screenshot.map(|path| srcrelief::shot::ShotPlan { path, focus: args.focus, entry: args.entry, overview: args.overview });
     eframe::run_native("SrcRelief", options, Box::new(move |cc| Ok(Box::new(srcrelief::app::ReliefApp::new(cc, args.dir, args.config, shot)))))
 }

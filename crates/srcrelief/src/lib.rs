@@ -4,6 +4,7 @@ pub mod canvas;
 pub mod focus;
 pub mod input;
 pub mod minimap;
+pub mod overview;
 pub mod panels;
 pub mod reach;
 pub mod search;
