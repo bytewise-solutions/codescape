@@ -823,6 +823,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "srcrelief-layout"
+version = "0.1.0"
+dependencies = [
+ "globset",
+ "srcrelief-format",
+ "srcrelief-rules",
+ "tempfile",
+]
+
+[[package]]
 name = "srcrelief-rules"
 version = "0.1.0"
 dependencies = [

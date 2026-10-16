@@ -1,0 +1,13 @@
+[package]
+name = "srcrelief-layout"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+srcrelief-format.workspace = true
+srcrelief-rules.workspace = true
+globset.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true
