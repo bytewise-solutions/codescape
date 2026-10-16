@@ -38,6 +38,51 @@ fn entry_owners(g: &ArchivedGraph) -> HashSet<NodeId> {
 }
 
 pub fn layout_container(g: &ArchivedGraph, node: NodeId, frames: &[FrameRule], opts: &LayoutOptions) -> ContainerLayout {
+    let base = layout_structure(g, node, frames, &LayoutOptions { show_wiring: false, ..*opts });
+    if !opts.show_wiring {
+        return base;
+    }
+    add_wiring(g, node, base, opts)
+}
+
+fn add_wiring(g: &ArchivedGraph, node: NodeId, mut l: ContainerLayout, opts: &LayoutOptions) -> ContainerLayout {
+    let hidden = opts.effective_hidden();
+    let extra: Vec<NodeId> = g
+        .children(node)
+        .filter(|&c| g.flags(c).contains(srcrelief_format::NodeFlags::WIRING) && !g.flags(c).intersects(hidden))
+        .collect();
+    let top = if l.children.is_empty() { HEADER + PAD } else { l.size[1] - PAD + GAP_Y };
+    let layer = l.children.iter().map(|c| c.layer + 1).max().unwrap_or(0);
+    let mut x = PAD;
+    let mut row_h: f32 = 0.0;
+    for c in extra {
+        let [w, h] = box_size(g, c);
+        l.children.push(ChildBox { node: c, rect: Rect::new(x, top, w, h), layer, pinned: false });
+        x += w + GAP_X;
+        row_h = row_h.max(h);
+    }
+    if row_h > 0.0 {
+        l.size = [l.size[0].max(x - GAP_X + PAD), top + row_h + PAD];
+    }
+    let rect_of: HashMap<NodeId, Rect> = l.children.iter().map(|c| (c.node, c.rect)).collect();
+    for agg in g.aggregates(node) {
+        let wiring = agg.wiring.to_native() as u32;
+        let (a, b) = (agg.a.to_native(), agg.b.to_native());
+        let (Some(ra), Some(rb)) = (rect_of.get(&a), rect_of.get(&b)) else { continue };
+        if wiring == 0 {
+            continue;
+        }
+        if let Some(e) = l.edges.iter_mut().find(|e| e.a == a && e.b == b) {
+            e.wiring = wiring;
+            continue;
+        }
+        let (from, to) = if ra.y <= rb.y { ([ra.center()[0], ra.bottom()], [rb.center()[0], rb.y]) } else { ([ra.center()[0], ra.y], [rb.center()[0], rb.bottom()]) };
+        l.edges.push(LaidEdge { a, b, calls: 0, deps: 0, wiring, implements: 0, dir: Direction::Down, undeclared: false, test_only: false, points: vec![from, to] });
+    }
+    l
+}
+
+fn layout_structure(g: &ArchivedGraph, node: NodeId, frames: &[FrameRule], opts: &LayoutOptions) -> ContainerLayout {
     let hidden = opts.effective_hidden();
     let kids: Vec<NodeId> = g.children(node).filter(|&c| !g.flags(c).intersects(hidden)).collect();
     let n = kids.len();
@@ -138,10 +183,13 @@ pub fn layout_container(g: &ArchivedGraph, node: NodeId, frames: &[FrameRule], o
     for (li, l) in layers.iter().enumerate() {
         let mut row: Vec<usize> = Vec::new();
         let mut w = 0.0;
-        let keep_whole = l.iter().any(|&v| pinned[v]);
-        for &v in l {
+        let pinned_row: Vec<usize> = l.iter().copied().filter(|&v| pinned[v]).collect();
+        if !pinned_row.is_empty() {
+            rows.push((li as u32, pinned_row));
+        }
+        for &v in l.iter().filter(|&&v| !pinned[v]) {
             let add = sizes[v][0] + if row.is_empty() { 0.0 } else { GAP_X };
-            if !keep_whole && !row.is_empty() && w + add > max_row {
+            if !row.is_empty() && w + add > max_row {
                 rows.push((li as u32, std::mem::take(&mut row)));
                 w = 0.0;
             }

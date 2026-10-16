@@ -124,14 +124,17 @@ impl<'a> Ctx<'a> {
                             self.test_files.insert(file.rel_path.as_str());
                         }
                     }
-                    Rule::Wiring { file_markers, file_imports, calls, annotations, type_prefixes } => {
+                    Rule::Wiring { file_markers, file_imports, calls, annotations, type_prefixes, requires_imports } => {
                         let marked = !file_markers.is_empty()
                             && sources(&file.rel_path).is_some_and(|src| {
                                 let head = String::from_utf8_lossy(&src[..src.len().min(1024)]).into_owned();
                                 file_markers.iter().any(|m| head.contains(m.as_str()))
                             });
-                        if marked || imports(file_imports) {
+                        if marked || (imports(file_imports) && file.types.is_empty()) {
                             wiring_files.insert(file.rel_path.as_str());
+                        }
+                        if !requires_imports.is_empty() && !imports(requires_imports) {
+                            continue;
                         }
                         for t in &file.types {
                             let simple = t.fqn.rsplit('.').next().unwrap_or(&t.fqn);

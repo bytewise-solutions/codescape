@@ -37,7 +37,7 @@ pub enum Rule {
     Dispatch { from_override: String, to_override: String },
     NameTag { kinds: Vec<String>, pattern: String, tag: String },
     Query { language: Lang, query: String, capture: String, kind: String, label: String },
-    Wiring { file_markers: Vec<String>, file_imports: Vec<String>, calls: Vec<String>, annotations: Vec<String>, type_prefixes: Vec<String> },
+    Wiring { file_markers: Vec<String>, file_imports: Vec<String>, calls: Vec<String>, annotations: Vec<String>, type_prefixes: Vec<String>, requires_imports: Vec<String> },
     TestCode { file_imports: Vec<String>, dir_names: Vec<String> },
 }
 
@@ -110,6 +110,8 @@ struct WiringFile {
     annotations: Vec<String>,
     #[serde(default)]
     type_prefixes: Vec<String>,
+    #[serde(default)]
+    requires_imports: Vec<String>,
 }
 
 #[derive(Deserialize)]
@@ -384,7 +386,7 @@ impl RuleFile {
             return Ok(Rule::NameTag { kinds: n.kinds, pattern: n.pattern, tag: n.tag });
         }
         if let Some(w) = self.wiring {
-            return Ok(Rule::Wiring { file_markers: w.file_markers, file_imports: w.file_imports, calls: w.calls, annotations: w.annotations, type_prefixes: w.type_prefixes });
+            return Ok(Rule::Wiring { file_markers: w.file_markers, file_imports: w.file_imports, calls: w.calls, annotations: w.annotations, type_prefixes: w.type_prefixes, requires_imports: w.requires_imports });
         }
         if let Some(t) = self.test_code {
             return Ok(Rule::TestCode { file_imports: t.file_imports, dir_names: t.dir_names });

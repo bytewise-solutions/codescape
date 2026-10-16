@@ -329,3 +329,20 @@ fn aggregate_counts_saturate() {
     let gr = file.graph();
     assert_eq!(gr.aggregates(gr.root())[0].calls.to_native(), u16::MAX);
 }
+
+#[test]
+fn types_keep_their_own_visibility() {
+    let mut b = GraphBuilder::new("p");
+    let pkg = b.add_node(b.root(), NodeKind::Package, SubKind::None, "config", Lang::Go);
+    let cfg = b.add_node(pkg, NodeKind::Type, SubKind::Struct, "Config", Lang::Go);
+    let ctor = b.add_node(cfg, NodeKind::Member, SubKind::Constructor, "newConfig", Lang::Go);
+    b.add_flags(ctor, NodeFlags::TEST);
+    let other = b.add_node(pkg, NodeKind::Type, SubKind::Struct, "Options", Lang::Go);
+    let wired = b.add_node(other, NodeKind::Member, SubKind::Constructor, "ProvideOptions", Lang::Go);
+    b.add_flags(wired, NodeFlags::WIRING);
+    let (_d, file) = roundtrip(b);
+    let g = file.graph();
+    let pkg = find(g, g.root(), "config");
+    assert!(!g.flags(find(g, pkg, "Config")).intersects(NodeFlags::TEST | NodeFlags::WIRING));
+    assert!(!g.flags(find(g, pkg, "Options")).intersects(NodeFlags::TEST | NodeFlags::WIRING));
+}

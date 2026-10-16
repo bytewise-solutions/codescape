@@ -242,7 +242,7 @@ impl GraphBuilder {
 
         for &old in order.iter().rev() {
             let kids = &self.children[old as usize];
-            if old == 0 || kids.is_empty() {
+            if old == 0 || kids.is_empty() || self.nodes[old as usize].kind == NodeKind::Type {
                 continue;
             }
             let flags: Vec<NodeFlags> = kids.iter().map(|&c| self.nodes[c as usize].flags).collect();

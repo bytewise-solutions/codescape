@@ -4,4 +4,4 @@ languages = ["java"]
 
 [[rule]]
 id = "dagger.wiring"
-wiring = { annotations = ["Component", "Subcomponent", "Module", "Provides", "Binds", "BindsInstance", "IntoSet", "IntoMap"], type_prefixes = ["Dagger"] }
+wiring = { annotations = ["Component", "Subcomponent", "Module", "Provides", "Binds", "BindsInstance", "IntoSet", "IntoMap"], type_prefixes = ["Dagger"], requires_imports = ["dagger"] }

@@ -387,9 +387,9 @@ fn f_rel(fx: &Fx, f: usize) -> String {
 #[test]
 fn dagger_annotations_and_static_builders_are_wiring() {
     let mut fx = Fx::new();
-    let f = fx.file("client", "client/src/main/java/c/dagger/AppComponent.java", Lang::Java, false, &[]);
+    let f = fx.file("client", "client/src/main/java/c/dagger/AppComponent.java", Lang::Java, false, &["dagger.Component"]);
     let comp = fx.ty(f, "c.dagger.AppComponent", &[], &["Component"]);
-    let g = fx.file("client", "client/src/main/java/c/dagger/AppModule.java", Lang::Java, false, &[]);
+    let g = fx.file("client", "client/src/main/java/c/dagger/AppModule.java", Lang::Java, false, &["dagger.Module", "dagger.Provides"]);
     let module = fx.ty(g, "c.dagger.AppModule", &[], &["Module"]);
     let provides = fx.func(g, Some(module), "provideClock", false, None, &[]);
     fx.facts.files[g].functions[0].annotations.push(Annotation { name: "Provides".into(), args: Vec::new() });
@@ -454,4 +454,30 @@ fn mains_in_test_helpers_are_tests() {
     fx.func(f, None, "main", true, None, &[]);
     fx.run(&builtins());
     assert_eq!(fx.entry("seed").category, Category::Test);
+}
+
+#[test]
+fn spring_component_is_not_dagger_wiring() {
+    let mut fx = Fx::new();
+    let f = fx.file("svc", "svc/src/main/java/s/OrderService.java", Lang::Java, false, &["org.springframework.stereotype.Component"]);
+    let spring = fx.ty(f, "s.OrderService", &[], &["Component"]);
+    let g = fx.file("client", "client/src/main/java/c/AppComponent.java", Lang::Java, false, &["dagger.Component"]);
+    let dagger = fx.ty(g, "c.AppComponent", &[], &["Component"]);
+    fx.run(&builtins());
+    assert!(!fx.b.flags(spring).contains(NodeFlags::WIRING), "Spring @Component is real code");
+    assert!(fx.b.flags(dagger).contains(NodeFlags::WIRING));
+}
+
+#[test]
+fn wire_import_beside_real_types_keeps_the_file() {
+    let mut fx = Fx::new();
+    let f = fx.file("svc", "svc/internal/data/data.go", Lang::Go, false, &["github.com/google/wire"]);
+    let data = fx.ty(f, "x/data.Data", &[], &[]);
+    let query = fx.func(f, Some(data), "Query", false, None, &[]);
+    let g = fx.file("svc", "svc/internal/billing/wire_providers.go", Lang::Go, false, &["github.com/google/wire"]);
+    let provider = fx.func(g, None, "ProvideRepository", false, None, &[]);
+    fx.run(&builtins());
+    assert!(!fx.b.flags(data).contains(NodeFlags::WIRING));
+    assert!(!fx.b.flags(query).contains(NodeFlags::WIRING));
+    assert!(fx.b.flags(provider).contains(NodeFlags::WIRING), "a provider-only file is still wiring");
 }

@@ -426,3 +426,49 @@ fn frames_skip_non_members_between_pinned_and_unpinned_members() {
         assert!(l.frames.iter().any(|f| f.rect.contains_rect(&r)), "{m} framed");
     }
 }
+
+#[test]
+fn wiring_siblings_never_move_other_boxes() {
+    let mut b = GraphBuilder::new("p");
+    let mut fs = Vec::new();
+    for m in ["a", "b", "c", "d", "e", "f", "g"] {
+        let id = b.add_node(b.root(), NodeKind::Package, SubKind::None, m, Lang::Go);
+        let f = b.add_node(id, NodeKind::Member, SubKind::Function, "f", Lang::Go);
+        b.set_span(f, "f", 1, 40);
+        fs.push(f);
+    }
+    for w in fs.windows(2) {
+        b.add_edge(w[0], w[1], EdgeKind::Calls, Scope::Main, Confidence::Resolved, EdgeFlags::NONE);
+    }
+    let dagger = b.add_node(b.root(), NodeKind::Package, SubKind::None, "dagger", Lang::Go);
+    let wire = b.add_node(dagger, NodeKind::Member, SubKind::Function, "provide", Lang::Go);
+    b.set_span(wire, "f", 1, 40);
+    b.add_flags(wire, NodeFlags::WIRING);
+    for &f in &fs {
+        b.add_edge(wire, f, EdgeKind::Calls, Scope::Main, Confidence::Resolved, EdgeFlags::NONE);
+    }
+    let dir = tempfile::tempdir().unwrap();
+    write_graph(&b.finish(), &dir.path().join("g")).unwrap();
+    let file = ReliefFile::open(&dir.path().join("g")).unwrap();
+    let g = file.graph();
+    let off = layout_container(g, g.root(), &[], &LayoutOptions::default());
+    let on = layout_container(g, g.root(), &[], &LayoutOptions { show_wiring: true, ..Default::default() });
+    assert_eq!(on.children.len(), off.children.len() + 1);
+    for c in &off.children {
+        assert_eq!(on.child(c.node).unwrap().rect, c.rect, "{} moved", g.name(c.node));
+    }
+}
+
+#[test]
+fn only_pinned_boxes_refuse_to_wrap() {
+    let mut names: Vec<String> = (0..39).map(|i| format!("lib{i:02}")).collect();
+    names.push("app".into());
+    let refs: Vec<&str> = names.iter().map(|s| s.as_str()).collect();
+    let g = with_entries(&refs, &[], &["app"]);
+    let gr = g.file.graph();
+    let l = layout_container(gr, gr.root(), &[], &LayoutOptions::default());
+    let aspect = l.size[0] / l.size[1];
+    assert!(aspect < 4.0, "unpinned sources still wrap: size {:?}", l.size);
+    let app = l.child(g.ids["app"]).unwrap().rect;
+    assert!(l.children.iter().filter(|c| !c.pinned).all(|c| c.rect.y > app.y), "pinned row sits above the rest");
+}
