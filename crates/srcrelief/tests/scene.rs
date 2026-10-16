@@ -285,3 +285,45 @@ fn scene_edges_carry_their_link_count() {
     let e = s.edges.iter().find(|e| e.a == left && e.b == right).unwrap();
     assert_eq!(e.links, 1);
 }
+
+fn crowded() -> Fx {
+    let mut b = GraphBuilder::new("p");
+    let m = b.add_node(b.root(), NodeKind::Module, SubKind::None, "big", Lang::Java);
+    let mut fs = Vec::new();
+    for i in 0..15 {
+        let p = b.add_node(m, NodeKind::Package, SubKind::None, &format!("pkg{i:02}"), Lang::Java);
+        let t = b.add_node(p, NodeKind::Type, SubKind::Class, "T", Lang::Java);
+        b.set_span(t, "f", 1, 100);
+        let f = b.add_node(t, NodeKind::Member, SubKind::Method, "f", Lang::Java);
+        b.set_span(f, "f", 2, 20);
+        fs.push(f);
+    }
+    for &f in &fs[1..] {
+        b.add_edge(fs[0], f, EdgeKind::Calls, Scope::Main, Confidence::Resolved, EdgeFlags::NONE);
+    }
+    let dir = tempfile::tempdir().unwrap();
+    write_graph(&b.finish(), &dir.path().join("g")).unwrap();
+    let file = ReliefFile::open(&dir.path().join("g")).unwrap();
+    Fx { _dir: dir, file }
+}
+
+#[test]
+fn crowded_containers_show_a_matrix_until_their_children_are_readable() {
+    let fx = crowded();
+    let g = fx.file.graph();
+    let mut cache = LayoutCache::new(Vec::new(), LayoutOptions::default());
+    let cam = fit_all(g, &mut cache);
+    let on = SceneOptions { matrix: true };
+    let s = build_scene_with(g, &mut cache, &cam, VIEW, &VisualRules::default(), None, on);
+    let big = node(g, &["big"]);
+    assert_eq!(s.matrices.len(), 1);
+    assert_eq!((s.matrices[0].container, s.matrices[0].matrix.rows.len()), (big, 15));
+    assert!(s.boxes.iter().all(|b| g.parent(b.node) != Some(big)), "no child boxes behind the matrix");
+    assert!(s.edges.is_empty());
+    let off = build_scene_with(g, &mut cache, &cam, VIEW, &VisualRules::default(), None, SceneOptions { matrix: false });
+    assert!(off.matrices.is_empty() && off.boxes.iter().any(|b| g.parent(b.node) == Some(big)));
+    let pkg = node(g, &["big", "pkg03"]);
+    let close = Camera::fit(world_rect(g, &mut cache, pkg).unwrap(), VIEW);
+    let zoomed = build_scene_with(g, &mut cache, &close, VIEW, &VisualRules::default(), None, on);
+    assert!(zoomed.matrices.is_empty(), "zooming in brings the boxes back");
+}

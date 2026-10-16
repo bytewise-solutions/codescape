@@ -219,8 +219,9 @@ fn the_legend_is_shown_by_default_and_remembered_when_hidden() {
 }
 
 #[test]
-fn quiet_arrows_are_on_by_default() {
+fn quiet_arrows_and_the_matrix_are_on_by_default() {
     let e = env();
     let store = SettingsStore::load(e.paths.clone()).unwrap();
     assert_eq!(store.settings().view(View::QuietArrows), Sourced { value: true, layer: Layer::Default });
+    assert_eq!(store.settings().view(View::Matrix), Sourced { value: true, layer: Layer::Default });
 }

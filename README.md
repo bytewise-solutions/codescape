@@ -58,6 +58,11 @@ enough to read.
 - **Quiet arrows.** Every dependency is drawn, but faint, slightly stronger for the heaviest ones in a container. Hover
   or select a box and its own arrows light up at full strength, as thick as the number of classes they link. Turn
   **View ▸ Quiet arrows** off to draw every arrow by its weight instead.
+- **Crowded containers become a matrix.** When a container holds 12 or more boxes too small to read, it shows a
+  dependency matrix instead: one row and one column per child, in layer order; a cell counts the classes linking the
+  row to the column. Blue cells above the diagonal follow the layering, red ones below it go upward, amber ones join
+  the same layer. Hover a cell for its names and count, click a row to select it, double-click to zoom in; boxes
+  return once they are readable. **View ▸ Matrix for crowded containers** turns it off.
 - **Implements / inherits** arrows are dotted with a hollow triangle at the interface, like UML.
 - **Constructors live inside their type.** A Go `func NewX(...) *X` is shown inside `X`, not as a box of its own.
 - **Dependency injection is set aside.** Code recognised as wiring (Google Wire's generated injectors and provider

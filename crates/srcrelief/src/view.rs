@@ -30,11 +30,12 @@ pub fn layout_options(s: &Settings, visual: &VisualRules) -> LayoutOptions {
 
 pub fn view_items(s: &Settings) -> Vec<ViewItem> {
     let item = |v: View| ViewItem { key: Key::View(v), label: v.label().into(), checked: s.view(v).value };
-    let mut out: Vec<ViewItem> = View::ALL.into_iter().filter(|v| !matches!(v, View::QuietArrows | View::Legend)).map(item).collect();
+    let mut out: Vec<ViewItem> = View::ALL.into_iter().filter(|v| !matches!(v, View::Matrix | View::QuietArrows | View::Legend)).map(item).collect();
     for f in &s.filters {
         let name = &f.value.name;
         out.push(ViewItem { key: Key::FilterShown(name.clone()), label: name.clone(), checked: s.filter_shown(name).is_some_and(|x| x.value) });
     }
+    out.push(item(View::Matrix));
     out.push(item(View::QuietArrows));
     out.push(item(View::Legend));
     out
