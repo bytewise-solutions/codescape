@@ -1,0 +1,8 @@
+[package]
+name = "srcrelief-facts"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+srcrelief-format.workspace = true
