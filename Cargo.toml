@@ -1,0 +1,43 @@
+[workspace]
+resolver = "3"
+members = ["crates/*"]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+license = "MIT"
+
+[workspace.dependencies]
+srcrelief-format = { path = "crates/srcrelief-format" }
+srcrelief-facts = { path = "crates/srcrelief-facts" }
+srcrelief-build = { path = "crates/srcrelief-build" }
+srcrelief-java = { path = "crates/srcrelief-java" }
+srcrelief-go = { path = "crates/srcrelief-go" }
+srcrelief-rules = { path = "crates/srcrelief-rules" }
+srcrelief-index = { path = "crates/srcrelief-index" }
+srcrelief-layout = { path = "crates/srcrelief-layout" }
+tree-sitter = "0.27.1"
+tree-sitter-java = "0.23.5"
+tree-sitter-go = "0.25.0"
+streaming-iterator = "0.1.9"
+rkyv = "0.8.18"
+memmap2 = "0.9.11"
+rayon = "1.12.0"
+ignore = "0.4.33"
+globset = "0.4.20"
+regex = "1.13.1"
+toml = "1.1.8"
+serde = { version = "1.0.229", features = ["derive"] }
+clap = { version = "4.6.7", features = ["derive"] }
+dirs = "7.0.0"
+blake3 = "1.8.7"
+anyhow = "1.0.104"
+thiserror = "2.0.21"
+tempfile = "3.27.0"
+eframe = { version = "0.37.0", default-features = false, features = ["wgpu", "default_fonts", "wayland", "x11"] }
+egui = "0.37.0"
+rfd = "0.17.2"
+nucleo-matcher = "0.3.1"
+
+[profile.dev.package."*"]
+opt-level = 2
