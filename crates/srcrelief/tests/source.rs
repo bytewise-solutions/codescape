@@ -2,26 +2,25 @@ use srcrelief::source::*;
 use srcrelief_format::Lang;
 
 #[test]
-fn spans_are_read_from_disk_dedented_and_cached() {
+fn files_are_read_once_with_tabs_expanded() {
     let dir = tempfile::tempdir().unwrap();
     std::fs::create_dir_all(dir.path().join("svc")).unwrap();
-    std::fs::write(dir.path().join("svc/a.go"), "package a\n\nfunc (s *S) Run() {\n\tif ok {\n\t\treturn\n\t}\n}\n").unwrap();
+    std::fs::write(dir.path().join("svc/a.go"), "package a\n\nfunc Run() {\n\treturn\n}\n").unwrap();
     let mut cache = SourceCache::new(dir.path());
-    let code = cache.span("svc/a.go", 4, 6).unwrap();
-    assert_eq!(code.first_line, 4);
-    assert_eq!(code.lines, ["if ok {", "    return", "}"], "tabs expand and the shared indent goes");
+    let lines = cache.file("svc/a.go").unwrap();
+    assert_eq!(lines.len(), 5);
+    assert_eq!(lines[3], "    return");
     std::fs::remove_file(dir.path().join("svc/a.go")).unwrap();
-    assert!(cache.span("svc/a.go", 4, 6).is_some(), "served from the cache");
-    assert!(cache.span("missing.go", 1, 2).is_none());
-    assert!(cache.span("svc/a.go", 0, 0).is_none(), "no span, no code");
+    assert!(cache.file("svc/a.go").is_some(), "served from the cache");
+    assert!(cache.file("missing.go").is_none());
 }
 
 #[test]
-fn code_is_drawn_only_once_readable() {
-    assert_eq!(code_font(100.0, 40), None, "40 lines in 100 px is noise");
-    let f = code_font(600.0, 40).unwrap();
-    assert!((6.0..=13.0).contains(&f), "{f}");
-    assert_eq!(code_font(2000.0, 3), Some(13.0), "never larger than normal text");
+fn the_file_replaces_the_box_once_its_text_is_readable() {
+    assert_eq!(file_font(300.0), None, "a box this narrow keeps its members");
+    let f = file_font(800.0).unwrap();
+    assert!(f >= FILE_MIN_PT && f < 14.0, "{f}");
+    assert!(file_font(4000.0).unwrap() > f, "zooming in keeps enlarging the text");
 }
 
 #[test]
@@ -41,25 +40,9 @@ fn highlighting_marks_keywords_strings_and_comments() {
     assert!(java[0].iter().any(|(t, k)| t == "extends" && *k == Token::Keyword));
 }
 
-#[test]
-fn spare_room_shows_the_lines_around_the_span() {
-    assert_eq!(context_window(100, 40, 49, 10), (40, 49), "just the span");
-    assert_eq!(context_window(100, 40, 49, 20), (35, 54), "five more on each side");
-    assert_eq!(context_window(100, 3, 12, 20), (1, 20), "the top of the file takes the missing lines below");
-    assert_eq!(context_window(100, 95, 99, 20), (81, 100));
-    assert_eq!(context_window(30, 10, 20, 500), (1, 30), "the whole file once it fits");
-    assert_eq!(context_window(100, 40, 49, 4), (40, 49), "never cuts the span itself");
-}
 
 #[test]
-fn a_window_keeps_the_span_indent_and_marks_its_lines() {
-    let dir = tempfile::tempdir().unwrap();
-    std::fs::write(dir.path().join("a.go"), "package a\n\ntype S struct{}\n\nfunc (s *S) Run() {\n\treturn\n}\n\nfunc other() {}\n").unwrap();
-    let mut cache = SourceCache::new(dir.path());
-    let w = cache.window("a.go", 5, 7, 20).unwrap();
-    assert_eq!(w.code.first_line, 1);
-    assert_eq!(w.own, 4..7, "lines 5-7 of the file");
-    assert_eq!(w.code.lines[4], "func (s *S) Run() {");
-    assert_eq!(w.code.lines[5], "    return");
-    assert_eq!(w.code.lines.len(), 9);
+fn overlapping_spans_merge_into_one_band() {
+    assert_eq!(merge_spans(vec![(32, 172), (50, 57), (59, 80)]), [(32, 172)]);
+    assert_eq!(merge_spans(vec![(80, 90), (29, 32), (33, 40), (0, 0)]), [(29, 40), (80, 90)], "adjacent lines join, empty spans go");
 }

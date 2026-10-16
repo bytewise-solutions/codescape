@@ -3,8 +3,9 @@ use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
-const MIN_CODE_PT: f32 = 5.0;
-pub const MAX_CODE_PT: f32 = 13.0;
+pub const FILE_MIN_PT: f32 = 8.0;
+const FILE_COLUMNS: f32 = 100.0;
+const MONO_ADVANCE: f32 = 0.62;
 pub const LINE_SPACING: f32 = 1.25;
 const TAB: &str = "    ";
 
@@ -21,93 +22,32 @@ const JAVA_WORDS: &[&str] = &[
     "volatile", "while", "null", "true", "false", "record", "yield",
 ];
 
-#[derive(Clone, Debug, PartialEq)]
-pub struct Code {
-    pub first_line: u32,
-    pub lines: Vec<String>,
-}
-
-#[derive(Clone, Debug, PartialEq)]
-pub struct Window {
-    pub code: Code,
-    pub own: std::ops::Range<usize>,
-}
-
-pub fn context_window(total: usize, start: usize, end: usize, capacity: usize) -> (usize, usize) {
-    let end = end.min(total);
-    let own = end + 1 - start;
-    if capacity <= own {
-        return (start, end);
-    }
-    let extra = capacity - own;
-    let first = start.saturating_sub(extra / 2).max(1);
-    let last = (end + extra - (start - first)).min(total);
-    let left = extra - (start - first) - (last - end);
-    (first.saturating_sub(left).max(1), last)
-}
-
 pub struct SourceCache {
     root: PathBuf,
     files: HashMap<String, Option<Arc<Vec<String>>>>,
-    spans: HashMap<(String, u32, u32), Option<Arc<Code>>>,
-    windows: HashMap<(String, u32, u32), (usize, Arc<Window>)>,
 }
 
 impl SourceCache {
     pub fn new(root: &Path) -> SourceCache {
-        SourceCache { root: root.to_path_buf(), files: HashMap::new(), spans: HashMap::new(), windows: HashMap::new() }
+        SourceCache { root: root.to_path_buf(), files: HashMap::new() }
     }
 
-    pub fn span(&mut self, file: &str, start: u32, end: u32) -> Option<Arc<Code>> {
-        let key = (file.to_string(), start, end);
-        if let Some(c) = self.spans.get(&key) {
-            return c.clone();
-        }
-        let code = self.read(file).filter(|_| start >= 1 && end >= start).map(|all| {
-            let end = (end as usize).min(all.len());
-            Arc::new(Code { first_line: start, lines: dedent(&all[(start as usize - 1).min(end)..end]) })
-        });
-        self.spans.insert(key, code.clone());
-        code
-    }
-
-    pub fn cached_window(&mut self, file: &str, start: u32, end: u32, capacity: usize) -> Option<Arc<Window>> {
-        let key = (file.to_string(), start, end);
-        if let Some((_, w)) = self.windows.get(&key).filter(|(c, _)| *c == capacity) {
-            return Some(w.clone());
-        }
-        let w = Arc::new(self.window(file, start, end, capacity)?);
-        self.windows.insert(key, (capacity, w.clone()));
-        Some(w)
-    }
-
-    pub fn window(&mut self, file: &str, start: u32, end: u32, capacity: usize) -> Option<Window> {
-        let all = self.read(file).filter(|a| start >= 1 && end >= start && (start as usize) <= a.len())?;
-        let end = (end as usize).min(all.len());
-        let (first, last) = context_window(all.len(), start as usize, end, capacity);
-        let own = &all[start as usize - 1..end];
-        let indent = own.iter().filter(|l| !l.trim().is_empty()).map(|l| l.len() - l.trim_start().len()).min().unwrap_or(0);
-        let lines = all[first - 1..last].iter().map(|l| l[indent.min(l.len() - l.trim_start().len())..].trim_end().to_string()).collect();
-        Some(Window { code: Code { first_line: first as u32, lines }, own: start as usize - first..end - first + 1 })
-    }
-
-    fn read(&mut self, file: &str) -> Option<Arc<Vec<String>>> {
+    pub fn file(&mut self, file: &str) -> Option<Arc<Vec<String>>> {
         let root = &self.root;
         self.files
             .entry(file.to_string())
-            .or_insert_with(|| std::fs::read_to_string(root.join(file)).ok().map(|s| Arc::new(s.lines().map(|l| l.replace('\t', TAB)).collect())))
+            .or_insert_with(|| std::fs::read_to_string(root.join(file)).ok().map(|s| Arc::new(s.lines().map(|l| l.replace('\t', TAB).trim_end().to_string()).collect())))
             .clone()
     }
 }
 
-fn dedent(lines: &[String]) -> Vec<String> {
-    let indent = lines.iter().filter(|l| !l.trim().is_empty()).map(|l| l.len() - l.trim_start().len()).min().unwrap_or(0);
-    lines.iter().map(|l| l.get(indent..).unwrap_or("").trim_end().to_string()).collect()
+pub fn file_font(box_width: f32) -> Option<f32> {
+    let font = box_width / (FILE_COLUMNS * MONO_ADVANCE);
+    (font >= FILE_MIN_PT).then_some(font)
 }
 
-pub fn code_font(height: f32, lines: usize) -> Option<f32> {
-    let font = height / (lines.max(1) as f32 * LINE_SPACING);
-    (font >= MIN_CODE_PT).then_some(font.min(MAX_CODE_PT))
+pub fn advance(font: f32) -> f32 {
+    font * MONO_ADVANCE
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -190,6 +130,19 @@ fn highlight_line(line: &str, words: &[&str], in_block: &mut bool) -> Vec<(Strin
         }
         push(&rest[..c.len_utf8()], Token::Text);
         rest = &rest[c.len_utf8()..];
+    }
+    out
+}
+
+pub fn merge_spans(mut spans: Vec<(u32, u32)>) -> Vec<(u32, u32)> {
+    spans.retain(|(s, e)| *s >= 1 && e >= s);
+    spans.sort();
+    let mut out: Vec<(u32, u32)> = Vec::new();
+    for (s, e) in spans {
+        match out.last_mut() {
+            Some(last) if s <= last.1 + 1 => last.1 = last.1.max(e),
+            _ => out.push((s, e)),
+        }
     }
     out
 }

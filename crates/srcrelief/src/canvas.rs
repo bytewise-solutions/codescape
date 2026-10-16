@@ -1,5 +1,6 @@
 use crate::camera::{Camera, WRect};
 use crate::focus::{Mark, Marks};
+use crate::source::file_font;
 use srcrelief_format::{ArchivedGraph, NodeFlags, NodeId, NodeKind, SubKind};
 use srcrelief_layout::{ContainerLayout, Direction, LayoutCache, Rect, display_children, display_path};
 use srcrelief_rules::VisualRules;
@@ -22,6 +23,7 @@ pub struct SceneBox {
     pub dimmed: bool,
     pub tag_color: Option<[u8; 3]>,
     pub hidden_details: usize,
+    pub source: bool,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -235,12 +237,19 @@ impl Builder<'_> {
         self.scene.stats.visited += 1;
         let g = self.g;
         let opts = self.cache.options();
-        let has_children = display_children(g, node).into_iter().any(|c| !opts.hides(g, c));
-        let open = has_children && rect.w >= OPEN_THRESHOLD_PX;
+        let shown: Vec<NodeId> = display_children(g, node).into_iter().filter(|&c| !opts.hides(g, c)).collect();
+        let has_children = !shown.is_empty();
+        let file_level = match g.kind(node) {
+            NodeKind::Type => shown.iter().all(|&c| g.kind(c) != NodeKind::Type),
+            NodeKind::Member => g.parent(node).is_some_and(|p| g.kind(p) == NodeKind::Package),
+            _ => false,
+        };
+        let source = file_level && g.file(node).is_some() && file_font(rect.w).is_some();
+        let open = !source && has_children && rect.w >= OPEN_THRESHOLD_PX;
         let tag_color = g.tags(node).find_map(|t| self.vis.style_for(t).map(|s| s.color));
-        self.scene.boxes.push(SceneBox { node, rect, open, depth, kind: g.kind(node), sub: g.sub_kind(node), flags: g.flags(node), mark: self.mark(node), dimmed: self.marks.is_some() && self.mark(node) == Mark::None, tag_color, hidden_details: 0 });
+        self.scene.boxes.push(SceneBox { node, rect, open, depth, kind: g.kind(node), sub: g.sub_kind(node), flags: g.flags(node), mark: self.mark(node), dimmed: self.marks.is_some() && self.mark(node) == Mark::None, tag_color, hidden_details: 0, source });
         self.scene.stats.drawn += 1;
-        if rect.h >= MIN_LABEL_PX * 1.6 {
+        if !source && rect.h >= MIN_LABEL_PX * 1.6 {
             let size = if open { 13.0 } else { (rect.h * 0.2).clamp(MIN_LABEL_PX, 16.0) };
             let (pos, centered, detail) = if open {
                 ([rect.x + 8.0, rect.y + 6.0], false, Some(summary(g, node)))

@@ -285,3 +285,19 @@ fn scene_edges_carry_their_link_count() {
     let e = s.edges.iter().find(|e| e.a == left && e.b == right).unwrap();
     assert_eq!(e.links, 1);
 }
+
+#[test]
+fn a_type_zoomed_close_shows_its_file_instead_of_its_members() {
+    let fx = fixture();
+    let g = fx.file.graph();
+    let mut cache = LayoutCache::new(Vec::new(), LayoutOptions::default());
+    let t = node(g, &["left", "left.api", "T"]);
+    let close = Camera::fit(world_rect(g, &mut cache, t).unwrap(), VIEW);
+    let s = scene(g, &mut cache, &close);
+    let b = s.boxes.iter().find(|b| b.node == t).unwrap();
+    assert!(b.source && !b.open);
+    assert!(s.boxes.iter().all(|x| g.parent(x.node) != Some(t)), "no member boxes over the file");
+    let far = fit_all(g, &mut cache);
+    let s = scene(g, &mut cache, &far);
+    assert!(s.boxes.iter().all(|b| !b.source));
+}

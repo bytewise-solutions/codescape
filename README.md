@@ -67,11 +67,10 @@ enough to read.
   dependency; red arrows point upward (a layering violation), amber ones join two boxes of the same layer.
 - **Box colours by kind:** interface (teal), class/struct (blue), enum/record (violet), function/method (grey),
   constructor (dim blue). A legend sits in the bottom-left corner; close it with its × or **View ▸ Legend**.
-- **Code when you zoom in.** A function, method or type whose members are not shown displays its own source lines,
-  with line numbers and keywords, strings and comments highlighted, once the box is large enough to read them; the
-  text grows as you keep zooming. Past normal text size, zooming further brings in the surrounding lines of the file,
-  faded, around the box's own lines, until the whole file shows. Lines are read from the project folder as they are on
-  disk.
+- **The file when you zoom in close.** Once a class, struct or top-level function is wide enough on screen to read
+  its code, its member boxes give way to its whole file, placed so the type's first line sits at the top of its box.
+  Zoom sets the text size, panning scrolls; the type's own lines and its methods sit on a light band. Types that
+  hold other boxes (an interface with its implementations) stay boxes. Lines are read from disk.
 - **Quiet arrows.** Every dependency is drawn, but faint, slightly stronger for the heaviest ones in a container. Hover
   or select a box and its own arrows light up at full strength, as thick as the number of classes they link. Turn
   **View ▸ Quiet arrows** off to draw every arrow by its weight instead.
