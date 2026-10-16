@@ -40,14 +40,15 @@ pub enum View {
     Details,
     Errors,
     Wiring,
+    QuietArrows,
     Legend,
 }
 
 impl View {
-    pub const ALL: [View; 6] = [View::Tests, View::TestDeps, View::Details, View::Errors, View::Wiring, View::Legend];
+    pub const ALL: [View; 7] = [View::Tests, View::TestDeps, View::Details, View::Errors, View::Wiring, View::QuietArrows, View::Legend];
 
     pub fn default_value(self) -> bool {
-        self == View::Legend
+        matches!(self, View::QuietArrows | View::Legend)
     }
 
     pub fn label(self) -> &'static str {
@@ -57,6 +58,7 @@ impl View {
             View::Details => "Details",
             View::Errors => "Errors",
             View::Wiring => "Wiring",
+            View::QuietArrows => "Quiet arrows",
             View::Legend => "Legend",
         }
     }
@@ -146,6 +148,8 @@ struct ViewFile {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     wiring: Option<bool>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    quiet_arrows: Option<bool>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     legend: Option<bool>,
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     filters: BTreeMap<String, bool>,
@@ -203,6 +207,7 @@ impl ViewFile {
             View::Details => &mut self.details,
             View::Errors => &mut self.errors,
             View::Wiring => &mut self.wiring,
+            View::QuietArrows => &mut self.quiet_arrows,
             View::Legend => &mut self.legend,
         }
     }
@@ -306,7 +311,7 @@ pub struct Settings {
     pub categories: Vec<Sourced<CategoryOverride>>,
     pub test_paths: Vec<Sourced<String>>,
     pub filters: Vec<Sourced<Filter>>,
-    pub views: [Sourced<bool>; 6],
+    pub views: [Sourced<bool>; View::ALL.len()],
     pub filter_views: BTreeMap<String, Sourced<bool>>,
     pub removed: Vec<Sourced<Key>>,
 }

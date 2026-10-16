@@ -120,6 +120,21 @@ pub fn edge_width(links: u32, marked: bool) -> f32 {
     if marked { w.max(2.2) } else { w }
 }
 
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct EdgeLook {
+    pub width: f32,
+    pub alpha: f32,
+}
+
+pub fn edge_look(links: u32, max_links: u32, lit: bool) -> EdgeLook {
+    if lit {
+        return EdgeLook { width: edge_width(links, false).max(1.4), alpha: 1.0 };
+    }
+    let share = if max_links > 1 { (links.max(1) - 1) as f32 / (max_links - 1) as f32 } else { 0.0 };
+    let share = share.clamp(0.0, 1.0);
+    EdgeLook { width: 0.7 + 0.5 * share, alpha: 0.18 + 0.32 * share }
+}
+
 pub fn edge_alpha(links: u32) -> f32 {
     (0.4 + (links.max(1) as f32).log2() * 0.2).min(1.0)
 }

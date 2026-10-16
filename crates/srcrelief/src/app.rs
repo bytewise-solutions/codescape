@@ -327,6 +327,7 @@ struct Project {
     search_open: bool,
     search_hits: Vec<NodeId>,
     search_cursor: usize,
+    hovered: Option<NodeId>,
     settings: SettingsStore,
     packs: Vec<String>,
     settings_open: bool,
@@ -445,6 +446,7 @@ impl Project {
             search_open: false,
             search_hits: Vec::new(),
             search_cursor: 0,
+            hovered: None,
             settings,
             packs,
             settings_open: false,
@@ -968,6 +970,7 @@ impl Project {
             ui.ctx().request_repaint();
         }
         let started = Instant::now();
+        self.hovered = resp.hover_pos().and_then(|p| self.scene.box_at([p.x, p.y]));
         self.scene = build_scene(g, &mut self.cache, &self.cam, self.view, &self.visual, self.focus.as_ref().map(|f| &f.marks));
         self.scene_ms = started.elapsed().as_secs_f32() * 1000.0;
         self.paint(&painter);
@@ -989,9 +992,15 @@ impl Project {
         painter.rect_filled(erect(self.view), 0.0, style::BG);
         let painter = painter.with_clip_rect(erect(self.view));
         let max_depth = self.scene.boxes.iter().map(|b| b.depth).max().unwrap_or(0);
+        let g = self.file.graph();
+        let mut heaviest: HashMap<Option<NodeId>, u32> = HashMap::new();
+        for e in &self.scene.edges {
+            let m = heaviest.entry(g.parent(e.a)).or_default();
+            *m = (*m).max(e.links);
+        }
         for depth in 1..=max_depth {
             for e in self.scene.edges.iter().filter(|e| e.depth == depth) {
-                self.paint_edge(&painter, e);
+                self.paint_edge(&painter, e, heaviest[&g.parent(e.a)]);
             }
             for b in self.scene.boxes.iter().filter(|b| b.depth == depth) {
                 self.paint_box(&painter, b);
@@ -1052,7 +1061,7 @@ impl Project {
         }
     }
 
-    fn paint_edge(&self, painter: &egui::Painter, e: &crate::canvas::SceneEdge) {
+    fn paint_edge(&self, painter: &egui::Painter, e: &crate::canvas::SceneEdge, heaviest: u32) {
         let pts: Vec<Pos2> = e.points.iter().map(|p| pos(*p)).collect();
         let (mut color, mut dashed) = match e.dir {
             Direction::Down => (style::EDGE, false),
@@ -1067,17 +1076,23 @@ impl Project {
             dashed = true;
         }
         let marked = e.mark != Mark::None;
+        let hovered = self.hovered.is_some_and(|h| e.a == h || e.b == h);
         let links = if e.weight == 0 { e.implements } else { e.links };
-        let width = style::edge_width(links, marked);
+        let (width, alpha) = if self.settings.settings().view(View::QuietArrows).value {
+            let look = style::edge_look(links, heaviest, marked || hovered);
+            (if marked { look.width.max(2.2) } else { look.width }, look.alpha)
+        } else {
+            (style::edge_width(links, marked), if marked { 1.0 } else { style::edge_alpha(links) })
+        };
         match e.mark {
             Mark::Down | Mark::Focus => color = style::REACH,
             Mark::Up => color = style::CALLER,
             Mark::None => {}
         }
-        if e.dimmed {
+        if e.dimmed && !hovered {
             color = color.gamma_multiply(0.2);
-        } else if !marked {
-            color = color.gamma_multiply(style::edge_alpha(links));
+        } else {
+            color = color.gamma_multiply(alpha);
         }
         let wiring_only = e.weight == 0 && e.implements == 0 && e.wiring > 0;
         let implements_only = e.weight == 0 && e.implements > 0;

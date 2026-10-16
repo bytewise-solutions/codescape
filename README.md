@@ -55,6 +55,9 @@ enough to read.
   dependency; red arrows point upward (a layering violation), amber ones join two boxes of the same layer.
 - **Box colours by kind:** interface (teal), class/struct (blue), enum/record (violet), function/method (grey),
   constructor (dim blue). A legend sits in the bottom-left corner; close it with its × or **View ▸ Legend**.
+- **Quiet arrows.** Every dependency is drawn, but faint, slightly stronger for the heaviest ones in a container. Hover
+  or select a box and its own arrows light up at full strength, as thick as the number of classes they link. Turn
+  **View ▸ Quiet arrows** off to draw every arrow by its weight instead.
 - **Implements / inherits** arrows are dotted with a hollow triangle at the interface, like UML.
 - **Constructors live inside their type.** A Go `func NewX(...) *X` is shown inside `X`, not as a box of its own.
 - **Dependency injection is set aside.** Code recognised as wiring (Google Wire's generated injectors and provider

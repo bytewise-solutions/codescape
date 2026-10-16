@@ -25,3 +25,17 @@ fn legend_explains_every_style() {
     assert!(lean.iter().all(|i| !i.label.starts_with("wiring") && i.label != "error type"));
     assert!(items.iter().any(|i| matches!(i.sample, LegendSample::Arrow { dashed: true, hollow_head: true, .. })));
 }
+
+#[test]
+fn quiet_arrows_stay_faint_until_lit() {
+    use srcrelief::style::{EdgeLook, edge_look};
+    let faint = edge_look(1, 20, false);
+    let heaviest = edge_look(20, 20, false);
+    let lit = edge_look(1, 20, true);
+    assert!(faint.width <= 0.8 && faint.alpha <= 0.25, "{faint:?}");
+    assert!(heaviest.alpha > faint.alpha && heaviest.alpha < 0.6, "the main flows show a little: {heaviest:?}");
+    assert!(heaviest.width < lit.width.max(edge_look(20, 20, true).width));
+    assert_eq!(lit.alpha, 1.0);
+    assert!(edge_look(16, 20, true).width > lit.width, "lit arrows keep their weight");
+    assert_eq!(edge_look(1, 0, false), EdgeLook { ..faint }, "an empty container does not divide by zero");
+}
