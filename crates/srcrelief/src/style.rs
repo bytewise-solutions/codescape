@@ -58,14 +58,60 @@ pub fn tint(base: Color32, over: Color32, amount: f32) -> Color32 {
     Color32::from_rgb(mix(base.r(), over.r()), mix(base.g(), over.g()), mix(base.b(), over.b()))
 }
 
-pub const LEGEND: &[(&str, Color32)] = &[
-    ("interface", INTERFACE),
-    ("class / struct", BOX_STROKE),
-    ("enum / record", ENUM),
-    ("function / method", FUNCTION),
-    ("constructor", CONSTRUCTOR),
-    ("wiring (DI)", WIRING),
-];
+pub const ERROR_TYPE: Color32 = Color32::from_rgb(200, 120, 120);
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum LegendSample {
+    Box { stroke: Color32 },
+    Outline { stroke: Color32, width: f32 },
+    Dot { color: Color32 },
+    Frame,
+    Arrow { color: Color32, dashed: bool, dotted: bool, hollow_head: bool },
+}
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct LegendItem {
+    pub label: &'static str,
+    pub sample: LegendSample,
+}
+
+const fn item(label: &'static str, sample: LegendSample) -> LegendItem {
+    LegendItem { label, sample }
+}
+
+pub fn legend(show_wiring: bool, show_noise: bool) -> Vec<LegendItem> {
+    use LegendSample::*;
+    let mut v = vec![
+        item("interface", Box { stroke: INTERFACE }),
+        item("class / struct", Box { stroke: BOX_STROKE }),
+        item("enum / record", Box { stroke: ENUM }),
+        item("function / method", Box { stroke: FUNCTION }),
+        item("constructor", Box { stroke: CONSTRUCTOR }),
+    ];
+    if show_wiring {
+        v.push(item("wiring (DI)", Box { stroke: WIRING }));
+    }
+    if show_noise {
+        v.push(item("error type", Box { stroke: ERROR_TYPE }));
+    }
+    v.extend([
+        item("selected", Outline { stroke: ACCENT, width: 2.5 }),
+        item("calls (from selection)", Outline { stroke: REACH, width: 2.0 }),
+        item("called by / sets up", Outline { stroke: CALLER, width: 2.0 }),
+        item("has an entry point", Dot { color: ENTRY }),
+        item("group", Frame),
+        item("calls / depends on", Arrow { color: EDGE, dashed: false, dotted: false, hollow_head: false }),
+        item("upward dependency", Arrow { color: EDGE_UP, dashed: true, dotted: false, hollow_head: false }),
+        item("same layer", Arrow { color: EDGE_SIDEWAYS, dashed: false, dotted: false, hollow_head: false }),
+        item("undeclared dependency", Arrow { color: EDGE_SIDEWAYS, dashed: true, dotted: false, hollow_head: false }),
+        item("implements / extends", Arrow { color: EDGE, dashed: true, dotted: false, hollow_head: true }),
+        item("test-only dependency", Arrow { color: EDGE, dashed: true, dotted: false, hollow_head: false }),
+    ]);
+    if show_wiring {
+        v.push(item("wiring arrow", Arrow { color: WIRING, dashed: false, dotted: true, hollow_head: false }));
+    }
+    v
+}
 
 pub const CALLER: Color32 = Color32::from_rgb(110, 165, 255);
 

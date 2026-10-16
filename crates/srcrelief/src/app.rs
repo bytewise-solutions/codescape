@@ -902,6 +902,8 @@ impl Project {
             style::EXTERNAL
         } else if wiring {
             style::WIRING
+        } else if b.flags.contains(NodeFlags::NOISE) {
+            style::ERROR_TYPE
         } else {
             style::kind_stroke(b.sub)
         };
@@ -987,16 +989,54 @@ impl Project {
     }
 
     fn paint_legend(&self, painter: &egui::Painter) {
-        let rows: Vec<&(&str, Color32)> = style::LEGEND.iter().filter(|(l, _)| self.cache.options().show_wiring || !l.starts_with("wiring")).collect();
+        let opts = self.cache.options();
+        let items = style::legend(opts.show_wiring, opts.show_noise);
         let area = minimap::area(self.view);
-        let h = rows.len() as f32 * 15.0 + 8.0;
-        let top = egui::Rect::from_min_size(Pos2::new(area.x, area.y - h - 6.0), egui::vec2(area.w, h));
+        let row = 14.0;
+        let half = items.len().div_ceil(2);
+        let width = area.w * 2.0 + 8.0;
+        let h = half as f32 * row + 10.0;
+        let top = egui::Rect::from_min_size(Pos2::new(area.right() - width, area.y - h - 6.0), egui::vec2(width, h));
         painter.rect_filled(top, 4.0, style::BAR);
-        for (i, (label, color)) in rows.iter().enumerate() {
-            let y = top.min.y + 6.0 + i as f32 * 15.0;
-            let swatch = egui::Rect::from_min_size(Pos2::new(top.min.x + 8.0, y + 2.0), egui::vec2(10.0, 8.0));
-            painter.rect_stroke(swatch, 1.0, Stroke::new(1.5, *color), StrokeKind::Inside);
-            painter.text(Pos2::new(top.min.x + 24.0, y), Align2::LEFT_TOP, *label, FontId::proportional(10.5), style::MUTED);
+        for (i, it) in items.iter().enumerate() {
+            let col = (i / half) as f32;
+            let x = top.min.x + 8.0 + col * (width / 2.0);
+            let y = top.min.y + 6.0 + (i % half) as f32 * row;
+            let sample = egui::Rect::from_min_size(Pos2::new(x, y + 2.0), egui::vec2(18.0, 9.0));
+            match it.sample {
+                style::LegendSample::Box { stroke } => {
+                    painter.rect_stroke(sample, 1.0, Stroke::new(1.5, stroke), StrokeKind::Inside);
+                }
+                style::LegendSample::Outline { stroke, width } => {
+                    painter.rect_stroke(sample, 1.0, Stroke::new(width, stroke), StrokeKind::Inside);
+                }
+                style::LegendSample::Dot { color } => {
+                    painter.circle_filled(sample.center(), 3.5, color);
+                }
+                style::LegendSample::Frame => {
+                    let r = sample;
+                    let pts = [r.left_top(), r.right_top(), r.right_bottom(), r.left_bottom(), r.left_top()];
+                    painter.extend(Shape::dashed_line(&pts, Stroke::new(1.0, style::FRAME), 3.0, 2.0));
+                }
+                style::LegendSample::Arrow { color, dashed, dotted, hollow_head } => {
+                    let (a, b) = (sample.left_center(), sample.right_center());
+                    let stroke = Stroke::new(1.4, color);
+                    if dotted {
+                        painter.extend(Shape::dashed_line(&[a, b], stroke, 2.0, 3.0));
+                    } else if dashed {
+                        painter.extend(Shape::dashed_line(&[a, b], stroke, 4.0, 3.0));
+                    } else {
+                        painter.line_segment([a, b], stroke);
+                    }
+                    let tri = vec![b, b + egui::vec2(-6.0, -3.5), b + egui::vec2(-6.0, 3.5)];
+                    if hollow_head {
+                        painter.add(Shape::convex_polygon(tri, style::BAR, Stroke::new(1.2, color)));
+                    } else {
+                        painter.add(Shape::convex_polygon(tri, color, Stroke::NONE));
+                    }
+                }
+            }
+            painter.text(Pos2::new(x + 26.0, y), Align2::LEFT_TOP, it.label, FontId::proportional(10.0), style::MUTED);
         }
     }
 
