@@ -89,3 +89,12 @@ fn builtin_packs_parse() {
     let p = load_packs(None, None, &PackSelection::default()).unwrap();
     assert_eq!(p.names(), ["java-core", "libgdx", "spring-boot", "dagger", "go-core", "fiber", "rabbitmq-amqp091", "google-wire", "layers", "significance", "default-visuals"]);
 }
+
+#[test]
+fn test_code_takes_path_globs() {
+    let src = "name = \"t\"\nversion = \"1\"\n[[rule]]\nid = \"t.it\"\ntest_code = { paths = [\"**/it/**\"] }\n";
+    let pack = Pack::parse(src, "t", None).unwrap();
+    assert_eq!(pack.rules[0].1, Rule::TestCode { file_imports: vec![], dir_names: vec![], paths: vec!["**/it/**".into()] });
+    let bad = src.replace("**/it/**", "a/{b");
+    assert!(Pack::parse(&bad, "t", None).unwrap_err().to_string().contains("t.it"));
+}

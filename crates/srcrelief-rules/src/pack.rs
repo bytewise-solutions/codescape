@@ -40,7 +40,8 @@ pub enum Rule {
     NameTag { kinds: Vec<String>, pattern: String, tag: String },
     Query { language: Lang, query: String, capture: String, kind: String, label: String },
     Wiring { file_markers: Vec<String>, file_imports: Vec<String>, calls: Vec<String>, annotations: Vec<String>, type_prefixes: Vec<String>, requires_imports: Vec<String> },
-    TestCode { file_imports: Vec<String>, dir_names: Vec<String> },
+    TestCode { file_imports: Vec<String>, dir_names: Vec<String>, paths: Vec<String> },
+    Filter { tag: String, paths: Vec<String>, names: Vec<String> },
     Noise { name_suffixes: Vec<String>, supertype_suffixes: Vec<String>, methods: Vec<String> },
     AnnotationTag { names: Vec<String>, tag: String },
     EntryOwnerTag { kinds: Vec<String>, tag: String },
@@ -175,6 +176,8 @@ struct TestCodeFile {
     file_imports: Vec<String>,
     #[serde(default)]
     dir_names: Vec<String>,
+    #[serde(default)]
+    paths: Vec<String>,
 }
 
 #[derive(Deserialize)]
@@ -468,7 +471,10 @@ impl RuleFile {
             return Ok(Rule::Noise { name_suffixes: n.name_suffixes, supertype_suffixes: n.supertype_suffixes, methods: n.methods });
         }
         if let Some(t) = self.test_code {
-            return Ok(Rule::TestCode { file_imports: t.file_imports, dir_names: t.dir_names });
+            for g in &t.paths {
+                globset::Glob::new(g).with_context(|| format!("bad glob in rule `{}`", self.id))?;
+            }
+            return Ok(Rule::TestCode { file_imports: t.file_imports, dir_names: t.dir_names, paths: t.paths });
         }
         let q = self.query.unwrap();
         let dir = dir.ok_or_else(|| anyhow!("rule `{}`: query rules need a pack directory", self.id))?;

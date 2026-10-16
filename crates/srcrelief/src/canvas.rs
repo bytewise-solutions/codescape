@@ -232,8 +232,8 @@ impl Builder<'_> {
         }
         self.scene.stats.visited += 1;
         let g = self.g;
-        let hidden = self.cache.options().effective_hidden();
-        let has_children = display_children(g, node).into_iter().any(|c| !g.flags(c).intersects(hidden));
+        let opts = self.cache.options();
+        let has_children = display_children(g, node).into_iter().any(|c| !opts.hides(g, c));
         let open = has_children && rect.w >= OPEN_THRESHOLD_PX;
         let tag_color = g.tags(node).find_map(|t| self.vis.style_for(t).map(|s| s.color));
         self.scene.boxes.push(SceneBox { node, rect, open, depth, kind: g.kind(node), sub: g.sub_kind(node), flags: g.flags(node), mark: self.mark(node), dimmed: self.marks.is_some() && self.mark(node) == Mark::None, tag_color, hidden_details: 0 });

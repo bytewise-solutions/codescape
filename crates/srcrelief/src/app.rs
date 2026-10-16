@@ -404,8 +404,8 @@ impl Project {
             self.history.push(node);
         }
         if fly {
-            let hidden = self.cache.options().effective_hidden();
-            let leaf = !g.children(node).any(|c| !g.flags(c).intersects(hidden));
+            let opts = self.cache.options();
+            let leaf = !g.children(node).any(|c| !opts.hides(g, c));
             let frame = if leaf { g.parent(node).filter(|&p| p != g.root()).unwrap_or(node) } else { node };
             self.fly_to(frame);
         }
@@ -518,25 +518,25 @@ impl Project {
             let mut tests = self.include_test_edges;
             if ui.checkbox(&mut tests, "test deps").changed() {
                 self.include_test_edges = tests;
-                let mut opts = *self.cache.options();
+                let mut opts = self.cache.options().clone();
                 opts.include_test_edges = tests;
                 self.cache.set_options(opts);
             }
             let mut details = self.cache.options().show_details;
             if ui.checkbox(&mut details, "details").on_hover_text("show data types, helpers and other non-architectural types").changed() {
-                let mut opts = *self.cache.options();
+                let mut opts = self.cache.options().clone();
                 opts.show_details = details;
                 self.cache.set_options(opts);
             }
             let mut errors = self.cache.options().show_noise;
             if ui.checkbox(&mut errors, "errors").on_hover_text("show exception and error types").changed() {
-                let mut opts = *self.cache.options();
+                let mut opts = self.cache.options().clone();
                 opts.show_noise = errors;
                 self.cache.set_options(opts);
             }
             let mut wiring = self.cache.options().show_wiring;
             if ui.checkbox(&mut wiring, "wiring").on_hover_text("show dependency-injection code and its arrows").changed() {
-                let mut opts = *self.cache.options();
+                let mut opts = self.cache.options().clone();
                 opts.show_wiring = wiring;
                 self.cache.set_options(opts);
             }
@@ -833,7 +833,7 @@ impl Project {
                 if let Some(w) = minimap::world_at(&root, self.view, [p.x, p.y]) {
                     self.target = Some(Camera { center: w, zoom: self.cam.zoom });
                 } else if self.scene.boxes.iter().any(|b| b.hidden_details > 0 && chip_rect(b.rect).contains([p.x, p.y])) {
-                    let mut opts = *self.cache.options();
+                    let mut opts = self.cache.options().clone();
                     opts.show_details = true;
                     self.cache.set_options(opts);
                 } else {

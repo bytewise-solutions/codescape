@@ -78,14 +78,20 @@ impl ProjectConfig {
     }
 
     pub fn config_pack(&self) -> Option<Pack> {
-        if self.categories.is_empty() {
+        if self.categories.is_empty() && self.test_paths.is_empty() && self.filters.is_empty() {
             return None;
         }
         let mut pack = Pack::parse("name = \"project-config\"\nversion = \"0\"\n", "project config", None).ok()?;
         for (i, c) in self.categories.iter().enumerate() {
             pack.rules.push((format!("project-config.category.{i}"), Rule::Path { glob: c.glob.clone(), category: c.category }));
         }
-        pack.hash = blake3::hash(format!("{:?}", self.categories).as_bytes()).to_hex()[..16].to_string();
+        if !self.test_paths.is_empty() {
+            pack.rules.push(("project-config.test".into(), Rule::TestCode { file_imports: Vec::new(), dir_names: Vec::new(), paths: self.test_paths.clone() }));
+        }
+        for f in &self.filters {
+            pack.rules.push((format!("project-config.filter.{}", f.name), Rule::Filter { tag: f.tag(), paths: f.paths.clone(), names: f.names.clone() }));
+        }
+        pack.hash = blake3::hash(format!("{:?}", pack.rules).as_bytes()).to_hex()[..16].to_string();
         Some(pack)
     }
 }

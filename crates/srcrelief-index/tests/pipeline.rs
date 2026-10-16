@@ -240,3 +240,77 @@ fn display_settings_in_the_shared_file_need_no_new_index_but_a_new_name_does() {
     excluded.exclude.push("nothing-matches/**".into());
     assert!(needs_reindex(&proj, &out.path, &excluded, &packs));
 }
+
+fn filter_project(root: &Path) {
+    let files = [
+        ("go.mod", "module example.com/app\n\ngo 1.22\n"),
+        ("main.go", "package main\n\nimport \"example.com/app/internal/svc\"\n\nfunc main() {\n\tsvc.Run()\n}\n"),
+        ("internal/svc/service.go", "package svc\n\ntype Service struct{}\n\nfunc (s *Service) Serve() {}\n\nfunc Run() {}\n"),
+        ("internal/svc/user_migration.go", "package svc\n\ntype UserMigration struct{}\n\nfunc (u UserMigration) Up() {}\n"),
+        ("internal/migrations/m001.go", "package migrations\n\ntype AddUsers struct{}\n\nfunc (a AddUsers) Up() {}\n"),
+        ("it/smoke.go", "package it\n\ntype Smoke struct{}\n\nfunc (s Smoke) Check() {}\n"),
+    ];
+    for (rel, src) in files {
+        let p = root.join(rel);
+        std::fs::create_dir_all(p.parent().unwrap()).unwrap();
+        std::fs::write(p, src).unwrap();
+    }
+}
+
+fn node(g: &ArchivedGraph, name: &str) -> NodeId {
+    (0..g.node_count() as NodeId).find(|&n| g.name(n) == name).unwrap_or_else(|| panic!("no node {name}"))
+}
+
+fn migrations() -> Filter {
+    Filter { name: "migrations".into(), paths: vec!["**/migrations/**".into()], names: vec!["Migration$".into()], shown: false }
+}
+
+#[test]
+fn a_filter_tags_matching_types_their_members_and_containers_left_with_nothing_else() {
+    let tmp = tempfile::tempdir().unwrap();
+    let proj = tmp.path().join("p");
+    filter_project(&proj);
+    let mut cfg = cfg_with_index(tmp.path());
+    cfg.filters.push(migrations());
+    let out = index_project(&proj, &cfg, &|_| {}).unwrap();
+    let file = ReliefFile::open(&out.path).unwrap();
+    let g = file.graph();
+    let tag = "filter:migrations";
+    for n in ["AddUsers", "UserMigration", "internal/migrations"] {
+        assert!(g.has_tag(node(g, n), tag), "{n} should be tagged");
+    }
+    let up: Vec<NodeId> = (0..g.node_count() as NodeId).filter(|&n| g.name(n) == "Up").collect();
+    assert_eq!(up.len(), 2);
+    assert!(up.iter().all(|&n| g.has_tag(n, tag)));
+    for n in ["Service", "Serve", "internal/svc", "Run"] {
+        assert!(!g.has_tag(node(g, n), tag), "{n} should not be tagged");
+    }
+    let packs = project_packs(&proj, &cfg).unwrap();
+    assert!(!needs_reindex(&proj, &out.path, &cfg, &packs));
+    let mut shown = cfg.clone();
+    shown.filters[0].shown = true;
+    assert!(!needs_reindex(&proj, &out.path, &shown, &project_packs(&proj, &shown).unwrap()), "shown is a display setting");
+    let mut changed = cfg.clone();
+    changed.filters[0].names = vec!["Service$".into()];
+    assert!(needs_reindex(&proj, &out.path, &changed, &project_packs(&proj, &changed).unwrap()));
+}
+
+#[test]
+fn extra_test_globs_mark_files_as_test_code() {
+    let tmp = tempfile::tempdir().unwrap();
+    let proj = tmp.path().join("p");
+    filter_project(&proj);
+    let cfg = cfg_with_index(tmp.path());
+    let out = index_project(&proj, &cfg, &|_| {}).unwrap();
+    let file = ReliefFile::open(&out.path).unwrap();
+    assert!(!file.graph().flags(node(file.graph(), "Smoke")).contains(NodeFlags::TEST));
+    let mut with = cfg.clone();
+    with.test_paths.push("it/**".into());
+    let packs = project_packs(&proj, &with).unwrap();
+    assert!(needs_reindex(&proj, &out.path, &with, &packs));
+    let out = index_project(&proj, &with, &|_| {}).unwrap();
+    let file = ReliefFile::open(&out.path).unwrap();
+    let g = file.graph();
+    assert!(g.flags(node(g, "Smoke")).contains(NodeFlags::TEST));
+    assert!(!g.flags(node(g, "Service")).contains(NodeFlags::TEST));
+}

@@ -67,10 +67,12 @@ pub enum Direction {
     Sideways,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct LayoutOptions {
     pub include_test_edges: bool,
     pub hidden: NodeFlags,
+    pub hidden_tags: Vec<String>,
+    pub show_tests: bool,
     pub show_wiring: bool,
     pub show_noise: bool,
     pub show_details: bool,
@@ -81,6 +83,8 @@ impl Default for LayoutOptions {
         LayoutOptions {
             include_test_edges: false,
             hidden: NodeFlags::EXTERNAL | NodeFlags::MOCK | NodeFlags::TEST | NodeFlags::WIRING | NodeFlags::NOISE | NodeFlags::DETAIL,
+            hidden_tags: Vec::new(),
+            show_tests: false,
             show_wiring: false,
             show_noise: false,
             show_details: false,
@@ -91,6 +95,9 @@ impl Default for LayoutOptions {
 impl LayoutOptions {
     pub fn effective_hidden(&self) -> NodeFlags {
         let mut keep = 0;
+        if self.show_tests {
+            keep |= NodeFlags::TEST.0 | NodeFlags::MOCK.0;
+        }
         if self.show_wiring {
             keep |= NodeFlags::WIRING.0;
         }
@@ -101,6 +108,14 @@ impl LayoutOptions {
             keep |= NodeFlags::DETAIL.0;
         }
         NodeFlags(self.hidden.0 & !keep)
+    }
+
+    pub fn tag_hidden(&self, g: &ArchivedGraph, node: NodeId) -> bool {
+        !self.hidden_tags.is_empty() && g.tags(node).any(|t| self.hidden_tags.iter().any(|h| h == t))
+    }
+
+    pub fn hides(&self, g: &ArchivedGraph, node: NodeId) -> bool {
+        g.flags(node).intersects(self.effective_hidden()) || self.tag_hidden(g, node)
     }
 }
 

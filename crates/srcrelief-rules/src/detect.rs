@@ -66,8 +66,17 @@ pub fn apply_detection(packs: &Packs, facts: &ProjectFacts, sources: &dyn Fn(&st
     cx.queries(sources, b);
     cx.role_tags(b);
     cx.significance(b);
+    cx.filters(b);
     cx.stats.entries = b.entries().len() - before;
     cx.stats
+}
+
+fn glob_set(globs: &[String]) -> globset::GlobSet {
+    let mut set = globset::GlobSetBuilder::new();
+    for g in globs.iter().filter_map(|g| Glob::new(g).ok()) {
+        set.add(g);
+    }
+    set.build().unwrap_or_else(|_| globset::GlobSet::empty())
 }
 
 fn files_sorted(facts: &ProjectFacts) -> Vec<&FileFacts> {
@@ -116,14 +125,19 @@ impl<'a> Ctx<'a> {
         let mut wiring_files: HashSet<&'a str> = HashSet::new();
         let mut wiring_calls: HashSet<(NodeId, NodeId)> = HashSet::new();
         let mut wiring_nodes: Vec<NodeId> = Vec::new();
+        let test_globs: HashMap<&str, globset::GlobSet> = self.packs.rules().filter_map(|(id, r)| match r {
+            Rule::TestCode { paths, .. } if !paths.is_empty() => Some((id, glob_set(paths))),
+            _ => None,
+        }).collect();
         for file in &facts.files {
             let imports = |prefixes: &[String]| file.imports.iter().any(|i| prefixes.iter().any(|p| i.path == *p || i.path.starts_with(&format!("{p}/")) || i.path.starts_with(&format!("{p}."))));
             let dirs: Vec<&str> = file.rel_path.split('/').collect();
             let dirs = &dirs[..dirs.len().saturating_sub(1)];
-            for (_, rule) in self.packs.rules_for(file.lang) {
+            for (id, rule) in self.packs.rules_for(file.lang) {
                 match rule {
-                    Rule::TestCode { file_imports, dir_names } => {
-                        if imports(file_imports) || dirs.iter().any(|d| dir_names.iter().any(|n| n == d)) {
+                    Rule::TestCode { file_imports, dir_names, .. } => {
+                        let by_path = test_globs.get(id).is_some_and(|g| g.is_match(&file.rel_path));
+                        if by_path || imports(file_imports) || dirs.iter().any(|d| dir_names.iter().any(|n| n == d)) {
                             self.test_files.insert(file.rel_path.as_str());
                         }
                     }
@@ -378,6 +392,37 @@ impl<'a> Ctx<'a> {
                     }
                 }
                 _ => {}
+            }
+        }
+    }
+
+    fn filters(&mut self, b: &mut GraphBuilder) {
+        for (_, rule) in self.packs.rules() {
+            let Rule::Filter { tag, paths, names } = rule else { continue };
+            let paths = glob_set(paths);
+            let names: Vec<regex::Regex> = names.iter().filter_map(|r| regex::Regex::new(r).ok()).collect();
+            let named = |b: &GraphBuilder, n: NodeId| names.iter().any(|re| re.is_match(b.name(n)));
+            let mut stack: Vec<NodeId> = Vec::new();
+            for file in &self.facts.files {
+                let by_path = paths.is_match(&file.rel_path);
+                stack.extend(file.types.iter().map(|t| t.node).filter(|&n| by_path || named(b, n)));
+                stack.extend(file.functions.iter().filter(|f| by_path || (f.owner.is_none() && named(b, f.node))).map(|f| f.node));
+            }
+            while let Some(n) = stack.pop() {
+                if !b.has_tag(n, tag) {
+                    b.add_tag(n, tag);
+                    self.stats.tags += 1;
+                    stack.extend_from_slice(b.children(n));
+                }
+            }
+            for n in (1..b.node_count() as NodeId).rev() {
+                if !matches!(b.node_kind(n), NodeKind::Package | NodeKind::Module) || b.has_tag(n, tag) {
+                    continue;
+                }
+                let mut live = b.children(n).iter().filter(|&&c| !b.flags(c).contains(NodeFlags::TEST)).peekable();
+                if live.peek().is_some() && live.all(|&c| b.has_tag(c, tag)) {
+                    b.add_tag(n, tag);
+                }
             }
         }
     }

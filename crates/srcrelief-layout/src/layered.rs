@@ -45,12 +45,13 @@ fn entry_owners(g: &ArchivedGraph) -> HashSet<NodeId> {
 }
 
 pub fn layout_container(g: &ArchivedGraph, node: NodeId, frames: &[FrameRule], opts: &LayoutOptions) -> ContainerLayout {
-    let mut base = layout_structure(g, node, frames, &LayoutOptions { show_wiring: false, show_noise: false, show_details: false, ..*opts });
-    let other = NodeFlags(opts.hidden.0 & !NodeFlags::DETAIL.0);
+    let mut base = layout_structure(g, node, frames, &LayoutOptions { show_wiring: false, show_noise: false, show_details: false, ..opts.clone() });
+    let tests = if opts.show_tests { NodeFlags::TEST.0 | NodeFlags::MOCK.0 } else { 0 };
+    let other = NodeFlags(opts.hidden.0 & !NodeFlags::DETAIL.0 & !tests);
     base.hidden_details = if opts.show_details {
         0
     } else {
-        display_children(g, node).into_iter().filter(|&c| g.flags(c).contains(NodeFlags::DETAIL) && !g.flags(c).intersects(other)).count()
+        display_children(g, node).into_iter().filter(|&c| g.flags(c).contains(NodeFlags::DETAIL) && !g.flags(c).intersects(other) && !opts.tag_hidden(g, c)).count()
     };
     if !opts.show_wiring && !opts.show_noise && !opts.show_details {
         return base;
@@ -59,10 +60,9 @@ pub fn layout_container(g: &ArchivedGraph, node: NodeId, frames: &[FrameRule], o
 }
 
 fn add_wiring(g: &ArchivedGraph, node: NodeId, mut l: ContainerLayout, opts: &LayoutOptions) -> ContainerLayout {
-    let hidden = opts.effective_hidden();
     let extra: Vec<NodeId> = display_children(g, node)
         .into_iter()
-        .filter(|&c| g.flags(c).intersects(NodeFlags::WIRING | NodeFlags::NOISE | NodeFlags::DETAIL) && !g.flags(c).intersects(hidden))
+        .filter(|&c| g.flags(c).intersects(NodeFlags::WIRING | NodeFlags::NOISE | NodeFlags::DETAIL) && !opts.hides(g, c))
         .collect();
     let top = if l.children.is_empty() { HEADER + PAD } else { l.size[1] - PAD + GAP_Y };
     let layer = l.children.iter().map(|c| c.layer + 1).max().unwrap_or(0);
@@ -96,8 +96,7 @@ fn add_wiring(g: &ArchivedGraph, node: NodeId, mut l: ContainerLayout, opts: &La
 }
 
 fn layout_structure(g: &ArchivedGraph, node: NodeId, frames: &[FrameRule], opts: &LayoutOptions) -> ContainerLayout {
-    let hidden = opts.effective_hidden();
-    let kids: Vec<NodeId> = display_children(g, node).into_iter().filter(|&c| !g.flags(c).intersects(hidden)).collect();
+    let kids: Vec<NodeId> = display_children(g, node).into_iter().filter(|&c| !opts.hides(g, c)).collect();
     let n = kids.len();
     if n == 0 {
         return ContainerLayout { size: [0.0, 0.0], header: HEADER, ..Default::default() };

@@ -608,3 +608,41 @@ fn implementations_fold_into_their_interface() {
     assert!(inside.child(g.ids["pgRepository"]).is_some(), "opening the interface shows its implementation");
     assert_eq!(display_path(gr, gr.children(g.ids["pgRepository"]).start), vec![gr.root(), pkg, g.ids["Repository"], g.ids["pgRepository"], gr.children(g.ids["pgRepository"]).start]);
 }
+
+fn tagged_graph() -> G {
+    let mut b = GraphBuilder::new("p");
+    for m in ["app", "gen", "it"] {
+        let id = b.add_node(b.root(), NodeKind::Module, SubKind::None, m, Lang::Go);
+        let t = b.add_node(id, NodeKind::Type, SubKind::Struct, "T", Lang::Go);
+        b.set_span(t, "f", 1, 10);
+        b.set_lines(t, 10);
+        match m {
+            "gen" => {
+                b.add_tag(id, "filter:generated");
+                b.add_tag(t, "filter:generated");
+            }
+            "it" => b.add_flags(t, NodeFlags::TEST),
+            _ => {}
+        }
+    }
+    let dir = tempfile::tempdir().unwrap();
+    write_graph(&b.finish(), &dir.path().join("g.relief")).unwrap();
+    let file = ReliefFile::open(&dir.path().join("g.relief")).unwrap();
+    let g = file.graph();
+    let ids = g.children(g.root()).map(|c| (g.name(c).to_string(), c)).collect();
+    G { _dir: dir, file, ids }
+}
+
+#[test]
+fn hidden_tags_take_boxes_out_and_tests_come_back_when_shown() {
+    let g = tagged_graph();
+    let gr = g.file.graph();
+    let shown = |opts: &LayoutOptions| -> Vec<&str> { layout_container(gr, gr.root(), &[], opts).children.iter().map(|c| gr.name(c.node)).collect() };
+    assert_eq!(shown(&LayoutOptions::default()), ["app", "gen"]);
+    let filtered = LayoutOptions { hidden_tags: vec!["filter:generated".into()], ..Default::default() };
+    assert_eq!(shown(&filtered), ["app"]);
+    assert!(filtered.hides(gr, g.ids["gen"]) && !filtered.hides(gr, g.ids["app"]));
+    let mut tests = shown(&LayoutOptions { show_tests: true, ..Default::default() });
+    tests.sort();
+    assert_eq!(tests, ["app", "gen", "it"]);
+}
