@@ -931,7 +931,7 @@ impl Project {
             dashed = true;
         }
         let marked = e.mark != Mark::None;
-        let width = if marked { 2.2 } else { (1.0 + (e.weight as f32).log10() * 0.4).min(2.5) };
+        let width = style::edge_width(e.weight, marked);
         match e.mark {
             Mark::Down | Mark::Focus => color = style::REACH,
             Mark::Up => color = style::CALLER,

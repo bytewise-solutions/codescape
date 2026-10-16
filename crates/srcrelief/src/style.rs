@@ -68,3 +68,10 @@ pub const LEGEND: &[(&str, Color32)] = &[
 ];
 
 pub const CALLER: Color32 = Color32::from_rgb(110, 165, 255);
+
+pub fn edge_width(weight: u32, marked: bool) -> f32 {
+    if marked {
+        return 2.2;
+    }
+    (1.0 + (weight.max(1) as f32).log10() * 0.4).min(2.5)
+}
