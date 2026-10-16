@@ -22,3 +22,25 @@ fn pinch_zooms() {
     assert_eq!(interpret(false, false, [0.0, 0.0], 1.25), Nav::Zoom(1.25));
     assert_eq!(interpret(true, false, [0.0, 0.0], 0.8), Nav::Zoom(0.800000011920929));
 }
+
+#[test]
+fn arrow_keys_pick_the_nearest_box_in_that_direction() {
+    use srcrelief::input::{Step, nearest_in};
+    use srcrelief_layout::Rect;
+    let at = |x: f32, y: f32| Rect::new(x, y, 40.0, 20.0);
+    let boxes = [(1, at(100.0, 100.0)), (2, at(200.0, 100.0)), (3, at(300.0, 100.0)), (4, at(110.0, 200.0)), (5, at(400.0, 210.0)), (6, at(190.0, 20.0))];
+    let from = boxes[0].1;
+    assert_eq!(nearest_in(Step::Right, 1, from, &boxes), Some(2), "next in the row, not the far one");
+    assert_eq!(nearest_in(Step::Down, 1, from, &boxes), Some(4), "straight below beats diagonal");
+    assert_eq!(nearest_in(Step::Up, 1, from, &boxes), Some(6));
+    assert_eq!(nearest_in(Step::Left, 1, from, &boxes), None);
+    assert_eq!(nearest_in(Step::Left, 3, boxes[2].1, &boxes), Some(2));
+}
+
+#[test]
+fn every_shortcut_is_listed_for_the_help() {
+    let keys: Vec<&str> = srcrelief::input::SHORTCUTS.iter().map(|(k, _)| *k).collect();
+    for k in ["← → ↑ ↓", "Enter", "Backspace", "Esc", "1 2 3", "+ −", "F", "Alt+←", "Ctrl+K", "?"] {
+        assert!(keys.contains(&k), "help misses {k}");
+    }
+}

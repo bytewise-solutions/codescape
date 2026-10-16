@@ -4,7 +4,7 @@ use crate::panels::{EntryGroupView, group_entries};
 use crate::focus::{Focus, FocusMode, History, Mark, UsageIndex, focus};
 use crate::search::{self, SearchIndex};
 use crate::shot::{Shot, ShotPlan, ShotStep};
-use crate::input::{Nav, interpret};
+use crate::input::{Nav, SHORTCUTS, Step, interpret, nearest_in};
 use crate::settings_window::{self, SettingsForm};
 use crate::view::{layout_options, toggle, view_items};
 use crate::{minimap, style};
@@ -328,6 +328,7 @@ struct Project {
     search_hits: Vec<NodeId>,
     search_cursor: usize,
     hovered: Option<NodeId>,
+    shortcuts_open: bool,
     settings: SettingsStore,
     packs: Vec<String>,
     settings_open: bool,
@@ -447,6 +448,7 @@ impl Project {
             search_hits: Vec::new(),
             search_cursor: 0,
             hovered: None,
+            shortcuts_open: false,
             settings,
             packs,
             settings_open: false,
@@ -510,9 +512,84 @@ impl Project {
             if ui.add(egui::Button::new("Jump to…").shortcut_text(jump)).clicked() {
                 self.search_open = true;
             }
+            if ui.add(egui::Button::new("Keyboard shortcuts").shortcut_text("?")).clicked() {
+                self.shortcuts_open = true;
+            }
         });
         if let Some((key, on)) = changed {
             self.set_display(&key, on);
+        }
+    }
+
+    fn keyboard(&mut self, ui: &egui::Ui) {
+        let plain = |k: Key| ui.input(|i| i.key_pressed(k) && !i.modifiers.alt && !i.modifiers.command && !i.modifiers.ctrl);
+        let typed = |c: &str| ui.input(|i| i.events.iter().any(|e| matches!(e, egui::Event::Text(t) if t == c)));
+        if typed("?") {
+            self.shortcuts_open = true;
+            return;
+        }
+        let steps = [(Key::ArrowLeft, Step::Left), (Key::ArrowRight, Step::Right), (Key::ArrowUp, Step::Up), (Key::ArrowDown, Step::Down)];
+        if let Some(&(_, step)) = steps.iter().find(|(k, _)| plain(*k)) {
+            self.step_selection(step);
+        } else if plain(Key::Enter) {
+            if let Some(n) = self.selected {
+                self.fly_to(n);
+            }
+        } else if plain(Key::Backspace) {
+            self.go_up();
+        } else if plain(Key::F) {
+            self.needs_fit = true;
+        } else if plain(Key::Plus) || plain(Key::Equals) || typed("+") {
+            self.zoom_by(1.25);
+        } else if plain(Key::Minus) || typed("-") {
+            self.zoom_by(0.8);
+        } else if self.focus.is_some() {
+            let modes = [(Key::Num1, FocusMode::Neighbours), (Key::Num2, FocusMode::Reaches), (Key::Num3, FocusMode::UsedBy)];
+            if let Some(&(_, mode)) = modes.iter().find(|(k, _)| plain(*k)) {
+                self.focus_mode = mode;
+                self.refocus();
+            }
+        }
+    }
+
+    fn zoom_by(&mut self, f: f64) {
+        let c = self.view.center();
+        self.cam.zoom_at(c, f, self.view);
+        self.target = None;
+    }
+
+    fn go_up(&mut self) {
+        let g = self.file.graph();
+        match self.selected.and_then(|n| g.parent(n)).filter(|&p| p != g.root()) {
+            Some(p) => self.set_focus(p, None, true, true),
+            None => {
+                self.clear_focus();
+                self.selected = None;
+                self.needs_fit = true;
+            }
+        }
+    }
+
+    fn step_selection(&mut self, step: Step) {
+        let g = self.file.graph();
+        let center = self.view.center();
+        let Some(sel) = self.selected.filter(|&s| self.scene.boxes.iter().any(|b| b.node == s)) else {
+            if let Some(n) = self.scene.box_at(center).filter(|&n| n != g.root()) {
+                self.set_focus(n, None, false, true);
+            }
+            return;
+        };
+        let parent = g.parent(sel);
+        let siblings: Vec<(NodeId, Rect)> = self.scene.boxes.iter().filter(|b| g.parent(b.node) == parent).map(|b| (b.node, b.rect)).collect();
+        let from = siblings.iter().find(|(n, _)| *n == sel).map(|(_, r)| *r).unwrap();
+        let Some(next) = nearest_in(step, sel, from, &siblings) else { return };
+        self.set_focus(next, None, false, true);
+        let g = self.file.graph();
+        let r = siblings.iter().find(|(n, _)| *n == next).map(|(_, r)| *r).unwrap();
+        if !self.view.contains_rect(&r) {
+            if let Some(w) = world_rect(g, &mut self.cache, next) {
+                self.target = Some(Camera { center: w.center(), zoom: self.cam.zoom });
+            }
         }
     }
 
@@ -564,10 +641,29 @@ impl Project {
             action = Some(Action::OpenFolder);
         }
         if ui.input(|i| i.key_pressed(Key::Escape)) {
-            self.search_open = false;
+            if self.search_open || self.shortcuts_open {
+                self.search_open = false;
+                self.shortcuts_open = false;
+            } else {
+                self.clear_focus();
+                self.selected = None;
+            }
         }
         if ui.input(|i| i.modifiers.alt && i.key_pressed(Key::ArrowLeft)) {
             self.go_back();
+        } else if !self.search_open && !ui.ctx().egui_wants_keyboard_input() {
+            self.keyboard(ui);
+        }
+        if self.shortcuts_open {
+            egui::Window::new("Keyboard shortcuts").open(&mut self.shortcuts_open).collapsible(false).resizable(false).anchor(Align2::CENTER_TOP, [0.0, 60.0]).show(ui.ctx(), |ui| {
+                egui::Grid::new("shortcuts").num_columns(2).spacing([18.0, 6.0]).show(ui, |ui| {
+                    for (keys, what) in SHORTCUTS {
+                        ui.label(egui::RichText::new(*keys).strong().color(style::ACCENT));
+                        ui.label(*what);
+                        ui.end_row();
+                    }
+                });
+            });
         }
         egui::Panel::top("breadcrumb").show(ui, |ui| ui.horizontal(|ui| self.breadcrumb(ui)));
         egui::Panel::bottom("status").show(ui, |ui| self.status_bar(ui));
@@ -835,7 +931,7 @@ impl Project {
                 ui.colored_label(style::ENTRY, format!("Entry point: {}", g.entry_label(i)));
             }
             if let Some(f) = self.focus.as_ref().filter(|f| f.node == n) {
-                for (title, list, color) in [("SET UP / CALLED BY", &f.callers, style::CALLER), ("CALLS", &f.calls, style::REACH)] {
+                for (title, list, color) in [("USED BY", &f.callers, style::CALLER), ("USES", &f.calls, style::REACH)] {
                     ui.add_space(8.0);
                     ui.label(egui::RichText::new(format!("{title} ({})", list.len())).small().color(color));
                     for &m in list.iter().take(LIST_LIMIT) {

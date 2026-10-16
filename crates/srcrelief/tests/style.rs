@@ -18,7 +18,7 @@ fn legend_explains_every_style() {
     use srcrelief::style::{LegendSample, legend};
     let items = legend(true, true);
     let labels: Vec<&str> = items.iter().map(|i| i.label).collect();
-    for needed in ["interface", "class / struct", "enum / record", "function / method", "constructor", "wiring (DI)", "error type", "calls / depends on", "upward dependency", "same layer", "undeclared dependency", "implements / extends", "wiring arrow", "test-only dependency", "selected", "calls (from selection)", "called by / sets up", "has an entry point", "group"] {
+    for needed in ["interface", "class / struct", "enum / record", "function / method", "constructor", "wiring (DI)", "error type", "calls / depends on", "upward dependency", "same layer", "undeclared dependency", "implements / extends", "wiring arrow", "test-only dependency", "selected", "the selection uses it", "it uses the selection", "has an entry point", "group"] {
         assert!(labels.contains(&needed), "legend misses {needed}");
     }
     let lean = legend(false, false);

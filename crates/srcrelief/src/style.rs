@@ -96,8 +96,8 @@ pub fn legend(show_wiring: bool, show_noise: bool) -> Vec<LegendItem> {
     }
     v.extend([
         item("selected", Outline { stroke: ACCENT, width: 2.5 }),
-        item("calls (from selection)", Outline { stroke: REACH, width: 2.0 }),
-        item("called by / sets up", Outline { stroke: CALLER, width: 2.0 }),
+        item("the selection uses it", Outline { stroke: REACH, width: 2.0 }),
+        item("it uses the selection", Outline { stroke: CALLER, width: 2.0 }),
         item("has an entry point", Dot { color: ENTRY }),
         item("group", Frame),
         item("calls / depends on", Arrow { color: EDGE, dashed: false, dotted: false, hollow_head: false }),

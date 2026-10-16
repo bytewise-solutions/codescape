@@ -39,11 +39,23 @@ tick in View is remembered for each project.
 | Zoom | `Ctrl` + wheel or pinch, around the pointer |
 | Zoom into a box | double-click it |
 | Inspect a box | click it (right panel) |
-| Focus an entry point or a box | click it: the view frames it, what it calls turns green, what calls or sets it up turns blue, the rest dims |
-| Walk the code | click a row under *Set up / called by* or *Calls* in the inspector; `Alt+Left` or **Back** retraces |
+| Focus an entry point or a box | click it: what it **uses** turns green, what **uses it** turns blue, the rest dims |
+| Walk the code | click a row under *Uses* or *Used by* in the inspector; `Alt+Left` or **Back** retraces |
 | See everything involved | inspector **Show**: *neighbours*, *everything it reaches*, *everywhere it's used* |
 | Jump to a name | `Ctrl+K`, type, `Enter` |
 | Go back up | click a breadcrumb segment, or the minimap |
+
+Keyboard (press `?` in the app for this list):
+
+| Keys | Action |
+|---|---|
+| `←` `→` `↑` `↓` | select the nearest box in that direction |
+| `Enter` / `Backspace` | zoom into the selected box / go up to its parent |
+| `Esc` | clear the selection |
+| `1` `2` `3` | show neighbours / everything it reaches / everywhere it's used |
+| `+` `−` / `F` | zoom in / out / fit the whole project |
+| `Alt+←` | back to the previous selection |
+| `Ctrl+K` | jump to a name (`↑` `↓` to pick a hit, `Enter` to go) |
 
 A container opens to show its children once it is big enough; arrows inside appear once the children are large
 enough to read.
