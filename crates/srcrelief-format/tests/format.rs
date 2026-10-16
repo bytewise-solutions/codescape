@@ -227,3 +227,92 @@ fn any_flipped_byte_is_rejected() {
         }
     }
 }
+
+#[test]
+fn wiring_edges_count_apart() {
+    let (mut b, [_, _, _, f, g, _]) = two_module_graph();
+    b.add_edge(f, g, EdgeKind::Calls, Scope::Main, Confidence::Resolved, EdgeFlags::WIRING);
+    let (_d, file) = roundtrip(b);
+    let gr = file.graph();
+    let a = &gr.aggregates(gr.root())[0];
+    assert_eq!((a.calls.to_native(), a.deps.to_native(), a.wiring.to_native()), (0, 0, 1));
+}
+
+#[test]
+fn implements_count_apart() {
+    let (mut b, [_, _, _, f, g, _]) = two_module_graph();
+    let (t, u) = (b.parent(f).unwrap(), b.parent(g).unwrap());
+    b.add_edge(t, u, EdgeKind::Implements, Scope::Main, Confidence::Resolved, EdgeFlags::NONE);
+    b.add_edge(t, u, EdgeKind::Inherits, Scope::Main, Confidence::Resolved, EdgeFlags::NONE);
+    let (_d, file) = roundtrip(b);
+    let gr = file.graph();
+    let a = &gr.aggregates(gr.root())[0];
+    assert_eq!((a.deps.to_native(), a.implements.to_native()), (0, 2));
+}
+
+#[test]
+fn test_and_wiring_roll_up_to_containers() {
+    let mut b = GraphBuilder::new("p");
+    let m = b.add_node(b.root(), NodeKind::Module, SubKind::None, "m", Lang::Go);
+    let tests = b.add_node(m, NodeKind::Package, SubKind::None, "testutil", Lang::Go);
+    let t1 = b.add_node(tests, NodeKind::Member, SubKind::Function, "Helper", Lang::Go);
+    b.add_flags(t1, NodeFlags::TEST);
+    let wiring = b.add_node(m, NodeKind::Package, SubKind::None, "dagger", Lang::Go);
+    let w1 = b.add_node(wiring, NodeKind::Type, SubKind::Interface, "Component", Lang::Go);
+    let w2 = b.add_node(wiring, NodeKind::Type, SubKind::Class, "AppModule", Lang::Go);
+    let wt = b.add_node(wiring, NodeKind::Type, SubKind::Class, "ModuleTest", Lang::Go);
+    b.add_flags(w1, NodeFlags::WIRING);
+    b.add_flags(w2, NodeFlags::WIRING);
+    b.add_flags(wt, NodeFlags::TEST);
+    let mixed = b.add_node(m, NodeKind::Package, SubKind::None, "app", Lang::Go);
+    let real = b.add_node(mixed, NodeKind::Type, SubKind::Struct, "App", Lang::Go);
+    let wired = b.add_node(mixed, NodeKind::Member, SubKind::Function, "provide", Lang::Go);
+    b.add_flags(wired, NodeFlags::WIRING);
+    let empty = b.add_node(m, NodeKind::Package, SubKind::None, "empty", Lang::Go);
+    let _ = (real, empty);
+    let (_d, file) = roundtrip(b);
+    let g = file.graph();
+    let m = find(g, g.root(), "m");
+    assert!(g.flags(find(g, m, "testutil")).contains(NodeFlags::TEST));
+    assert!(g.flags(find(g, m, "dagger")).contains(NodeFlags::WIRING));
+    assert!(!g.flags(find(g, m, "app")).intersects(NodeFlags::WIRING | NodeFlags::TEST));
+    assert!(!g.flags(find(g, m, "empty")).intersects(NodeFlags::WIRING | NodeFlags::TEST));
+    assert!(!g.flags(m).intersects(NodeFlags::WIRING | NodeFlags::TEST));
+}
+
+#[test]
+fn edges_touching_test_nodes_become_test_scope() {
+    let (mut b, [_, _, _, f, g, h]) = two_module_graph();
+    b.add_flags(h, NodeFlags::TEST);
+    b.add_edge(f, h, EdgeKind::Calls, Scope::Main, Confidence::Resolved, EdgeFlags::NONE);
+    b.add_edge(f, g, EdgeKind::Calls, Scope::Main, Confidence::Resolved, EdgeFlags::NONE);
+    let (_d, file) = roundtrip(b);
+    let gr = file.graph();
+    let m1 = find(gr, gr.root(), "m1");
+    assert_eq!(gr.aggregates(m1)[0].scope_mask, SCOPE_TEST);
+    assert_eq!(gr.aggregates(gr.root())[0].scope_mask, SCOPE_MAIN);
+}
+
+#[test]
+fn edges_touching_wiring_nodes_are_wiring() {
+    let (mut b, [_, _, _, f, g, _]) = two_module_graph();
+    b.add_flags(g, NodeFlags::WIRING);
+    b.add_edge(f, g, EdgeKind::Calls, Scope::Main, Confidence::Resolved, EdgeFlags::NONE);
+    let (_d, file) = roundtrip(b);
+    let gr = file.graph();
+    let a = &gr.aggregates(gr.root())[0];
+    assert_eq!((a.calls.to_native(), a.wiring.to_native()), (0, 1));
+    let e = gr.out_edges(find(gr, find(gr, find(gr, find(gr, gr.root(), "m1"), "p1"), "T"), "f"));
+    assert!(EdgeFlags(e[0].flags).contains(EdgeFlags::WIRING));
+}
+
+#[test]
+fn constructor_sub_kind_roundtrips() {
+    let mut b = GraphBuilder::new("p");
+    let t = b.add_node(b.root(), NodeKind::Type, SubKind::Struct, "T", Lang::Go);
+    b.add_node(t, NodeKind::Member, SubKind::Constructor, "NewT", Lang::Go);
+    let (_d, file) = roundtrip(b);
+    let g = file.graph();
+    let t = find(g, g.root(), "T");
+    assert_eq!(g.sub_kind(find(g, t, "NewT")), SubKind::Constructor);
+}

@@ -23,7 +23,7 @@ macro_rules! u8_enum {
 }
 
 u8_enum!(NodeKind { Project, Module, Package, Type, Member, External });
-u8_enum!(SubKind { None, Class, Interface, Enum, Record, Annotation, Struct, NamedType, Method, Function, Field });
+u8_enum!(SubKind { None, Class, Interface, Enum, Record, Annotation, Struct, NamedType, Method, Function, Field, Constructor });
 u8_enum!(Lang { None, Java, Go });
 u8_enum!(EdgeKind { DependsOn, Calls, Inherits, Implements, Instantiates, FrameworkDispatch });
 u8_enum!(Scope { Main, Test });
@@ -121,8 +121,8 @@ macro_rules! flag_set {
     };
 }
 
-flag_set!(NodeFlags { EXTERNAL = 1, TEST = 2, MOCK = 4, GENERATED = 8 });
-flag_set!(EdgeFlags { UNDECLARED = 1 });
+flag_set!(NodeFlags { EXTERNAL = 1, TEST = 2, MOCK = 4, GENERATED = 8, WIRING = 16 });
+flag_set!(EdgeFlags { UNDECLARED = 1, WIRING = 2 });
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct EntryPointSpec {
@@ -178,6 +178,8 @@ pub struct Agg {
     pub b: u32,
     pub calls: u32,
     pub deps: u32,
+    pub wiring: u32,
+    pub implements: u32,
     pub scope_mask: u8,
     pub undeclared: bool,
 }

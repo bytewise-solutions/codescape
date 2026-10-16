@@ -155,6 +155,10 @@ impl GraphBuilder {
         &self.edges
     }
 
+    pub fn edges_mut(&mut self) -> &mut [RawEdge] {
+        &mut self.edges
+    }
+
     pub fn add_entry(&mut self, spec: EntryPointSpec) -> u32 {
         self.entries.push(spec);
         (self.entries.len() - 1) as u32
@@ -236,15 +240,34 @@ impl GraphBuilder {
             }
         }
 
+        for &old in order.iter().rev() {
+            let kids = &self.children[old as usize];
+            if old == 0 || kids.is_empty() {
+                continue;
+            }
+            let flags: Vec<NodeFlags> = kids.iter().map(|&c| self.nodes[c as usize].flags).collect();
+            if flags.iter().all(|f| f.contains(NodeFlags::TEST)) {
+                self.nodes[old as usize].flags |= NodeFlags::TEST;
+            } else if flags.iter().filter(|f| !f.contains(NodeFlags::TEST)).all(|f| f.contains(NodeFlags::WIRING)) {
+                self.nodes[old as usize].flags |= NodeFlags::WIRING;
+            }
+        }
+
         let mut merged: HashMap<(u32, u32, u8, u8), (u8, u8, u32)> = HashMap::new();
         for e in &self.edges {
             let (from, to) = (new_id[e.from as usize], new_id[e.to as usize]);
             if from == to || from == NONE || to == NONE {
                 continue;
             }
-            let slot = merged.entry((from, to, e.kind as u8, e.scope as u8)).or_insert((e.confidence as u8, 0, 0));
+            let touching = self.nodes[e.from as usize].flags | self.nodes[e.to as usize].flags;
+            let scope = if touching.contains(NodeFlags::TEST) { Scope::Test } else { e.scope };
+            let mut flags = e.flags;
+            if touching.contains(NodeFlags::WIRING) {
+                flags |= EdgeFlags::WIRING;
+            }
+            let slot = merged.entry((from, to, e.kind as u8, scope as u8)).or_insert((e.confidence as u8, 0, 0));
             slot.0 = slot.0.min(e.confidence as u8);
-            slot.1 |= e.flags.0;
+            slot.1 |= flags.0;
             slot.2 += 1;
         }
         let mut sorted: Vec<(u32, Edge)> = merged
@@ -280,8 +303,13 @@ impl GraphBuilder {
             let container = parent_new[a as usize];
             let agg = agg_map
                 .entry((container, a, b))
-                .or_insert(Agg { a, b, calls: 0, deps: 0, scope_mask: 0, undeclared: false });
-            if EdgeKind::from_u8(e.kind).is_call_like() {
+                .or_insert(Agg { a, b, calls: 0, deps: 0, wiring: 0, implements: 0, scope_mask: 0, undeclared: false });
+            let kind = EdgeKind::from_u8(e.kind);
+            if EdgeFlags(e.flags).contains(EdgeFlags::WIRING) {
+                agg.wiring += e.count;
+            } else if matches!(kind, EdgeKind::Implements | EdgeKind::Inherits) {
+                agg.implements += e.count;
+            } else if kind.is_call_like() {
                 agg.calls += e.count;
             } else {
                 agg.deps += e.count;
