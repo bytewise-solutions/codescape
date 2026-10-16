@@ -3,6 +3,7 @@ name = "srcrelief-index"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
+autotests = false
 
 [[bin]]
 name = "srcrelief-index"
@@ -27,3 +28,7 @@ anyhow.workspace = true
 
 [dev-dependencies]
 tempfile.workspace = true
+
+[[test]]
+name = "all"
+path = "tests/all.rs"

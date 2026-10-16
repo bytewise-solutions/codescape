@@ -3,6 +3,7 @@ name = "srcrelief-rules"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
+autotests = false
 
 [dependencies]
 srcrelief-format.workspace = true
@@ -21,3 +22,7 @@ streaming-iterator.workspace = true
 
 [dev-dependencies]
 tempfile.workspace = true
+
+[[test]]
+name = "all"
+path = "tests/all.rs"

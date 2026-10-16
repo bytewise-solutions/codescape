@@ -3,6 +3,7 @@ name = "srcrelief"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
+autotests = false
 
 [lib]
 path = "src/lib.rs"
@@ -29,3 +30,7 @@ anyhow.workspace = true
 
 [dev-dependencies]
 tempfile.workspace = true
+
+[[test]]
+name = "all"
+path = "tests/all.rs"

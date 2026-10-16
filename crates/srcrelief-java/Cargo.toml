@@ -3,6 +3,7 @@ name = "srcrelief-java"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
+autotests = false
 
 [dependencies]
 srcrelief-format.workspace = true
@@ -15,3 +16,7 @@ globset.workspace = true
 
 [dev-dependencies]
 tempfile.workspace = true
+
+[[test]]
+name = "all"
+path = "tests/all.rs"
