@@ -358,3 +358,30 @@ fn edges_touching_noise_are_set_aside() {
     let gr = file.graph();
     assert!(gr.aggregates(gr.root()).is_empty(), "nothing but noise links the two modules");
 }
+
+#[test]
+fn packages_of_details_are_details() {
+    let mut b = GraphBuilder::new("p");
+    let m = b.add_node(b.root(), NodeKind::Module, SubKind::None, "common", Lang::Java);
+    let bank = b.add_node(m, NodeKind::Package, SubKind::None, "messages.bank", Lang::Java);
+    for (name, flags) in [("Deposit", NodeFlags::DETAIL), ("Withdraw", NodeFlags::DETAIL), ("BankTest", NodeFlags::TEST)] {
+        let t = b.add_node(bank, NodeKind::Type, SubKind::Record, name, Lang::Java);
+        b.add_flags(t, flags);
+    }
+    let mixed = b.add_node(m, NodeKind::Package, SubKind::None, "messages.chat", Lang::Java);
+    let d = b.add_node(mixed, NodeKind::Type, SubKind::Record, "Line", Lang::Java);
+    b.add_flags(d, NodeFlags::DETAIL);
+    b.add_node(mixed, NodeKind::Type, SubKind::Class, "ChatRouter", Lang::Java);
+    let only = b.add_node(b.root(), NodeKind::Module, SubKind::None, "dto-only", Lang::Java);
+    let p = b.add_node(only, NodeKind::Package, SubKind::None, "dto", Lang::Java);
+    let t = b.add_node(p, NodeKind::Type, SubKind::Record, "X", Lang::Java);
+    b.add_flags(t, NodeFlags::DETAIL);
+    let (_d, file) = roundtrip(b);
+    let g = file.graph();
+    let common = find(g, g.root(), "common");
+    assert!(g.flags(find(g, common, "messages.bank")).contains(NodeFlags::DETAIL));
+    assert!(!g.flags(find(g, common, "messages.chat")).contains(NodeFlags::DETAIL));
+    let only = find(g, g.root(), "dto-only");
+    assert!(g.flags(find(g, only, "dto")).contains(NodeFlags::DETAIL));
+    assert!(!g.flags(only).contains(NodeFlags::DETAIL), "modules stay on the map");
+}

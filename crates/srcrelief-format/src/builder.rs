@@ -254,10 +254,16 @@ impl GraphBuilder {
                 continue;
             }
             let flags: Vec<NodeFlags> = kids.iter().map(|&c| self.nodes[c as usize].flags).collect();
-            if flags.iter().all(|f| f.contains(NodeFlags::TEST)) {
+            let live: Vec<&NodeFlags> = flags.iter().filter(|f| !f.contains(NodeFlags::TEST)).collect();
+            if live.is_empty() {
                 self.nodes[old as usize].flags |= NodeFlags::TEST;
-            } else if flags.iter().filter(|f| !f.contains(NodeFlags::TEST)).all(|f| f.contains(NodeFlags::WIRING)) {
+            } else if live.iter().all(|f| f.contains(NodeFlags::WIRING)) {
                 self.nodes[old as usize].flags |= NodeFlags::WIRING;
+            } else if self.nodes[old as usize].kind == NodeKind::Package
+                && live.iter().all(|f| f.intersects(NodeFlags::DETAIL | NodeFlags::WIRING | NodeFlags::NOISE | NodeFlags::MOCK))
+                && live.iter().any(|f| f.contains(NodeFlags::DETAIL))
+            {
+                self.nodes[old as usize].flags |= NodeFlags::DETAIL;
             }
         }
 
