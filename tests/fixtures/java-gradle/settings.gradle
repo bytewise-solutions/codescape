@@ -1,0 +1,3 @@
+rootProject.name = 'demo'
+// include 'ghost'
+include 'app', 'core', 'util'
