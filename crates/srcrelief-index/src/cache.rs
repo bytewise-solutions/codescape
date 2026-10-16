@@ -8,15 +8,19 @@ use std::time::SystemTime;
 pub const DETECTION_STAMP: &str = "(detection)";
 pub const INPUTS_STAMP: &str = "(inputs)";
 pub const ENGINE_STAMP: &str = "(engine)";
+pub const SETTINGS_STAMP: &str = "(settings)";
 
 pub fn engine_stamp() -> &'static str {
     env!("SRCRELIEF_ENGINE_BUILD")
 }
 
-pub fn cache_path(project_dir: &Path) -> PathBuf {
+pub fn project_key(project_dir: &Path) -> String {
     let canonical = project_dir.canonicalize().unwrap_or_else(|_| project_dir.to_path_buf());
-    let key = blake3::hash(canonical.to_string_lossy().as_bytes()).to_hex();
-    dirs::cache_dir().unwrap_or_else(std::env::temp_dir).join("srcrelief").join(format!("{}.relief", &key[..16]))
+    blake3::hash(canonical.to_string_lossy().as_bytes()).to_hex()[..16].to_string()
+}
+
+pub fn cache_path(project_dir: &Path) -> PathBuf {
+    dirs::cache_dir().unwrap_or_else(std::env::temp_dir).join("srcrelief").join(format!("{}.relief", project_key(project_dir)))
 }
 
 pub fn index_path(project_dir: &Path, cfg: &ProjectConfig) -> PathBuf {
@@ -26,7 +30,7 @@ pub fn index_path(project_dir: &Path, cfg: &ProjectConfig) -> PathBuf {
 fn is_input(p: &Path) -> bool {
     let name = p.file_name().and_then(|n| n.to_str()).unwrap_or("");
     matches!(p.extension().and_then(|e| e.to_str()), Some("java" | "go"))
-        || matches!(name, "settings.gradle" | "settings.gradle.kts" | "build.gradle" | "build.gradle.kts" | "go.mod" | "go.work" | crate::config::CONFIG_FILE)
+        || matches!(name, "settings.gradle" | "settings.gradle.kts" | "build.gradle" | "build.gradle.kts" | "go.mod" | "go.work")
 }
 
 pub fn inputs_fingerprint(project_dir: &Path, excludes: &GlobSet) -> String {
@@ -57,6 +61,9 @@ pub fn needs_reindex(project_dir: &Path, index: &Path, cfg: &ProjectConfig, pack
         return true;
     }
     if !g.provenance().any(|(n, _, h)| n == ENGINE_STAMP && h == engine_stamp()) {
+        return true;
+    }
+    if !g.provenance().any(|(n, _, h)| n == SETTINGS_STAMP && h == cfg.fingerprint()) {
         return true;
     }
     let dir = project_dir.canonicalize().unwrap_or_else(|_| project_dir.to_path_buf());

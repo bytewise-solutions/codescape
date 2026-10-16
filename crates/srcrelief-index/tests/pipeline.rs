@@ -222,3 +222,21 @@ fn index_records_the_indexer_build() {
     assert!(!stamp.is_empty());
     assert!(file.graph().provenance().any(|(n, _, h)| n == "(engine)" && h == stamp));
 }
+
+#[test]
+fn display_settings_in_the_shared_file_need_no_new_index_but_a_new_name_does() {
+    let tmp = tempfile::tempdir().unwrap();
+    let proj = tmp.path().join("p");
+    copy_dir(&fixture("go-resolve"), &proj);
+    let cfg = cfg_with_index(tmp.path());
+    let out = index_project(&proj, &cfg, &|_| {}).unwrap();
+    let packs = project_packs(&proj, &cfg).unwrap();
+    std::fs::write(proj.join("srcrelief.toml"), "[view]\ndetails = true\nwiring = true\n").unwrap();
+    let loaded = ProjectConfig { index: cfg.index.clone(), ..ProjectConfig::load(&proj, None).unwrap() };
+    assert!(!needs_reindex(&proj, &out.path, &loaded, &packs));
+    let renamed = ProjectConfig { name: Some("Other".into()), ..loaded.clone() };
+    assert!(needs_reindex(&proj, &out.path, &renamed, &packs));
+    let mut excluded = loaded;
+    excluded.exclude.push("nothing-matches/**".into());
+    assert!(needs_reindex(&proj, &out.path, &excluded, &packs));
+}

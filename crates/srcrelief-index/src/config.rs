@@ -1,10 +1,12 @@
-use anyhow::{Context, Result, anyhow};
-use serde::Deserialize;
+use crate::settings::{Layer, Settings, SettingsFile};
+use anyhow::{Result, anyhow};
 use srcrelief_format::Category;
 use srcrelief_rules::{Pack, PackSelection, Rule};
 use std::path::{Path, PathBuf};
 
 pub const CONFIG_FILE: &str = "srcrelief.toml";
+
+pub const BUILTIN_EXCLUDES: &[&str] = &["**/build/**", "**/.gradle/**", "**/node_modules/**", "**/vendor/**", "**/.git/**", "**/target/**", "**/dist/**", "**/.*/**"];
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct CategoryOverride {
@@ -12,47 +14,49 @@ pub struct CategoryOverride {
     pub category: Category,
 }
 
-#[derive(Clone, Debug, Default)]
+#[derive(Clone, Debug, PartialEq)]
+pub struct Filter {
+    pub name: String,
+    pub paths: Vec<String>,
+    pub names: Vec<String>,
+    pub shown: bool,
+}
+
+impl Filter {
+    pub fn tag(&self) -> String {
+        filter_tag(&self.name)
+    }
+}
+
+pub fn filter_tag(name: &str) -> String {
+    format!("filter:{name}")
+}
+
+#[derive(Clone, Debug)]
 pub struct ProjectConfig {
     pub name: Option<String>,
     pub include: Vec<String>,
     pub exclude: Vec<String>,
     pub packs: PackSelection,
     pub categories: Vec<CategoryOverride>,
+    pub test_paths: Vec<String>,
+    pub filters: Vec<Filter>,
     pub index: Option<PathBuf>,
 }
 
-#[derive(Deserialize, Default)]
-#[serde(deny_unknown_fields)]
-struct ConfigFile {
-    name: Option<String>,
-    #[serde(default)]
-    include: Vec<String>,
-    #[serde(default)]
-    exclude: Vec<String>,
-    #[serde(default)]
-    packs: PacksFile,
-    #[serde(default, rename = "category")]
-    categories: Vec<CategoryFile>,
-    index: Option<PathBuf>,
-}
-
-#[derive(Deserialize, Default)]
-#[serde(deny_unknown_fields)]
-struct PacksFile {
-    #[serde(default)]
-    enable: Vec<String>,
-    #[serde(default)]
-    disable: Vec<String>,
-    #[serde(default)]
-    dirs: Vec<PathBuf>,
-}
-
-#[derive(Deserialize)]
-#[serde(deny_unknown_fields)]
-struct CategoryFile {
-    glob: String,
-    category: String,
+impl Default for ProjectConfig {
+    fn default() -> Self {
+        ProjectConfig {
+            name: None,
+            include: Vec::new(),
+            exclude: BUILTIN_EXCLUDES.iter().map(|g| g.to_string()).collect(),
+            packs: PackSelection::default(),
+            categories: Vec::new(),
+            test_paths: Vec::new(),
+            filters: Vec::new(),
+            index: None,
+        }
+    }
 }
 
 impl ProjectConfig {
@@ -61,34 +65,16 @@ impl ProjectConfig {
             Some(p) => p.to_path_buf(),
             None => project_dir.join(CONFIG_FILE),
         };
-        if !path.is_file() {
-            if explicit.is_some() {
-                return Err(anyhow!("config file {} not found", path.display()));
-            }
-            return Ok(ProjectConfig::default());
+        if explicit.is_some() && !path.is_file() {
+            return Err(anyhow!("config file {} not found", path.display()));
         }
-        let src = std::fs::read_to_string(&path).with_context(|| format!("reading {}", path.display()))?;
-        let file: ConfigFile = toml::from_str(&src).map_err(|e| anyhow!("{}: {e}", path.display()))?;
-        if !file.include.is_empty() {
-            return Err(anyhow!("{}: `include` is not supported yet; list what to leave out under `exclude`", path.display()));
-        }
-        let base = path.parent().unwrap_or(project_dir);
-        let categories = file
-            .categories
-            .into_iter()
-            .map(|c| {
-                let category = Category::parse(&c.category).ok_or_else(|| anyhow!("{}: unknown category `{}`", path.display(), c.category))?;
-                Ok(CategoryOverride { glob: c.glob, category })
-            })
-            .collect::<Result<_>>()?;
-        Ok(ProjectConfig {
-            name: file.name,
-            include: file.include,
-            exclude: file.exclude,
-            packs: PackSelection { enable: file.packs.enable, disable: file.packs.disable, extra_dirs: file.packs.dirs.into_iter().map(|d| base.join(d)).collect() },
-            categories,
-            index: file.index.map(|i| base.join(i)),
-        })
+        let file = SettingsFile::read(&path)?;
+        let base = path.parent().unwrap_or(project_dir).to_path_buf();
+        Ok(Settings::merge(&[(Layer::Shared, &file, path, base)])?.config())
+    }
+
+    pub fn fingerprint(&self) -> String {
+        blake3::hash(format!("{:?}{:?}", self.name, self.exclude).as_bytes()).to_hex()[..16].to_string()
     }
 
     pub fn config_pack(&self) -> Option<Pack> {

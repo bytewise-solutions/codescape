@@ -8,7 +8,7 @@ use crate::input::{Nav, interpret};
 use crate::{minimap, style};
 use egui::{Align2, Color32, FontId, Key, Pos2, Sense, Shape, Stroke, StrokeKind};
 use srcrelief_format::*;
-use srcrelief_index::{ProjectConfig, Progress, index_path, index_project, needs_reindex, project_packs};
+use srcrelief_index::{ProjectConfig, Progress, SettingsPaths, SettingsStore, index_path, index_project, needs_reindex, project_packs};
 use srcrelief_layout::{Direction, LayoutCache, LayoutOptions, Rect};
 use srcrelief_rules::VisualRules;
 use std::collections::HashMap;
@@ -76,7 +76,7 @@ impl ReliefApp {
         self.recent.truncate(RECENT_LIMIT);
         save_recent(&self.recent);
         let prepared = (|| -> anyhow::Result<(ProjectConfig, srcrelief_rules::Packs, PathBuf)> {
-            let cfg = ProjectConfig::load(&dir, self.config.as_deref())?;
+            let cfg = SettingsStore::load(SettingsPaths::new(&dir, self.config.as_deref()))?.config();
             let packs = project_packs(&dir, &cfg)?;
             let path = index_path(&dir, &cfg);
             Ok((cfg, packs, path))
