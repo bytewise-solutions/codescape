@@ -39,9 +39,15 @@ struct TypeInfo {
     fields: HashMap<String, String>,
     embeds: Vec<String>,
     iface_methods: Vec<String>,
+    iface_arity: Vec<usize>,
     methods: HashMap<String, NodeId>,
+    arity: HashMap<String, usize>,
     file: usize,
     excluded: bool,
+}
+
+fn covers(ty: &TypeInfo, iface: &TypeInfo) -> bool {
+    iface.iface_methods.iter().enumerate().all(|(i, m)| ty.methods.contains_key(m) && iface.iface_arity.get(i).is_none_or(|a| ty.arity.get(m).is_none_or(|b| a == b)))
 }
 
 struct PkgInfo {
@@ -211,7 +217,9 @@ impl<'a> Resolver<'a> {
                     fields: t.fields.iter().cloned().collect(),
                     embeds: t.embeds.clone(),
                     iface_methods: t.methods.clone(),
+                    iface_arity: t.arity.clone(),
                     methods,
+                    arity: HashMap::new(),
                     file: fi,
                     excluded: f.is_test || f.is_mock,
                 });
@@ -242,6 +250,7 @@ impl<'a> Resolver<'a> {
                 match owner {
                     Some(t) => {
                         self.types[t].methods.insert(func.name.clone(), id);
+                        self.types[t].arity.insert(func.name.clone(), func.params.len());
                     }
                     None => {
                         self.pkgs[pi].funcs.entry(func.name.clone()).or_insert((id, func.results.clone(), fi));
@@ -299,7 +308,7 @@ impl<'a> Resolver<'a> {
                 .copied()
                 .filter(|&s| s != ii)
                 .filter(|&s| self.visible[self.pkgs[self.types[s].pkg].module].contains(&iface_module))
-                .filter(|&s| iface.iface_methods.iter().all(|m| self.types[s].methods.contains_key(m)))
+                .filter(|&s| covers(&self.types[s], iface))
                 .collect();
             if impls.is_empty() || impls.len() > MAX_IMPLEMENTATIONS {
                 continue;
@@ -480,7 +489,7 @@ impl<'a> Resolver<'a> {
             (0..self.types.len())
                 .filter(|&t| {
                     let ty = &self.types[t];
-                    ty.kind == SubKind::Struct && !ty.excluded && self.visible[from_module].contains(&self.pkgs[ty.pkg].module) && wanted.iter().all(|m| ty.methods.contains_key(m))
+                    ty.kind == SubKind::Struct && !ty.excluded && self.visible[from_module].contains(&self.pkgs[ty.pkg].module) && covers(ty, &self.types[iface])
                 })
                 .collect()
         };

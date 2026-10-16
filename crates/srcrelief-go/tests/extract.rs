@@ -199,3 +199,22 @@ fn files_record_package_and_import_targets() {
     expected.sort();
     assert_eq!(targets, expected);
 }
+
+#[test]
+fn implements_needs_matching_parameter_counts() {
+    let tmp = tempfile::tempdir().unwrap();
+    std::fs::write(tmp.path().join("go.mod"), "module example.com/g\n\ngo 1.22\n").unwrap();
+    let src = "package g\n\ntype EventProducer interface {\n\tPublish(e *Event) error\n}\n\ntype Event struct{}\n\n\
+type eventProducer struct{}\n\nfunc (p *eventProducer) Publish(e *Event) error { return nil }\n\n\
+type batchProducer struct{}\n\nfunc (p *batchProducer) Publish(tenant string, b *Event) error { return nil }\n";
+    std::fs::write(tmp.path().join("g.go"), src).unwrap();
+    let d = discover(tmp.path(), &default_excludes()).unwrap();
+    let mut b = GraphBuilder::new("g");
+    let nodes: Vec<NodeId> = d.modules.iter().map(|m| b.add_node(b.root(), NodeKind::Module, SubKind::None, &m.name, Lang::Go)).collect();
+    let mut facts = ProjectFacts::default();
+    extract_go(&d, &nodes, &default_excludes(), &mut b, &mut facts);
+    let pkg = b.children(nodes[0])[0];
+    let iface = b.child(pkg, "EventProducer").unwrap();
+    let from: Vec<&str> = b.edges().iter().filter(|e| e.to == iface && e.kind == EdgeKind::Implements).map(|e| b.name(e.from)).collect();
+    assert_eq!(from, ["eventProducer"]);
+}

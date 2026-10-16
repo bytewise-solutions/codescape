@@ -18,6 +18,7 @@ pub struct GoType {
     pub kind: SubKind,
     pub fields: Vec<(String, String)>,
     pub methods: Vec<String>,
+    pub arity: Vec<usize>,
     pub embeds: Vec<String>,
     pub start_line: u32,
     pub end_line: u32,
@@ -143,6 +144,7 @@ impl<'s> Ctx<'s> {
                 kind: SubKind::NamedType,
                 fields: Vec::new(),
                 methods: Vec::new(),
+                arity: Vec::new(),
                 embeds: Vec::new(),
                 start_line: line(spec),
                 end_line: end_line(spec),
@@ -178,7 +180,10 @@ impl<'s> Ctx<'s> {
                         match el.kind() {
                             "method_elem" | "method_spec" => {
                                 if let Some(nm) = el.child_by_field_name("name") {
+                                    let mut params = Vec::new();
+                                    self.params(el.child_by_field_name("parameters"), &mut params);
                                     t.methods.push(self.text(nm).to_string());
+                                    t.arity.push(params.len());
                                 }
                             }
                             "type_elem" | "constraint_elem" => t.embeds.push(self.text(el).to_string()),
