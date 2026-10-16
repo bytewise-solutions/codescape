@@ -387,3 +387,29 @@ fn random_graphs_have_30_percent_fewer_crossings() {
     }
     assert!(after * 10 <= before * 7, "crossings {before} -> {after}");
 }
+
+#[test]
+fn pinned_row_never_wraps() {
+    let apps: Vec<String> = (0..14).map(|i| format!("app{i:02}")).collect();
+    let mut names: Vec<&str> = apps.iter().map(|s| s.as_str()).collect();
+    names.push("core");
+    let deps: Vec<(&str, &str)> = apps.iter().map(|a| (a.as_str(), "core")).collect();
+    let g = with_entries(&names, &deps, &names[..14]);
+    let gr = g.file.graph();
+    let l = layout_container(gr, gr.root(), &[], &LayoutOptions::default());
+    let ys: Vec<f32> = l.children.iter().filter(|c| c.pinned).map(|c| c.rect.y).collect();
+    assert_eq!(ys.len(), 14);
+    assert!(ys.iter().all(|&y| (y - ys[0]).abs() < 0.5), "pinned boxes share one row: {ys:?}");
+}
+
+#[test]
+fn squeezed_layers_keep_forward_edges_down() {
+    let names: Vec<String> = (0..12).map(|i| format!("n{i:02}")).collect();
+    let refs: Vec<&str> = names.iter().map(|s| s.as_str()).collect();
+    let deps: Vec<(&str, &str, Scope)> = refs.windows(2).map(|w| (w[0], w[1], Scope::Main)).collect();
+    let g = graph(&refs, &deps);
+    let gr = g.file.graph();
+    let l = layout_container(gr, gr.root(), &[], &LayoutOptions::default());
+    assert!(l.children.iter().map(|c| c.layer).max().unwrap() < 11, "a 12-long chain is squeezed");
+    assert!(l.edges.iter().all(|e| e.dir == Direction::Down), "{:?}", l.edges.iter().map(|e| e.dir).collect::<Vec<_>>());
+}

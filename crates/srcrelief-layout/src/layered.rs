@@ -92,6 +92,7 @@ pub fn layout_container(g: &ArchivedGraph, node: NodeId, frames: &[FrameRule], o
         }
     }
 
+    let raw_layer = layer.clone();
     let raw_layers = layer.iter().max().map_or(0, |m| *m as usize + 1);
     let max_layers = ((n as f32).sqrt().ceil() as usize).max(MIN_LAYER_CAP);
     if raw_layers > max_layers {
@@ -137,9 +138,10 @@ pub fn layout_container(g: &ArchivedGraph, node: NodeId, frames: &[FrameRule], o
     for (li, l) in layers.iter().enumerate() {
         let mut row: Vec<usize> = Vec::new();
         let mut w = 0.0;
+        let keep_whole = l.iter().any(|&v| pinned[v]);
         for &v in l {
             let add = sizes[v][0] + if row.is_empty() { 0.0 } else { GAP_X };
-            if !row.is_empty() && w + add > max_row {
+            if !keep_whole && !row.is_empty() && w + add > max_row {
                 rows.push((li as u32, std::mem::take(&mut row)));
                 w = 0.0;
             }
@@ -184,14 +186,17 @@ pub fn layout_container(g: &ArchivedGraph, node: NodeId, frames: &[FrameRule], o
         .iter()
         .map(|e| {
             let (ra, rb) = (rects[e.a], rects[e.b]);
-            let dir = if e.back || layer[e.a] > layer[e.b] {
+            let dir = if e.back || raw_layer[e.a] > raw_layer[e.b] {
                 Direction::Up
-            } else if layer[e.a] == layer[e.b] || row_of[&e.a] == row_of[&e.b] {
+            } else if raw_layer[e.a] == raw_layer[e.b] {
                 Direction::Sideways
             } else {
                 Direction::Down
             };
+            let same_row = row_of[&e.a] == row_of[&e.b];
+            let side_points = || if ra.x < rb.x { vec![[ra.right(), ra.center()[1]], [rb.x, rb.center()[1]]] } else { vec![[ra.x, ra.center()[1]], [rb.right(), rb.center()[1]]] };
             let points = match dir {
+                Direction::Down if same_row => side_points(),
                 Direction::Down => vec![[toward(&ra, rb.center()[0]), ra.bottom()], [toward(&rb, ra.center()[0]), rb.y]],
                 Direction::Up => {
                     let (from, to) = ([toward(&ra, rb.center()[0]), ra.y], [toward(&rb, ra.center()[0]), rb.bottom()]);

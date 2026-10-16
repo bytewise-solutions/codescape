@@ -4,6 +4,7 @@ use crate::panels::{EntryGroupView, group_entries};
 use crate::reach::{ReachSet, compute_reach};
 use crate::search::SearchIndex;
 use crate::shot::{Shot, ShotPlan, ShotStep};
+use crate::input::{Nav, interpret};
 use crate::{minimap, style};
 use egui::{Align2, Color32, FontId, Key, Pos2, Sense, Shape, Stroke, StrokeKind};
 use srcrelief_format::*;
@@ -440,7 +441,7 @@ impl Project {
             let t = &self.totals;
             ui.label(egui::RichText::new(format!("{} modules · {} packages · {} types · {:.0}k loc", t.modules, t.packages, t.types, t.lines as f32 / 1000.0)).color(style::MUTED));
             ui.separator();
-            ui.label(egui::RichText::new(format!("{} apps · {} dev tools · {} tests", t.apps, t.tools, t.tests)).color(style::MUTED));
+            ui.label(egui::RichText::new(format!("{} apps · {} dev tools", t.apps, t.tools)).color(style::MUTED));
             ui.separator();
             ui.label(egui::RichText::new(format!("calls {:.0}% resolved · {:.0}% guessed", r as f32 * 100.0 / total, gu as f32 * 100.0 / total)).color(style::MUTED));
             if up > 0 {
@@ -458,6 +459,12 @@ impl Project {
                 self.include_test_edges = tests;
                 let mut opts = *self.cache.options();
                 opts.include_test_edges = tests;
+                self.cache.set_options(opts);
+            }
+            let mut wiring = self.cache.options().show_wiring;
+            if ui.checkbox(&mut wiring, "wiring").on_hover_text("show dependency-injection code and its arrows").changed() {
+                let mut opts = *self.cache.options();
+                opts.show_wiring = wiring;
                 self.cache.set_options(opts);
             }
             ui.label(egui::RichText::new(format!("{:.1} ms · {} boxes", self.scene_ms, self.scene.stats.drawn)).color(style::MUTED));
@@ -574,7 +581,12 @@ impl Project {
                 ui.label(egui::RichText::new("Click a box to inspect it. Double-click to zoom into it.").color(style::MUTED));
                 return;
             };
-            ui.label(egui::RichText::new(format!("{:?}", g.kind(n)).to_uppercase()).small().color(style::MUTED));
+            let kind = match g.sub_kind(n) {
+                SubKind::None => format!("{:?}", g.kind(n)),
+                sub => format!("{sub:?}"),
+            };
+            let wiring = if g.flags(n).contains(NodeFlags::WIRING) { " · WIRING (DEPENDENCY INJECTION)" } else { "" };
+            ui.label(egui::RichText::new(format!("{}{wiring}", kind.to_uppercase())).small().color(style::MUTED));
             ui.heading(g.name(n));
             if let Some(f) = g.file(n) {
                 let (s, e) = g.span(n);
@@ -700,11 +712,17 @@ impl Project {
             self.target = None;
         }
         if let Some(p) = resp.hover_pos() {
-            let (scroll, pinch) = ui.input(|i| (i.smooth_scroll_delta.y, i.zoom_delta()));
-            let factor = ((scroll * 0.0025).exp() * pinch) as f64;
-            if (factor - 1.0).abs() > 1e-4 {
-                self.cam.zoom_at([p.x, p.y], factor, self.view);
-                self.target = None;
+            let (scroll, pinch, mods) = ui.input(|i| (i.smooth_scroll_delta, i.zoom_delta(), i.modifiers));
+            match interpret(mods.command || mods.ctrl, mods.shift, [scroll.x, scroll.y], pinch) {
+                Nav::Zoom(f) => {
+                    self.cam.zoom_at([p.x, p.y], f, self.view);
+                    self.target = None;
+                }
+                Nav::Pan(d) => {
+                    self.cam.pan_by(d);
+                    self.target = None;
+                }
+                Nav::None => {}
             }
         }
         if resp.clicked() {
@@ -738,6 +756,7 @@ impl Project {
         self.paint(&painter);
         let root = self.cache.shared(g, g.root());
         minimap::draw(&painter, &root, &self.cam, self.view);
+        self.paint_legend(&painter);
         if let Some(n) = fly {
             self.fly_to(n);
         }
@@ -769,8 +788,17 @@ impl Project {
     fn paint_box(&self, painter: &egui::Painter, b: &crate::canvas::SceneBox) {
         let r = erect(b.rect);
         let external = b.flags.contains(NodeFlags::EXTERNAL);
-        painter.rect_filled(r, 3.0, if external { Color32::from_rgb(43, 43, 43) } else { style::depth_fill(b.depth, b.open) });
-        let mut stroke = Stroke::new(if b.open { 1.5 } else { 1.0 }, if external { style::EXTERNAL } else { style::BOX_STROKE });
+        let wiring = b.flags.contains(NodeFlags::WIRING);
+        let accent = if external {
+            style::EXTERNAL
+        } else if wiring {
+            style::WIRING
+        } else {
+            style::kind_stroke(b.sub)
+        };
+        let fill = if external { Color32::from_rgb(43, 43, 43) } else { style::tint(style::depth_fill(b.depth, b.open), accent, if b.open { 0.05 } else { 0.12 }) };
+        painter.rect_filled(r, 3.0, fill);
+        let mut stroke = Stroke::new(if b.open { 1.5 } else { 1.0 }, accent);
         if let Some(c) = b.tag_color {
             stroke.color = Color32::from_rgb(c[0], c[1], c[2]);
         }
@@ -804,18 +832,43 @@ impl Project {
         if e.highlighted {
             color = style::REACH;
         }
+        let wiring_only = e.weight == 0 && e.implements == 0 && e.wiring > 0;
+        let implements_only = e.weight == 0 && e.implements > 0;
+        if wiring_only {
+            painter.extend(Shape::dashed_line(&pts, Stroke::new(1.0, style::WIRING.gamma_multiply(0.7)), 2.0, 4.0));
+            return;
+        }
         let stroke = Stroke::new(width, color);
-        if dashed {
-            painter.extend(Shape::dashed_line(&pts, stroke, 6.0, 4.0));
+        if dashed || implements_only {
+            painter.extend(Shape::dashed_line(&pts, stroke, if implements_only { 3.0 } else { 6.0 }, 4.0));
         } else {
             painter.add(Shape::line(pts.clone(), stroke));
         }
         if pts.len() >= 2 {
             let (a, b) = (pts[pts.len() - 2], pts[pts.len() - 1]);
             let dir = (b - a).normalized();
-            let head = 8.0;
-            let side = egui::vec2(-dir.y, dir.x) * head * 0.45;
-            painter.add(Shape::convex_polygon(vec![b, b - dir * head + side, b - dir * head - side], color, Stroke::NONE));
+            let head = if implements_only { 11.0 } else { 8.0 };
+            let side = egui::vec2(-dir.y, dir.x) * head * if implements_only { 0.55 } else { 0.45 };
+            let tri = vec![b, b - dir * head + side, b - dir * head - side];
+            if implements_only {
+                painter.add(Shape::convex_polygon(tri, style::BG, Stroke::new(1.3, color)));
+            } else {
+                painter.add(Shape::convex_polygon(tri, color, Stroke::NONE));
+            }
+        }
+    }
+
+    fn paint_legend(&self, painter: &egui::Painter) {
+        let rows: Vec<&(&str, Color32)> = style::LEGEND.iter().filter(|(l, _)| self.cache.options().show_wiring || !l.starts_with("wiring")).collect();
+        let area = minimap::area(self.view);
+        let h = rows.len() as f32 * 15.0 + 8.0;
+        let top = egui::Rect::from_min_size(Pos2::new(area.x, area.y - h - 6.0), egui::vec2(area.w, h));
+        painter.rect_filled(top, 4.0, style::BAR);
+        for (i, (label, color)) in rows.iter().enumerate() {
+            let y = top.min.y + 6.0 + i as f32 * 15.0;
+            let swatch = egui::Rect::from_min_size(Pos2::new(top.min.x + 8.0, y + 2.0), egui::vec2(10.0, 8.0));
+            painter.rect_stroke(swatch, 1.0, Stroke::new(1.5, *color), StrokeKind::Inside);
+            painter.text(Pos2::new(top.min.x + 24.0, y), Align2::LEFT_TOP, *label, FontId::proportional(10.5), style::MUTED);
         }
     }
 

@@ -33,3 +33,36 @@ pub fn visuals() -> egui::Visuals {
     v.selection.bg_fill = Color32::from_rgb(46, 125, 50);
     v
 }
+
+pub const WIRING: Color32 = Color32::from_rgb(150, 120, 88);
+pub const INTERFACE: Color32 = Color32::from_rgb(38, 166, 154);
+pub const ENUM: Color32 = Color32::from_rgb(149, 117, 205);
+pub const ANNOTATION: Color32 = Color32::from_rgb(130, 120, 160);
+pub const FUNCTION: Color32 = Color32::from_rgb(128, 136, 148);
+pub const CONSTRUCTOR: Color32 = Color32::from_rgb(96, 118, 158);
+
+pub fn kind_stroke(sub: srcrelief_format::SubKind) -> Color32 {
+    use srcrelief_format::SubKind::*;
+    match sub {
+        Interface => INTERFACE,
+        Enum | Record => ENUM,
+        Annotation => ANNOTATION,
+        Function | Method | Field => FUNCTION,
+        Constructor => CONSTRUCTOR,
+        _ => BOX_STROKE,
+    }
+}
+
+pub fn tint(base: Color32, over: Color32, amount: f32) -> Color32 {
+    let mix = |a: u8, b: u8| (a as f32 + (b as f32 - a as f32) * amount) as u8;
+    Color32::from_rgb(mix(base.r(), over.r()), mix(base.g(), over.g()), mix(base.b(), over.b()))
+}
+
+pub const LEGEND: &[(&str, Color32)] = &[
+    ("interface", INTERFACE),
+    ("class / struct", BOX_STROKE),
+    ("enum / record", ENUM),
+    ("function / method", FUNCTION),
+    ("constructor", CONSTRUCTOR),
+    ("wiring (DI)", WIRING),
+];

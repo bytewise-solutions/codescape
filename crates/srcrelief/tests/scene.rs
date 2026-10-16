@@ -211,3 +211,27 @@ fn edges_carry_the_depth_of_their_container() {
         }
     }
 }
+
+#[test]
+fn scene_marks_implements_and_kinds() {
+    let mut b = GraphBuilder::new("p");
+    let m = b.add_node(b.root(), NodeKind::Package, SubKind::None, "screens", Lang::Java);
+    let iface = b.add_node(m, NodeKind::Type, SubKind::Interface, "ViewManager", Lang::Java);
+    let imp = b.add_node(m, NodeKind::Type, SubKind::Class, "ViewManagerImpl", Lang::Java);
+    for t in [iface, imp] {
+        b.set_span(t, "f", 1, 80);
+    }
+    b.add_edge(imp, iface, EdgeKind::Implements, Scope::Main, Confidence::Resolved, EdgeFlags::NONE);
+    let dir = tempfile::tempdir().unwrap();
+    write_graph(&b.finish(), &dir.path().join("g")).unwrap();
+    let f = ReliefFile::open(&dir.path().join("g")).unwrap();
+    let g = f.graph();
+    let mut cache = LayoutCache::new(Vec::new(), LayoutOptions::default());
+    let pkg = g.children(g.root()).start;
+    let cam = Camera::fit(world_rect(g, &mut cache, pkg).unwrap(), VIEW);
+    let s = scene(g, &mut cache, &cam);
+    let e = s.edges.iter().find(|e| g.name(e.a) == "ViewManagerImpl").expect("implements edge drawn");
+    assert!(e.implements > 0 && e.weight == 0);
+    let kinds: Vec<SubKind> = s.boxes.iter().filter(|b| b.kind == NodeKind::Type).map(|b| b.sub).collect();
+    assert!(kinds.contains(&SubKind::Interface) && kinds.contains(&SubKind::Class));
+}

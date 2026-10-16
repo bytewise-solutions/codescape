@@ -1,4 +1,4 @@
-use srcrelief_format::ArchivedGraph;
+use srcrelief_format::{ArchivedGraph, Category};
 use srcrelief_rules::VisualRules;
 
 #[derive(Clone, Debug, PartialEq)]
@@ -27,7 +27,7 @@ pub fn group_entries(g: &ArchivedGraph, vis: &VisualRules) -> Vec<EntryGroupView
             }
         }
     }
-    for i in (0..n).filter(|&i| g.entry_parent(i).is_none()) {
+    for i in (0..n).filter(|&i| g.entry_parent(i).is_none() && g.entry_category(i) != Category::Test) {
         let mut kids = std::mem::take(&mut children[i]);
         kids.sort_by(|&a, &b| {
             let (a, b) = (a as usize, b as usize);

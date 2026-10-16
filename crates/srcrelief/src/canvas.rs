@@ -1,6 +1,6 @@
 use crate::camera::{Camera, WRect};
 use crate::reach::ReachSet;
-use srcrelief_format::{ArchivedGraph, NodeFlags, NodeId, NodeKind};
+use srcrelief_format::{ArchivedGraph, NodeFlags, NodeId, NodeKind, SubKind};
 use srcrelief_layout::{ContainerLayout, Direction, LayoutCache, Rect};
 use srcrelief_rules::VisualRules;
 
@@ -16,6 +16,7 @@ pub struct SceneBox {
     pub open: bool,
     pub depth: u32,
     pub kind: NodeKind,
+    pub sub: SubKind,
     pub flags: NodeFlags,
     pub highlighted: bool,
     pub tag_color: Option<[u8; 3]>,
@@ -32,6 +33,8 @@ pub struct SceneEdge {
     pub test_only: bool,
     pub highlighted: bool,
     pub weight: u32,
+    pub wiring: u32,
+    pub implements: u32,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -136,7 +139,7 @@ pub fn fit_label(name: &str, width: f32, size: f32) -> String {
 }
 
 fn summary(g: &ArchivedGraph, node: NodeId) -> String {
-    let kids = g.children(node).filter(|&c| !g.flags(c).intersects(NodeFlags::MOCK | NodeFlags::TEST | NodeFlags::EXTERNAL)).count();
+    let kids = g.children(node).filter(|&c| !g.flags(c).intersects(NodeFlags::MOCK | NodeFlags::TEST | NodeFlags::EXTERNAL | NodeFlags::WIRING)).count();
     let unit = match g.kind(node) {
         NodeKind::Module => "pkgs",
         NodeKind::Package => "types",
@@ -200,6 +203,8 @@ impl Builder<'_> {
                 test_only: e.test_only,
                 highlighted: self.highlighted(e.a) && self.highlighted(e.b),
                 weight: e.calls + e.deps,
+                wiring: e.wiring,
+                implements: e.implements,
             });
         }
         for c in &layout.children {
@@ -214,11 +219,11 @@ impl Builder<'_> {
         }
         self.scene.stats.visited += 1;
         let g = self.g;
-        let hidden = self.cache.options().hidden;
+        let hidden = self.cache.options().effective_hidden();
         let has_children = g.children(node).any(|c| !g.flags(c).intersects(hidden));
         let open = has_children && rect.w >= OPEN_THRESHOLD_PX;
         let tag_color = g.tags(node).find_map(|t| self.vis.style_for(t).map(|s| s.color));
-        self.scene.boxes.push(SceneBox { node, rect, open, depth, kind: g.kind(node), flags: g.flags(node), highlighted: self.highlighted(node), tag_color });
+        self.scene.boxes.push(SceneBox { node, rect, open, depth, kind: g.kind(node), sub: g.sub_kind(node), flags: g.flags(node), highlighted: self.highlighted(node), tag_color });
         self.scene.stats.drawn += 1;
         if rect.h >= MIN_LABEL_PX * 1.6 {
             let size = if open { 13.0 } else { (rect.h * 0.2).clamp(MIN_LABEL_PX, 16.0) };
