@@ -36,6 +36,7 @@ pub struct SceneEdge {
     pub mark: Mark,
     pub dimmed: bool,
     pub weight: u32,
+    pub links: u32,
     pub wiring: u32,
     pub implements: u32,
 }
@@ -216,6 +217,7 @@ impl Builder<'_> {
                 mark: self.edge_mark(e.a, e.b),
                 dimmed: self.marks.is_some() && self.edge_mark(e.a, e.b) == Mark::None,
                 weight: e.calls + e.deps,
+                links: e.links,
                 wiring: e.wiring,
                 implements: e.implements,
             });

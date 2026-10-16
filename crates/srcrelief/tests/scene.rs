@@ -273,3 +273,15 @@ fn folded_implementations_are_reachable_and_details_counted() {
     assert_eq!(pkg_box.hidden_details, 1);
     assert!(s.boxes.iter().all(|b| b.node != adapter || g.parent(b.node) == Some(pkg)));
 }
+
+#[test]
+fn scene_edges_carry_their_link_count() {
+    let fx = fixture();
+    let g = fx.file.graph();
+    let mut cache = LayoutCache::new(Vec::new(), LayoutOptions::default());
+    let cam = fit_all(g, &mut cache);
+    let s = scene(g, &mut cache, &cam);
+    let (left, right) = (node(g, &["left"]), node(g, &["right"]));
+    let e = s.edges.iter().find(|e| e.a == left && e.b == right).unwrap();
+    assert_eq!(e.links, 1);
+}

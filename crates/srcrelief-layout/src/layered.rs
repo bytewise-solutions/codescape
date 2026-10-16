@@ -22,6 +22,7 @@ struct SibEdge {
     deps: u32,
     wiring: u32,
     implements: u32,
+    links: u32,
     undeclared: bool,
     test_only: bool,
     layering: bool,
@@ -90,7 +91,7 @@ fn add_wiring(g: &ArchivedGraph, node: NodeId, mut l: ContainerLayout, opts: &La
             continue;
         }
         let (from, to) = if ra.y <= rb.y { ([ra.center()[0], ra.bottom()], [rb.center()[0], rb.y]) } else { ([ra.center()[0], ra.y], [rb.center()[0], rb.bottom()]) };
-        l.edges.push(LaidEdge { a, b, calls: 0, deps: 0, wiring, implements: 0, dir: Direction::Down, undeclared: false, test_only: false, points: vec![from, to] });
+        l.edges.push(LaidEdge { a, b, calls: 0, deps: 0, wiring, implements: 0, links: 0, dir: Direction::Down, undeclared: false, test_only: false, points: vec![from, to] });
     }
     l
 }
@@ -125,7 +126,7 @@ fn layout_structure(g: &ArchivedGraph, node: NodeId, frames: &[FrameRule], opts:
             continue;
         }
         let wiring = if opts.show_wiring { wiring } else { 0 };
-        edges.push(SibEdge { a, b, calls, deps, wiring, implements, undeclared: agg.undeclared, test_only, layering: structural && !pinned[b], back: false });
+        edges.push(SibEdge { a, b, calls, deps, wiring, implements, links: agg.links.to_native() as u32, undeclared: agg.undeclared, test_only, layering: structural && !pinned[b], back: false });
     }
 
     let rank: Vec<Option<usize>> = kids.iter().map(|&k| role_rank(g, k)).collect();
@@ -321,7 +322,7 @@ fn layout_structure(g: &ArchivedGraph, node: NodeId, frames: &[FrameRule], opts:
                     vec![from, to]
                 }
             };
-            LaidEdge { a: kids[e.a], b: kids[e.b], calls: e.calls, deps: e.deps, wiring: e.wiring, implements: e.implements, dir, undeclared: e.undeclared, test_only: e.test_only, points }
+            LaidEdge { a: kids[e.a], b: kids[e.b], calls: e.calls, deps: e.deps, wiring: e.wiring, implements: e.implements, links: e.links, dir, undeclared: e.undeclared, test_only: e.test_only, points }
         })
         .collect();
 

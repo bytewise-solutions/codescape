@@ -180,6 +180,7 @@ pub struct Agg {
     pub deps: u16,
     pub wiring: u16,
     pub implements: u16,
+    pub links: u16,
     pub scope_mask: u8,
     pub undeclared: bool,
 }

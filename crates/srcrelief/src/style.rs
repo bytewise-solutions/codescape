@@ -115,9 +115,11 @@ pub fn legend(show_wiring: bool, show_noise: bool) -> Vec<LegendItem> {
 
 pub const CALLER: Color32 = Color32::from_rgb(110, 165, 255);
 
-pub fn edge_width(weight: u32, marked: bool) -> f32 {
-    if marked {
-        return 2.2;
-    }
-    (1.0 + (weight.max(1) as f32).log10() * 0.4).min(2.5)
+pub fn edge_width(links: u32, marked: bool) -> f32 {
+    let w = (0.6 + (links.max(1) as f32).log2() * 0.45).min(3.5);
+    if marked { w.max(2.2) } else { w }
+}
+
+pub fn edge_alpha(links: u32) -> f32 {
+    (0.4 + (links.max(1) as f32).log2() * 0.2).min(1.0)
 }

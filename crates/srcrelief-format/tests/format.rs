@@ -385,3 +385,33 @@ fn packages_of_details_are_details() {
     assert!(g.flags(find(g, only, "dto")).contains(NodeFlags::DETAIL));
     assert!(!g.flags(only).contains(NodeFlags::DETAIL), "modules stay on the map");
 }
+
+#[test]
+fn links_count_distinct_type_pairs() {
+    let mut b = GraphBuilder::new("proj");
+    let root = b.root();
+    let m = b.add_node(root, NodeKind::Module, SubKind::None, "m", Lang::Java);
+    let p1 = b.add_node(m, NodeKind::Package, SubKind::None, "p1", Lang::Java);
+    let p2 = b.add_node(m, NodeKind::Package, SubKind::None, "p2", Lang::Java);
+    let a = b.add_node(p1, NodeKind::Type, SubKind::Class, "A", Lang::Java);
+    let a1 = b.add_node(a, NodeKind::Member, SubKind::Method, "a1", Lang::Java);
+    let a2 = b.add_node(a, NodeKind::Member, SubKind::Method, "a2", Lang::Java);
+    let t = b.add_node(p1, NodeKind::Type, SubKind::Class, "B", Lang::Java);
+    let b1 = b.add_node(t, NodeKind::Member, SubKind::Method, "b1", Lang::Java);
+    let c = b.add_node(p2, NodeKind::Type, SubKind::Class, "C", Lang::Java);
+    let c1 = b.add_node(c, NodeKind::Member, SubKind::Method, "c1", Lang::Java);
+    let c2 = b.add_node(c, NodeKind::Member, SubKind::Method, "c2", Lang::Java);
+    let helper = b.add_node(p1, NodeKind::Member, SubKind::Function, "helper", Lang::Java);
+    for (x, y) in [(a1, c1), (a2, c2), (a1, c2), (b1, c1), (helper, c1)] {
+        b.add_edge(x, y, EdgeKind::Calls, Scope::Main, Confidence::Resolved, EdgeFlags::NONE);
+    }
+    let w = b.add_node(p1, NodeKind::Type, SubKind::Class, "Module", Lang::Java);
+    let w1 = b.add_node(w, NodeKind::Member, SubKind::Method, "provide", Lang::Java);
+    b.add_edge(w1, c1, EdgeKind::Calls, Scope::Main, Confidence::Resolved, EdgeFlags::WIRING);
+    let (_d, file) = roundtrip(b);
+    let gr = file.graph();
+    let m = find(gr, gr.root(), "m");
+    let agg = &gr.aggregates(m)[0];
+    assert_eq!(agg.calls.to_native(), 5);
+    assert_eq!(agg.links.to_native(), 3, "A->C, B->C and helper->C; wiring is not a link");
+}

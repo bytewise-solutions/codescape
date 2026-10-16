@@ -1,5 +1,5 @@
 use crate::model::*;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct RawEdge {
@@ -301,6 +301,18 @@ impl GraphBuilder {
             edge_index[i + 1] += edge_index[i];
         }
 
+        let mut carrier: Vec<NodeId> = (0..n as NodeId).collect();
+        let mut in_type = vec![false; n];
+        for (new, &old) in order.iter().enumerate() {
+            let p = parent_new[new];
+            if self.nodes[old as usize].kind == NodeKind::Type && (p == NONE || !in_type[p as usize]) {
+                in_type[new] = true;
+            } else if p != NONE && in_type[p as usize] {
+                in_type[new] = true;
+                carrier[new] = carrier[p as usize];
+            }
+        }
+        let mut linked: HashSet<(u32, u32, u32, u32, u32)> = HashSet::new();
         let mut agg_map: HashMap<(u32, u32, u32), Agg> = HashMap::new();
         for (from, e) in &sorted {
             if EdgeFlags(e.flags).contains(EdgeFlags::NOISE) {
@@ -323,8 +335,12 @@ impl GraphBuilder {
             let container = parent_new[a as usize];
             let agg = agg_map
                 .entry((container, a, b))
-                .or_insert(Agg { a, b, calls: 0, deps: 0, wiring: 0, implements: 0, scope_mask: 0, undeclared: false });
+                .or_insert(Agg { a, b, calls: 0, deps: 0, wiring: 0, implements: 0, links: 0, scope_mask: 0, undeclared: false });
             let kind = EdgeKind::from_u8(e.kind);
+            let structural = !EdgeFlags(e.flags).contains(EdgeFlags::WIRING) && !matches!(kind, EdgeKind::Implements | EdgeKind::Inherits);
+            if structural && Scope::from_u8(e.scope) == Scope::Main && linked.insert((container, a, b, carrier[*from as usize], carrier[e.to as usize])) {
+                agg.links = agg.links.saturating_add(1);
+            }
             let add = e.count.min(u16::MAX as u32) as u16;
             let slot = if EdgeFlags(e.flags).contains(EdgeFlags::WIRING) {
                 &mut agg.wiring

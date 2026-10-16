@@ -1050,7 +1050,8 @@ impl Project {
             dashed = true;
         }
         let marked = e.mark != Mark::None;
-        let width = style::edge_width(e.weight, marked);
+        let links = if e.weight == 0 { e.implements } else { e.links };
+        let width = style::edge_width(links, marked);
         match e.mark {
             Mark::Down | Mark::Focus => color = style::REACH,
             Mark::Up => color = style::CALLER,
@@ -1058,6 +1059,8 @@ impl Project {
         }
         if e.dimmed {
             color = color.gamma_multiply(0.2);
+        } else if !marked {
+            color = color.gamma_multiply(style::edge_alpha(links));
         }
         let wiring_only = e.weight == 0 && e.implements == 0 && e.wiring > 0;
         let implements_only = e.weight == 0 && e.implements > 0;
@@ -1074,7 +1077,7 @@ impl Project {
         if pts.len() >= 2 {
             let (a, b) = (pts[pts.len() - 2], pts[pts.len() - 1]);
             let dir = (b - a).normalized();
-            let head = if implements_only { 11.0 } else { 8.0 };
+            let head = if implements_only { 11.0 } else { 5.0 + width * 1.5 };
             let side = egui::vec2(-dir.y, dir.x) * head * if implements_only { 0.55 } else { 0.45 };
             let tri = vec![b, b - dir * head + side, b - dir * head - side];
             if implements_only {

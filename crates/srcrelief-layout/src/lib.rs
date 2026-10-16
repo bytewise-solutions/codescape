@@ -135,6 +135,7 @@ pub struct LaidEdge {
     pub deps: u32,
     pub wiring: u32,
     pub implements: u32,
+    pub links: u32,
     pub dir: Direction,
     pub undeclared: bool,
     pub test_only: bool,
