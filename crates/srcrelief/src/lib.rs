@@ -9,5 +9,6 @@ pub mod reach;
 pub mod search;
 pub mod settings_window;
 pub mod shot;
+pub mod source;
 pub mod style;
 pub mod view;

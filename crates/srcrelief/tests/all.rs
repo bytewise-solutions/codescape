@@ -5,5 +5,6 @@ mod panels;
 mod reach;
 mod scene;
 mod search;
+mod source;
 mod style;
 mod view;

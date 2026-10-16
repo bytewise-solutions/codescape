@@ -5,6 +5,7 @@ use crate::focus::{Focus, FocusMode, History, Mark, UsageIndex, focus};
 use crate::search::{self, SearchIndex};
 use crate::shot::{Shot, ShotPlan, ShotStep};
 use crate::input::{Nav, SHORTCUTS, Step, interpret, nearest_in};
+use crate::source::{SourceCache, Token, code_font, highlight};
 use crate::settings_window::{self, SettingsForm};
 use crate::view::{layout_options, toggle, view_items};
 use crate::{minimap, style};
@@ -337,6 +338,7 @@ struct Project {
     totals: Totals,
     scene_ms: f32,
     last_frame: Instant,
+    source: std::cell::RefCell<SourceCache>,
 }
 
 fn chevron(painter: &egui::Painter, center: Pos2, up: bool) {
@@ -386,6 +388,7 @@ fn lifecycle_badge(l: Lifecycle) -> &'static str {
 
 impl Project {
     fn open(dir: PathBuf, path: &Path, visual: VisualRules, settings: SettingsStore, packs: Vec<String>) -> Result<Project, String> {
+        let source = std::cell::RefCell::new(SourceCache::new(&dir));
         let file = ReliefFile::open(path).map_err(|e| format!("{e}"))?;
         let g = file.graph();
         let groups = group_entries(g, &visual);
@@ -457,6 +460,7 @@ impl Project {
             totals,
             scene_ms: 0.0,
             last_frame: Instant::now(),
+            source,
         })
     }
 
@@ -1110,6 +1114,9 @@ impl Project {
             for l in self.scene.labels.iter().filter(|l| l.depth == depth) {
                 self.paint_label(&painter, l);
             }
+            for b in self.scene.boxes.iter().filter(|b| b.depth == depth && !b.open && matches!(b.kind, NodeKind::Member | NodeKind::Type)) {
+                self.paint_code(&painter, b);
+            }
         }
     }
 
@@ -1283,6 +1290,47 @@ impl Project {
                 }
             }
             painter.text(Pos2::new(x + 26.0, y), Align2::LEFT_TOP, it.label, FontId::proportional(10.0), style::MUTED);
+        }
+    }
+
+    fn paint_code(&self, painter: &egui::Painter, b: &crate::canvas::SceneBox) {
+        const TOP: f32 = 40.0;
+        if b.rect.h < TOP + 30.0 || b.rect.w < 160.0 {
+            return;
+        }
+        let g = self.file.graph();
+        let Some(file) = g.file(b.node) else { return };
+        let (start, end) = g.span(b.node);
+        let Some(code) = self.source.borrow_mut().span(file, start, end) else { return };
+        let Some(size) = code_font(b.rect.h - TOP - 6.0, code.lines.len()) else { return };
+        let area = erect(b.rect).shrink(2.0).intersect(erect(self.view));
+        let clip = painter.with_clip_rect(area);
+        let mono = FontId::monospace(size);
+        let fade = |c: Color32| if b.dimmed { c.gamma_multiply(0.35) } else { c };
+        let gutter = format!("{}", code.first_line as usize + code.lines.len()).len() as f32 * size * 0.62 + 10.0;
+        let lines: Vec<&str> = code.lines.iter().map(String::as_str).collect();
+        let line_h = size * crate::source::LINE_SPACING;
+        for (i, segments) in highlight(&lines, g.lang(b.node)).into_iter().enumerate() {
+            let y = b.rect.y + TOP + i as f32 * line_h;
+            if y > self.view.bottom() {
+                break;
+            }
+            if y + line_h < self.view.y {
+                continue;
+            }
+            let number = (code.first_line as usize + i).to_string();
+            clip.text(Pos2::new(b.rect.x + 8.0 + gutter - 6.0, y), Align2::RIGHT_TOP, number, mono.clone(), fade(style::MUTED.gamma_multiply(0.6)));
+            let mut job = egui::text::LayoutJob::default();
+            for (text, kind) in segments {
+                let color = match kind {
+                    Token::Text => style::TEXT,
+                    Token::Keyword => style::CODE_KEYWORD,
+                    Token::String => style::CODE_STRING,
+                    Token::Comment => style::MUTED,
+                };
+                job.append(&text, 0.0, egui::TextFormat { font_id: mono.clone(), color: fade(color), ..Default::default() });
+            }
+            clip.galley(Pos2::new(b.rect.x + 8.0 + gutter, y), clip.layout_job(job), style::TEXT);
         }
     }
 

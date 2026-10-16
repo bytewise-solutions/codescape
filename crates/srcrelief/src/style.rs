@@ -113,6 +113,9 @@ pub fn legend(show_wiring: bool, show_noise: bool) -> Vec<LegendItem> {
     v
 }
 
+pub const CODE_KEYWORD: Color32 = Color32::from_rgb(198, 146, 233);
+pub const CODE_STRING: Color32 = Color32::from_rgb(152, 195, 121);
+
 pub const CALLER: Color32 = Color32::from_rgb(110, 165, 255);
 
 pub fn edge_width(links: u32, marked: bool) -> f32 {
