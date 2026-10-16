@@ -139,3 +139,40 @@ fn copy_dir(from: &Path, to: &Path) {
         }
     }
 }
+
+fn write_pack(dir: &Path, detection_pattern: &str, color: [u8; 3]) {
+    std::fs::create_dir_all(dir).unwrap();
+    std::fs::write(
+        dir.join("pack.toml"),
+        format!(
+            "name = \"mine\"\nversion = \"1\"\n[[rule]]\nid = \"mine.repo\"\nname_tag = {{ kinds = [\"type\"], pattern = \"{detection_pattern}\", tag = \"layer:repository\" }}\n[visual]\n[[visual.tag_style]]\ntag = \"layer:repository\"\ncolor = [{}, {}, {}]\n",
+            color[0], color[1], color[2]
+        ),
+    )
+    .unwrap();
+}
+
+#[test]
+fn user_pack_from_config_dir_tags_without_touching_the_project() {
+    let tmp = tempfile::tempdir().unwrap();
+    let pack = tmp.path().join("packs/mine");
+    write_pack(&pack, "Repo$", [200, 10, 10]);
+    let dir = fixture("go-resolve");
+    let before = listing(&dir);
+    let mut cfg = cfg_with_index(tmp.path());
+    cfg.packs.extra_dirs.push(tmp.path().join("packs"));
+    let out = index_project(&dir, &cfg, &|_| {}).unwrap();
+    let file = ReliefFile::open(&out.path).unwrap();
+    let g = file.graph();
+    let tagged: Vec<&str> = (0..g.node_count() as NodeId).filter(|&n| g.has_tag(n, "layer:repository")).map(|n| g.name(n)).collect();
+    assert!(tagged.contains(&"Repo") && tagged.contains(&"pgRepo"), "{tagged:?}");
+    assert_eq!(listing(&dir), before);
+
+    write_pack(&pack, "Repo$", [10, 200, 10]);
+    let packs = project_packs(&dir, &cfg).unwrap();
+    assert!(!needs_reindex(&dir, &out.path, &cfg, &packs), "a colour change is visual only");
+    assert_eq!(packs.visual().style_for("layer:repository").unwrap().color, [10, 200, 10]);
+    write_pack(&pack, "Service$", [10, 200, 10]);
+    let packs = project_packs(&dir, &cfg).unwrap();
+    assert!(needs_reindex(&dir, &out.path, &cfg, &packs), "a detection change needs a new index");
+}
