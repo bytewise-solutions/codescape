@@ -1,0 +1,54 @@
+name = "layers"
+version = "0.1.0"
+
+[[rule]]
+id = "layers.handler-names"
+name_tag = { kinds = ["type"], pattern = "(Handler|Controller|Resource|Endpoints?|Router)$", tag = "layer:handler" }
+
+[[rule]]
+id = "layers.service-names"
+name_tag = { kinds = ["type"], pattern = "(Service|UseCase|Usecase|Interactor|Manager)(Impl)?$", tag = "layer:service" }
+
+[[rule]]
+id = "layers.repository-names"
+name_tag = { kinds = ["type"], pattern = "(Repository|Repo|Store|Storage|Dao|DAO)(Impl)?$", tag = "layer:repository" }
+
+[[rule]]
+id = "layers.model-names"
+name_tag = { kinds = ["type"], pattern = "(Entity|Model|Dto|DTO|Request|Response)$", tag = "layer:model" }
+
+[[rule]]
+id = "layers.handler-packages"
+name_tag = { kinds = ["package"], pattern = "(^|[./])(handlers?|controllers?|api|rest|web|http)$", tag = "layer:handler" }
+
+[[rule]]
+id = "layers.service-packages"
+name_tag = { kinds = ["package"], pattern = "(^|[./])(services?|usecases?|application)$", tag = "layer:service" }
+
+[[rule]]
+id = "layers.repository-packages"
+name_tag = { kinds = ["package"], pattern = "(^|[./])(repository|repositories|repo|repos|store|storage|dao|persistence|pgsql|db)$", tag = "layer:repository" }
+
+[[rule]]
+id = "layers.model-packages"
+name_tag = { kinds = ["package"], pattern = "(^|[./])(models?|entity|entities|dto)$", tag = "layer:model" }
+
+[[rule]]
+id = "layers.spring-handlers"
+annotation_tag = { names = ["RestController", "Controller"], tag = "layer:handler" }
+
+[[rule]]
+id = "layers.spring-services"
+annotation_tag = { names = ["Service"], tag = "layer:service" }
+
+[[rule]]
+id = "layers.spring-repositories"
+annotation_tag = { names = ["Repository"], tag = "layer:repository" }
+
+[[rule]]
+id = "layers.jpa-entities"
+annotation_tag = { names = ["Entity", "Table"], tag = "layer:model" }
+
+[[rule]]
+id = "layers.entry-owners"
+entry_owner_tag = { kinds = ["http-route", "message-handler"], tag = "layer:handler" }

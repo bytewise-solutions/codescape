@@ -14,6 +14,7 @@ const BUILTINS: &[(&str, &str)] = &[
     ("fiber", include_str!("../../../rules/fiber/pack.toml")),
     ("rabbitmq-amqp091", include_str!("../../../rules/rabbitmq-amqp091/pack.toml")),
     ("google-wire", include_str!("../../../rules/google-wire/pack.toml")),
+    ("layers", include_str!("../../../rules/layers/pack.toml")),
     ("default-visuals", include_str!("../../../rules/default-visuals/pack.toml")),
 ];
 
@@ -40,6 +41,8 @@ pub enum Rule {
     Wiring { file_markers: Vec<String>, file_imports: Vec<String>, calls: Vec<String>, annotations: Vec<String>, type_prefixes: Vec<String>, requires_imports: Vec<String> },
     TestCode { file_imports: Vec<String>, dir_names: Vec<String> },
     Noise { name_suffixes: Vec<String>, supertype_suffixes: Vec<String>, methods: Vec<String> },
+    AnnotationTag { names: Vec<String>, tag: String },
+    EntryOwnerTag { kinds: Vec<String>, tag: String },
 }
 
 #[derive(Clone, Debug)]
@@ -97,6 +100,22 @@ struct RuleFile {
     wiring: Option<WiringFile>,
     test_code: Option<TestCodeFile>,
     noise: Option<NoiseFile>,
+    annotation_tag: Option<AnnotationTagFile>,
+    entry_owner_tag: Option<EntryOwnerTagFile>,
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct AnnotationTagFile {
+    names: Vec<String>,
+    tag: String,
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct EntryOwnerTagFile {
+    kinds: Vec<String>,
+    tag: String,
 }
 
 #[derive(Deserialize)]
@@ -344,6 +363,8 @@ impl RuleFile {
             self.wiring.is_some(),
             self.test_code.is_some(),
             self.noise.is_some(),
+            self.annotation_tag.is_some(),
+            self.entry_owner_tag.is_some(),
         ]
         .iter()
         .filter(|b| **b)
@@ -401,6 +422,12 @@ impl RuleFile {
         }
         if let Some(w) = self.wiring {
             return Ok(Rule::Wiring { file_markers: w.file_markers, file_imports: w.file_imports, calls: w.calls, annotations: w.annotations, type_prefixes: w.type_prefixes, requires_imports: w.requires_imports });
+        }
+        if let Some(a) = self.annotation_tag {
+            return Ok(Rule::AnnotationTag { names: a.names, tag: a.tag });
+        }
+        if let Some(e) = self.entry_owner_tag {
+            return Ok(Rule::EntryOwnerTag { kinds: e.kinds, tag: e.tag });
         }
         if let Some(n) = self.noise {
             return Ok(Rule::Noise { name_suffixes: n.name_suffixes, supertype_suffixes: n.supertype_suffixes, methods: n.methods });

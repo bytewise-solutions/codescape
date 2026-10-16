@@ -27,6 +27,12 @@ struct SibEdge {
     back: bool,
 }
 
+const ROLE_ORDER: [&str; 4] = ["layer:handler", "layer:service", "layer:repository", "layer:model"];
+
+fn role_rank(g: &ArchivedGraph, n: NodeId) -> Option<usize> {
+    g.tags(n).filter_map(|t| ROLE_ORDER.iter().position(|r| *r == t)).min()
+}
+
 fn entry_owners(g: &ArchivedGraph) -> HashSet<NodeId> {
     let mut out = HashSet::new();
     for i in 0..g.entries().len() {
@@ -108,6 +114,15 @@ fn layout_structure(g: &ArchivedGraph, node: NodeId, frames: &[FrameRule], opts:
         edges.push(SibEdge { a, b, calls, deps, wiring, implements, undeclared: agg.undeclared, test_only, layering: structural && !pinned[b], back: false });
     }
 
+    let rank: Vec<Option<usize>> = kids.iter().map(|&k| role_rank(g, k)).collect();
+    for e in edges.iter_mut() {
+        if let (Some(ra), Some(rb)) = (rank[e.a], rank[e.b]) {
+            if ra > rb {
+                e.back = true;
+                e.layering = false;
+            }
+        }
+    }
     let mut out: Vec<Vec<usize>> = vec![Vec::new(); n];
     for (ei, e) in edges.iter().enumerate() {
         if e.layering {
@@ -137,6 +152,35 @@ fn layout_structure(g: &ArchivedGraph, node: NodeId, frames: &[FrameRule], opts:
         }
     }
 
+    let mut preds: Vec<Vec<usize>> = vec![Vec::new(); n];
+    for e in edges.iter().filter(|e| e.layering && !e.back) {
+        preds[e.b].push(e.a);
+    }
+    if rank.iter().any(|r| r.is_some()) {
+        for _ in 0..n + ROLE_ORDER.len() {
+            let mut floor = [0u32; ROLE_ORDER.len()];
+            for (r, slot) in floor.iter_mut().enumerate() {
+                *slot = (0..n).filter(|&v| rank[v].is_some_and(|rv| rv < r)).map(|v| layer[v] + 1).max().unwrap_or(0);
+            }
+            let mut changed = false;
+            for &v in &queue {
+                if pinned[v] {
+                    continue;
+                }
+                let mut want = rank[v].map_or(layer[v], |r| layer[v].max(floor[r]));
+                for &p in &preds[v] {
+                    want = want.max(layer[p] + 1);
+                }
+                if want > layer[v] {
+                    layer[v] = want;
+                    changed = true;
+                }
+            }
+            if !changed {
+                break;
+            }
+        }
+    }
     let raw_layer = layer.clone();
     let raw_layers = layer.iter().max().map_or(0, |m| *m as usize + 1);
     let max_layers = ((n as f32).sqrt().ceil() as usize).max(MIN_LAYER_CAP);

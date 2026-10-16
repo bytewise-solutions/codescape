@@ -499,3 +499,55 @@ fn error_types_hidden_by_default_and_shown_without_moving_others() {
         assert_eq!(on.child(c.node).unwrap().rect, c.rect);
     }
 }
+
+fn tagged(types: &[(&str, &str)], calls: &[(&str, &str)]) -> G {
+    let mut b = GraphBuilder::new("p");
+    let pkg = b.add_node(b.root(), NodeKind::Package, SubKind::None, "billing", Lang::Go);
+    let mut ids = HashMap::new();
+    for (name, tag) in types {
+        let t = b.add_node(pkg, NodeKind::Type, SubKind::Struct, name, Lang::Go);
+        b.set_span(t, "f", 1, 40);
+        if !tag.is_empty() {
+            b.add_tag(t, tag);
+        }
+        ids.insert(name.to_string(), t);
+    }
+    for (a, c) in calls {
+        b.add_edge(ids[*a], ids[*c], EdgeKind::Calls, Scope::Main, Confidence::Resolved, EdgeFlags::NONE);
+    }
+    let dir = tempfile::tempdir().unwrap();
+    write_graph(&b.finish(), &dir.path().join("g")).unwrap();
+    let file = ReliefFile::open(&dir.path().join("g")).unwrap();
+    let g = file.graph();
+    let pkg = g.children(g.root()).start;
+    let ids = g.children(pkg).map(|c| (g.name(c).to_string(), c)).collect();
+    G { _dir: dir, file, ids }
+}
+
+#[test]
+fn roles_order_layers_top_down() {
+    let g = tagged(
+        &[("Invoice", "layer:model"), ("invoiceRepo", "layer:repository"), ("invoiceService", "layer:service"), ("InvoiceHandler", "layer:handler"), ("Price", "")],
+        &[("InvoiceHandler", "invoiceService")],
+    );
+    let gr = g.file.graph();
+    let pkg = gr.children(gr.root()).start;
+    let l = layout_container(gr, pkg, &[], &LayoutOptions::default());
+    let layer = |n: &str| l.child(g.ids[n]).unwrap().layer;
+    assert!(layer("InvoiceHandler") < layer("invoiceService"));
+    assert!(layer("invoiceService") < layer("invoiceRepo"), "no call links them, the roles still order them");
+    assert!(layer("invoiceRepo") < layer("Invoice"));
+}
+
+#[test]
+fn calls_against_the_role_order_point_up() {
+    let g = tagged(&[("orderRepo", "layer:repository"), ("orderService", "layer:service")], &[("orderService", "orderRepo"), ("orderRepo", "orderService")]);
+    let gr = g.file.graph();
+    let pkg = gr.children(gr.root()).start;
+    let l = layout_container(gr, pkg, &[], &LayoutOptions::default());
+    assert!(l.child(g.ids["orderService"]).unwrap().layer < l.child(g.ids["orderRepo"]).unwrap().layer);
+    let back = l.edges.iter().find(|e| e.a == g.ids["orderRepo"]).unwrap();
+    assert_eq!(back.dir, Direction::Up);
+    let down = l.edges.iter().find(|e| e.a == g.ids["orderService"]).unwrap();
+    assert_eq!(down.dir, Direction::Down);
+}

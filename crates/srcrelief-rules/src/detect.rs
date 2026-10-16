@@ -63,6 +63,7 @@ pub fn apply_detection(packs: &Packs, facts: &ProjectFacts, sources: &dyn Fn(&st
     cx.annotation_routes(b);
     cx.call_rules(b);
     cx.queries(sources, b);
+    cx.role_tags(b);
     cx.stats.entries = b.entries().len() - before;
     cx.stats
 }
@@ -241,6 +242,43 @@ impl<'a> Ctx<'a> {
                         b.add_flags(t.node, NodeFlags::NOISE);
                     }
                 }
+            }
+        }
+    }
+
+    fn role_tags(&mut self, b: &mut GraphBuilder) {
+        for (_, rule) in self.packs.rules() {
+            match rule {
+                Rule::AnnotationTag { names, tag } => {
+                    for file in &self.facts.files {
+                        let hits = file
+                            .types
+                            .iter()
+                            .filter(|t| t.annotations.iter().any(|a| names.contains(&a.name)))
+                            .map(|t| t.node)
+                            .chain(file.functions.iter().filter(|f| f.annotations.iter().any(|a| names.contains(&a.name))).map(|f| f.node));
+                        for n in hits.collect::<Vec<_>>() {
+                            b.add_tag(n, tag);
+                            self.stats.tags += 1;
+                        }
+                    }
+                }
+                Rule::EntryOwnerTag { kinds, tag } => {
+                    let owners: Vec<NodeId> = b
+                        .entries()
+                        .iter()
+                        .filter(|e| kinds.contains(&e.kind))
+                        .filter_map(|e| match b.node_kind(e.node) {
+                            NodeKind::Type => Some(e.node),
+                            _ => b.parent(e.node).filter(|&p| b.node_kind(p) == NodeKind::Type),
+                        })
+                        .collect();
+                    for n in owners {
+                        b.add_tag(n, tag);
+                        self.stats.tags += 1;
+                    }
+                }
+                _ => {}
             }
         }
     }

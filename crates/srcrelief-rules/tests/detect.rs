@@ -502,3 +502,34 @@ fn error_types_are_noise() {
         assert!(!fx.b.flags(n).contains(NodeFlags::NOISE), "{} is real", fx.b.name(n));
     }
 }
+
+#[test]
+fn architectural_roles_are_tagged() {
+    let mut fx = Fx::new();
+    let f = fx.file("api", "api/internal/billing/billing.go", Lang::Go, false, &["github.com/gofiber/fiber/v2"]);
+    let handler = fx.ty(f, "x.AccountHandler", &[], &[]);
+    let service = fx.ty(f, "x.checkoutService", &[], &[]);
+    let service_impl = fx.ty(f, "x.InvoiceServiceImpl", &[], &[]);
+    let repo = fx.ty(f, "x.planRepository", &[], &[]);
+    let store = fx.ty(f, "x.planStore", &[], &[]);
+    let model = fx.ty(f, "x.InvoiceResponse", &[], &[]);
+    let plain = fx.ty(f, "x.Price", &[], &[]);
+    let routes = fx.ty(f, "x.webhooks", &[], &[]);
+    let hook = fx.func(f, Some(routes), "Receive", false, None, &[]);
+    let reg = fx.func(f, None, "Register", false, None, &[]);
+    fx.call(f, CallFacts { caller: reg, method: "Post".into(), receiver_var: Some("app".into()), string_args: str_args(&[Some("/hook"), None]), arg_targets: vec![None, Some(hook)], ..Default::default() });
+    let j = fx.file("auth", "auth/src/main/java/a/Users.java", Lang::Java, false, &[]);
+    let rest = fx.ty(j, "a.Users", &[], &["RestController"]);
+    let svc = fx.ty(j, "a.Accounts", &[], &["Service"]);
+    let api = fx.module("api");
+    let pkg = fx.b.add_node(api, NodeKind::Package, SubKind::None, "internal/repository", Lang::Go);
+    fx.run(&builtins());
+    let has = |n: NodeId, t: &str| fx.b.has_tag(n, t);
+    assert!(has(handler, "layer:handler") && has(rest, "layer:handler") && has(routes, "layer:handler"));
+    assert!(has(service, "layer:service") && has(service_impl, "layer:service") && has(svc, "layer:service"));
+    assert!(has(repo, "layer:repository") && has(store, "layer:repository") && has(pkg, "layer:repository"));
+    assert!(has(model, "layer:model"));
+    for t in ["layer:handler", "layer:service", "layer:repository", "layer:model"] {
+        assert!(!has(plain, t), "Price has no role");
+    }
+}
