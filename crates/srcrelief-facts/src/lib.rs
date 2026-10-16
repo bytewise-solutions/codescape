@@ -52,6 +52,8 @@ pub struct CallFacts {
 pub struct FileFacts {
     pub rel_path: String,
     pub module: NodeId,
+    pub package: Option<NodeId>,
+    pub import_targets: Vec<NodeId>,
     pub lang: Lang,
     pub is_test: bool,
     pub is_dev: bool,

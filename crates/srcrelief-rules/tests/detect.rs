@@ -24,6 +24,8 @@ impl Fx {
         self.facts.files.push(FileFacts {
             rel_path: rel.into(),
             module: m,
+            package: None,
+            import_targets: Vec::new(),
             lang,
             is_test,
             is_dev: false,

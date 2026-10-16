@@ -7,6 +7,8 @@ use srcrelief_format::*;
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::path::{Path, PathBuf};
 
+const MAX_IMPLEMENTATIONS: usize = 8;
+
 const BUILTINS: &[&str] = &[
     "append", "cap", "clear", "close", "complex", "copy", "delete", "imag", "len", "make", "max", "min", "new", "panic",
     "print", "println", "real", "recover", "string", "int", "int64", "int32", "uint", "uint64", "byte", "rune", "float64",
@@ -49,6 +51,7 @@ struct PkgInfo {
     name: String,
     types: HashMap<String, usize>,
     funcs: HashMap<String, (NodeId, Vec<String>, usize)>,
+    ctor_owner: HashMap<String, usize>,
 }
 
 pub fn extract_go(d: &Discovery, module_nodes: &[NodeId], excludes: &GlobSet, b: &mut GraphBuilder, facts: &mut ProjectFacts) -> ExtractStats {
@@ -87,6 +90,7 @@ pub fn extract_go(d: &Discovery, module_nodes: &[NodeId], excludes: &GlobSet, b:
         })
         .collect();
     r.declare();
+    r.implements_edges();
     r.module_edges();
     r.package_edges();
     r.resolve(facts);
@@ -171,7 +175,7 @@ impl<'a> Resolver<'a> {
                     let base = m.go_module_path.clone().unwrap_or_else(|| m.name.clone());
                     let import_path = if f.dir.is_empty() { base } else { format!("{base}/{}", f.dir) };
                     let p = self.pkgs.len();
-                    self.pkgs.push(PkgInfo { node, module: f.module, import_path: import_path.clone(), name: String::new(), types: HashMap::new(), funcs: HashMap::new() });
+                    self.pkgs.push(PkgInfo { node, module: f.module, import_path: import_path.clone(), name: String::new(), types: HashMap::new(), funcs: HashMap::new(), ctor_owner: HashMap::new() });
                     self.pkg_by_key.insert(key, p);
                     self.pkg_by_path.insert(import_path, p);
                     if f.is_mock {
@@ -218,8 +222,16 @@ impl<'a> Resolver<'a> {
             let pi = self.file_pkg[fi];
             for func in &f.gf.funcs {
                 let owner = func.receiver.as_ref().and_then(|r| self.pkgs[pi].types.get(r).copied());
-                let parent = owner.map_or(self.pkgs[pi].node, |t| self.types[t].node);
-                let sub = if owner.is_some() { SubKind::Method } else { SubKind::Function };
+                let ctor = if func.receiver.is_none() { self.constructor_owner(pi, func) } else { None };
+                let parent = owner.or(ctor).map_or(self.pkgs[pi].node, |t| self.types[t].node);
+                let sub = match (owner, ctor) {
+                    (Some(_), _) => SubKind::Method,
+                    (None, Some(t)) => {
+                        self.pkgs[pi].ctor_owner.insert(func.name.clone(), t);
+                        SubKind::Constructor
+                    }
+                    (None, None) => SubKind::Function,
+                };
                 let id = match owner.and_then(|t| self.types[t].methods.get(&func.name).copied()) {
                     Some(id) => id,
                     None => self.b.add_node(parent, NodeKind::Member, sub, &func.name, Lang::Go),
@@ -239,6 +251,63 @@ impl<'a> Resolver<'a> {
                     self.method_names.entry(func.name.clone()).or_default().push((id, f.module));
                 }
             }
+        }
+    }
+
+    fn constructor_owner(&self, pi: usize, func: &GoFunc) -> Option<usize> {
+        let raw = func.results.first()?.trim_start_matches('*');
+        if raw.contains('.') {
+            return None;
+        }
+        let &t = self.pkgs[pi].types.get(raw)?;
+        if self.types[t].kind != SubKind::Interface {
+            return Some(t);
+        }
+        let mut built: Vec<usize> = func
+            .calls
+            .iter()
+            .filter_map(|c| c.composite.as_deref())
+            .filter(|c| !c.contains('.'))
+            .filter_map(|c| self.pkgs[pi].types.get(c.trim_start_matches('*')).copied())
+            .filter(|&c| self.types[c].kind != SubKind::Interface)
+            .collect();
+        built.sort();
+        built.dedup();
+        (built.len() == 1).then(|| built[0])
+    }
+
+    fn implements_edges(&mut self) {
+        let mut by_method: HashMap<&str, Vec<usize>> = HashMap::new();
+        for (ti, t) in self.types.iter().enumerate() {
+            if t.kind == SubKind::Struct && !t.excluded {
+                for m in t.methods.keys() {
+                    by_method.entry(m.as_str()).or_default().push(ti);
+                }
+            }
+        }
+        let mut edges: Vec<(NodeId, NodeId)> = Vec::new();
+        for (ii, iface) in self.types.iter().enumerate() {
+            if iface.kind != SubKind::Interface || iface.excluded || iface.iface_methods.is_empty() {
+                continue;
+            }
+            let iface_module = self.pkgs[iface.pkg].module;
+            let Some(seed) = iface.iface_methods.iter().map(|m| by_method.get(m.as_str()).map_or(&[][..], |v| v.as_slice())).min_by_key(|v| v.len()) else {
+                continue;
+            };
+            let impls: Vec<usize> = seed
+                .iter()
+                .copied()
+                .filter(|&s| s != ii)
+                .filter(|&s| self.visible[self.pkgs[self.types[s].pkg].module].contains(&iface_module))
+                .filter(|&s| iface.iface_methods.iter().all(|m| self.types[s].methods.contains_key(m)))
+                .collect();
+            if impls.is_empty() || impls.len() > MAX_IMPLEMENTATIONS {
+                continue;
+            }
+            edges.extend(impls.iter().map(|&s| (self.types[s].node, iface.node)));
+        }
+        for (from, to) in edges {
+            self.b.add_edge(from, to, EdgeKind::Implements, Scope::Main, Confidence::Resolved, EdgeFlags::NONE);
         }
     }
 
@@ -424,9 +493,21 @@ impl<'a> Resolver<'a> {
         for fi in 0..self.files.len() {
             let f = &self.files[fi];
             let pi = self.file_pkg[fi];
+            let own = self.pkgs[pi].node;
+            let mut import_targets: Vec<NodeId> = Vec::new();
+            for imp in &f.gf.imports {
+                if let Some(&p) = self.pkg_by_path.get(&imp.path) {
+                    let n = self.pkgs[p].node;
+                    if n != own && !import_targets.contains(&n) {
+                        import_targets.push(n);
+                    }
+                }
+            }
             let mut ff = FileFacts {
                 rel_path: f.rel.clone(),
                 module: self.module_nodes[f.module],
+                package: Some(own),
+                import_targets,
                 lang: Lang::Go,
                 is_test: f.is_test,
                 is_dev: false,
@@ -450,6 +531,7 @@ impl<'a> Resolver<'a> {
                     Some(t) => self.types[t].methods[&func.name],
                     None => self.pkgs[pi].funcs[&func.name].0,
                 };
+                let owner = owner.or_else(|| if func.receiver.is_none() { self.pkgs[pi].ctor_owner.get(&func.name).copied() } else { None });
                 ff.functions.push(FnFacts {
                     node,
                     owner: owner.map(|t| self.types[t].node),

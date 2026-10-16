@@ -503,9 +503,30 @@ impl<'a> Resolver<'a> {
     fn resolve_calls(&mut self, facts: &mut ProjectFacts) {
         for fi in 0..self.files.len() {
             let f = &self.files[fi];
+            let pkg_name = if f.jf.package.is_empty() { "(default)".to_string() } else { f.jf.package.clone() };
+            let package = self.packages.get(&(f.module, pkg_name)).copied();
+            let mut import_targets: Vec<NodeId> = Vec::new();
+            for imp in f.jf.imports.iter().filter(|i| !i.is_static) {
+                let target = if imp.wildcard {
+                    self.package_module.get(&imp.path).and_then(|&m| self.packages.get(&(m, imp.path.clone()))).copied()
+                } else {
+                    self.fqn(&imp.path, fi).map(|t| {
+                        let tf = &self.files[self.types[t].file];
+                        let name = if tf.jf.package.is_empty() { "(default)".to_string() } else { tf.jf.package.clone() };
+                        self.packages[&(tf.module, name)]
+                    })
+                };
+                if let Some(t) = target {
+                    if Some(t) != package && !import_targets.contains(&t) {
+                        import_targets.push(t);
+                    }
+                }
+            }
             let mut ff = FileFacts {
                 rel_path: f.rel.clone(),
                 module: self.module_nodes[f.module],
+                package,
+                import_targets,
                 lang: Lang::Java,
                 is_test: f.is_test,
                 is_dev: f.is_dev,

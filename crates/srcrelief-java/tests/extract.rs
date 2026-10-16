@@ -162,3 +162,12 @@ fn main_code_does_not_see_test_scope_dependencies() {
     let only = at(&r.b, &["app", "com.example.app", "ViewUser", "onlyInApp"]);
     assert!(has_edge(&r.b, fire, only, EdgeKind::Calls).is_none(), "core -> app is a test-only dependency");
 }
+
+#[test]
+fn java_files_record_package_and_import_targets() {
+    let r = run();
+    let fx = r.facts.files.iter().find(|f| f.rel_path.ends_with("ViewUser.java")).unwrap();
+    assert_eq!(fx.package, Some(at(&r.b, &["app", "com.example.app"])));
+    assert!(fx.import_targets.contains(&at(&r.b, &["core", "com.example.core"])));
+    assert!(fx.import_targets.contains(&at(&r.b, &["util", "com.example.util"])));
+}

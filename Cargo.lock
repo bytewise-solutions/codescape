@@ -2748,6 +2748,7 @@ dependencies = [
  "srcrelief-build",
  "srcrelief-facts",
  "srcrelief-format",
+ "tempfile",
  "tree-sitter",
  "tree-sitter-go",
 ]
