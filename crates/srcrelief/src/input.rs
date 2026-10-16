@@ -60,6 +60,7 @@ pub const SHORTCUTS: &[(&str, &str)] = &[
     ("1 2 3", "show neighbours / everything it reaches / everywhere it's used"),
     ("+ −", "zoom in / out"),
     ("F", "fit the whole project"),
+    ("Page Up Page Down Home End", "scroll the file under the pointer or the selected one"),
     ("Alt+←", "back to the previous selection"),
     ("Ctrl+K", "jump to a name"),
     ("?", "this list"),

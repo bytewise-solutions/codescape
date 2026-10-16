@@ -5,7 +5,7 @@ use crate::focus::{Focus, FocusMode, History, Mark, UsageIndex, focus};
 use crate::search::{self, SearchIndex};
 use crate::shot::{Shot, ShotPlan, ShotStep};
 use crate::input::{Nav, SHORTCUTS, Step, interpret, nearest_in};
-use crate::source::{LINE_SPACING, SourceCache, Token, advance, file_font, highlight, merge_spans};
+use crate::source::{LINE_SPACING, SourceCache, Token, advance, file_font, highlight, initial_scroll, merge_spans, scroll_by};
 use crate::settings_window::{self, SettingsForm};
 use crate::view::{layout_options, toggle, view_items};
 use crate::{minimap, style};
@@ -339,6 +339,7 @@ struct Project {
     scene_ms: f32,
     last_frame: Instant,
     source: std::cell::RefCell<SourceCache>,
+    file_scroll: HashMap<NodeId, f32>,
 }
 
 fn chevron(painter: &egui::Painter, center: Pos2, up: bool) {
@@ -461,6 +462,7 @@ impl Project {
             scene_ms: 0.0,
             last_frame: Instant::now(),
             source,
+            file_scroll: HashMap::new(),
         })
     }
 
@@ -538,6 +540,17 @@ impl Project {
         if typed("?") {
             self.shortcuts_open = true;
             return;
+        }
+        let pointer = ui.input(|i| i.pointer.hover_pos());
+        let page = pointer.and_then(|p| self.file_page_at(p)).or(self.selected.filter(|&s| self.scene.boxes.iter().any(|b| b.node == s && b.source)));
+        if let Some((node, (line_h, total, visible))) = page.and_then(|n| Some((n, self.file_metrics(n)?))) {
+            let lines = [(Key::PageDown, -(visible as f32 - 2.0)), (Key::PageUp, visible as f32 - 2.0), (Key::End, -(total as f32)), (Key::Home, total as f32)];
+            if let Some(&(_, by)) = lines.iter().find(|(k, _)| plain(*k)) {
+                if let Some(v) = self.scrolled(node, by * line_h) {
+                    self.file_scroll.insert(node, v);
+                }
+                return;
+            }
         }
         let steps = [(Key::ArrowLeft, Step::Left), (Key::ArrowRight, Step::Right), (Key::ArrowUp, Step::Up), (Key::ArrowDown, Step::Down)];
         if let Some(&(_, step)) = steps.iter().find(|(k, _)| plain(*k)) {
@@ -1030,7 +1043,12 @@ impl Project {
         }
         if let Some(p) = resp.hover_pos() {
             let (scroll, pinch, mods) = ui.input(|i| (i.smooth_scroll_delta, i.zoom_delta(), i.modifiers));
-            match interpret(mods.command || mods.ctrl, mods.shift, [scroll.x, scroll.y], pinch) {
+            let page = self.file_page_at(p).filter(|_| !(mods.command || mods.ctrl || mods.shift) && scroll.y != 0.0 && (pinch - 1.0).abs() < 1e-4);
+            if let Some(node) = page {
+                if let Some(v) = self.scrolled(node, scroll.y) {
+                    self.file_scroll.insert(node, v);
+                }
+            } else { match interpret(mods.command || mods.ctrl, mods.shift, [scroll.x, scroll.y], pinch) {
                 Nav::Zoom(f) => {
                     self.cam.zoom_at([p.x, p.y], f, self.view);
                     self.target = None;
@@ -1040,7 +1058,7 @@ impl Project {
                     self.target = None;
                 }
                 Nav::None => {}
-            }
+            } }
         }
         let mut clicked_box = None;
         let mut display = None;
@@ -1057,14 +1075,14 @@ impl Project {
                 } else if self.scene.boxes.iter().any(|b| b.hidden_details > 0 && chip_rect(b.rect).contains([p.x, p.y])) {
                     display = Some((View::Details, true));
                 } else {
-                    clicked_box = self.scene.box_at([p.x, p.y]);
+                    clicked_box = self.file_page_at(p).or_else(|| self.scene.box_at([p.x, p.y]));
                 }
             }
         }
         let mut fly = None;
         if resp.double_clicked() {
             if let Some(p) = resp.interact_pointer_pos() {
-                if let Some(n) = self.scene.box_at([p.x, p.y]) {
+                if let Some(n) = self.file_page_at(p).or_else(|| self.scene.box_at([p.x, p.y])) {
                     self.selected = Some(n);
                     fly = Some(n);
                 }
@@ -1079,6 +1097,13 @@ impl Project {
         let started = Instant::now();
         self.hovered = resp.hover_pos().and_then(|p| self.scene.box_at([p.x, p.y]));
         self.scene = build_scene(g, &mut self.cache, &self.cam, self.view, &self.visual, self.focus.as_ref().map(|f| &f.marks));
+        let shown: Vec<(NodeId, f32, f32)> = self.scene.boxes.iter().filter(|b| b.source).filter_map(|b| Some((b.node, b.rect.y, file_font(b.rect.w)? * LINE_SPACING))).collect();
+        self.file_scroll.retain(|n, _| shown.iter().any(|(s, _, _)| s == n));
+        for (n, y, line_h) in shown {
+            let start = g.span(n).0;
+            let view_y = self.view.y;
+            self.file_scroll.entry(n).or_insert_with(|| initial_scroll(start, y, view_y, line_h));
+        }
         self.scene_ms = started.elapsed().as_secs_f32() * 1000.0;
         self.paint(&painter);
         let root = self.cache.shared(g, g.root());
@@ -1300,16 +1325,36 @@ impl Project {
         }
     }
 
+    fn file_page(&self, b: &crate::canvas::SceneBox) -> egui::Rect {
+        egui::Rect::from_min_max(Pos2::new(b.rect.x, self.view.y), Pos2::new(b.rect.right(), self.view.bottom())).intersect(erect(self.view))
+    }
+
+    fn file_page_at(&self, p: Pos2) -> Option<NodeId> {
+        self.scene.boxes.iter().rev().filter(|b| b.source).find(|b| self.file_page(b).contains(p)).map(|b| b.node)
+    }
+
+    fn file_metrics(&self, node: NodeId) -> Option<(f32, usize, usize)> {
+        let b = self.scene.boxes.iter().find(|b| b.node == node && b.source)?;
+        let line_h = file_font(b.rect.w)? * LINE_SPACING;
+        let total = self.source.borrow_mut().file(self.file.graph().file(node)?)?.len();
+        Some((line_h, total, (self.view.h / line_h) as usize))
+    }
+
+    fn scrolled(&self, node: NodeId, wheel_px: f32) -> Option<f32> {
+        let (line_h, total, visible) = self.file_metrics(node)?;
+        Some(scroll_by(self.file_scroll.get(&node).copied().unwrap_or(0.0), wheel_px, line_h, total, visible))
+    }
+
     fn paint_file(&self, painter: &egui::Painter, b: &crate::canvas::SceneBox) {
         let g = self.file.graph();
         let Some(path) = g.file(b.node) else { return };
         let Some(lines) = self.source.borrow_mut().file(path) else { return };
         let Some(size) = file_font(b.rect.w) else { return };
         let line_h = size * LINE_SPACING;
-        let (start, _) = g.span(b.node);
-        let top = b.rect.y - start.saturating_sub(1) as f32 * line_h;
-        let sheet = egui::Rect::from_min_size(Pos2::new(b.rect.x, top - 8.0), egui::vec2(b.rect.w, lines.len() as f32 * line_h + 16.0));
-        let clip = painter.with_clip_rect(sheet.intersect(erect(self.view)));
+        let scroll = self.file_scroll.get(&b.node).copied().unwrap_or(0.0);
+        let sheet = self.file_page(b);
+        let top = sheet.top() + 6.0 - scroll * line_h;
+        let clip = painter.with_clip_rect(sheet);
         clip.rect_filled(sheet, 4.0, style::PANEL);
         clip.rect_stroke(sheet, 4.0, Stroke::new(1.5, if self.selected == Some(b.node) { style::ACCENT } else { style::FRAME }), StrokeKind::Inside);
         let mut own = vec![g.span(b.node)];

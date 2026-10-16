@@ -46,3 +46,13 @@ fn overlapping_spans_merge_into_one_band() {
     assert_eq!(merge_spans(vec![(32, 172), (50, 57), (59, 80)]), [(32, 172)]);
     assert_eq!(merge_spans(vec![(80, 90), (29, 32), (33, 40), (0, 0)]), [(29, 40), (80, 90)], "adjacent lines join, empty spans go");
 }
+
+#[test]
+fn a_file_opens_on_its_type_and_scrolls_within_its_lines() {
+    assert_eq!(initial_scroll(40, 300.0, 100.0, 20.0), 29.0, "line 40 sits where the box top was, 10 lines down");
+    assert_eq!(initial_scroll(3, 300.0, 100.0, 20.0), 0.0, "never above the first line");
+    assert_eq!(scroll_by(10.0, -60.0, 20.0, 200, 30), 13.0, "wheel down by three lines");
+    assert_eq!(scroll_by(1.0, 200.0, 20.0, 200, 30), 0.0);
+    assert_eq!(scroll_by(165.0, -400.0, 20.0, 200, 30), 172.0, "stops with the last line still in view, plus a margin");
+    assert_eq!(scroll_by(0.0, -100.0, 20.0, 10, 30), 0.0, "a short file does not scroll");
+}

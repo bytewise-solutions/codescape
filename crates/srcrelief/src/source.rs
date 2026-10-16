@@ -146,3 +146,14 @@ pub fn merge_spans(mut spans: Vec<(u32, u32)>) -> Vec<(u32, u32)> {
     }
     out
 }
+
+const END_MARGIN_LINES: f32 = 2.0;
+
+pub fn initial_scroll(start_line: u32, box_y: f32, view_y: f32, line_h: f32) -> f32 {
+    (start_line.saturating_sub(1) as f32 - (box_y - view_y) / line_h).max(0.0)
+}
+
+pub fn scroll_by(current: f32, wheel_px: f32, line_h: f32, total: usize, visible: usize) -> f32 {
+    let max = (total as f32 - visible as f32 + END_MARGIN_LINES).max(0.0);
+    (current - wheel_px / line_h).clamp(0.0, max)
+}
