@@ -40,16 +40,15 @@ pub enum View {
     Details,
     Errors,
     Wiring,
-    Matrix,
     QuietArrows,
     Legend,
 }
 
 impl View {
-    pub const ALL: [View; 8] = [View::Tests, View::TestDeps, View::Details, View::Errors, View::Wiring, View::Matrix, View::QuietArrows, View::Legend];
+    pub const ALL: [View; 7] = [View::Tests, View::TestDeps, View::Details, View::Errors, View::Wiring, View::QuietArrows, View::Legend];
 
     pub fn default_value(self) -> bool {
-        matches!(self, View::Matrix | View::QuietArrows | View::Legend)
+        matches!(self, View::QuietArrows | View::Legend)
     }
 
     pub fn label(self) -> &'static str {
@@ -59,7 +58,6 @@ impl View {
             View::Details => "Details",
             View::Errors => "Errors",
             View::Wiring => "Wiring",
-            View::Matrix => "Matrix for crowded containers",
             View::QuietArrows => "Quiet arrows",
             View::Legend => "Legend",
         }
@@ -150,8 +148,6 @@ struct ViewFile {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     wiring: Option<bool>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    matrix: Option<bool>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     quiet_arrows: Option<bool>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     legend: Option<bool>,
@@ -211,7 +207,6 @@ impl ViewFile {
             View::Details => &mut self.details,
             View::Errors => &mut self.errors,
             View::Wiring => &mut self.wiring,
-            View::Matrix => &mut self.matrix,
             View::QuietArrows => &mut self.quiet_arrows,
             View::Legend => &mut self.legend,
         }

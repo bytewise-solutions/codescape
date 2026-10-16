@@ -1,6 +1,5 @@
 use crate::camera::Camera;
-use crate::canvas::{Scene, SceneMatrix, SceneOptions, build_scene_with, fit_label, root_world, world_rect};
-use crate::matrix::Hit;
+use crate::canvas::{Scene, build_scene, root_world, world_rect};
 use crate::panels::{EntryGroupView, group_entries};
 use crate::focus::{Focus, FocusMode, History, Mark, UsageIndex, focus};
 use crate::search::{self, SearchIndex};
@@ -329,7 +328,6 @@ struct Project {
     search_hits: Vec<NodeId>,
     search_cursor: usize,
     hovered: Option<NodeId>,
-    pointer: Option<Pos2>,
     settings: SettingsStore,
     packs: Vec<String>,
     settings_open: bool,
@@ -449,7 +447,6 @@ impl Project {
             search_hits: Vec::new(),
             search_cursor: 0,
             hovered: None,
-            pointer: None,
             settings,
             packs,
             settings_open: false,
@@ -953,14 +950,14 @@ impl Project {
                 } else if self.scene.boxes.iter().any(|b| b.hidden_details > 0 && chip_rect(b.rect).contains([p.x, p.y])) {
                     display = Some((View::Details, true));
                 } else {
-                    clicked_box = self.matrix_row_at([p.x, p.y]).or_else(|| self.scene.box_at([p.x, p.y]));
+                    clicked_box = self.scene.box_at([p.x, p.y]);
                 }
             }
         }
         let mut fly = None;
         if resp.double_clicked() {
             if let Some(p) = resp.interact_pointer_pos() {
-                if let Some(n) = self.matrix_row_at([p.x, p.y]).or_else(|| self.scene.box_at([p.x, p.y])) {
+                if let Some(n) = self.scene.box_at([p.x, p.y]) {
                     self.selected = Some(n);
                     fly = Some(n);
                 }
@@ -973,16 +970,13 @@ impl Project {
             ui.ctx().request_repaint();
         }
         let started = Instant::now();
-        self.pointer = resp.hover_pos();
-        self.hovered = self.pointer.and_then(|p| self.scene.box_at([p.x, p.y]));
-        let opts = SceneOptions { matrix: self.settings.settings().view(View::Matrix).value };
-        self.scene = build_scene_with(g, &mut self.cache, &self.cam, self.view, &self.visual, self.focus.as_ref().map(|f| &f.marks), opts);
+        self.hovered = resp.hover_pos().and_then(|p| self.scene.box_at([p.x, p.y]));
+        self.scene = build_scene(g, &mut self.cache, &self.cam, self.view, &self.visual, self.focus.as_ref().map(|f| &f.marks));
         self.scene_ms = started.elapsed().as_secs_f32() * 1000.0;
         self.paint(&painter);
         let root = self.cache.shared(g, g.root());
         minimap::draw(&painter, &root, &self.cam, self.view);
         self.paint_legend(&painter);
-        self.paint_matrix_tooltip(&painter);
         if let Some(n) = clicked_box {
             self.set_focus(n, None, false, true);
         }
@@ -1020,111 +1014,7 @@ impl Project {
             for l in self.scene.labels.iter().filter(|l| l.depth == depth) {
                 self.paint_label(&painter, l);
             }
-            for m in self.scene.matrices.iter().filter(|m| m.depth == depth) {
-                self.paint_matrix(&painter, m);
-            }
         }
-        for m in self.scene.matrices.iter().filter(|m| m.depth == 0) {
-            self.paint_matrix(&painter, m);
-        }
-    }
-
-    fn matrix_row_at(&self, p: [f32; 2]) -> Option<NodeId> {
-        self.scene.matrix_at(p).map(|(m, h)| match h {
-            Hit::Row(r) | Hit::Cell(r, _) => m.matrix.rows[r],
-        })
-    }
-
-    fn matrix_hover(&self, m: &SceneMatrix) -> Option<Hit> {
-        let p = self.pointer?;
-        self.scene.matrix_at([p.x, p.y]).filter(|(x, _)| x.container == m.container).map(|(_, h)| h)
-    }
-
-    fn paint_matrix(&self, painter: &egui::Painter, m: &SceneMatrix) {
-        let grid = m.grid;
-        let n = m.matrix.rows.len();
-        let span = n as f32 * grid.cell;
-        let area = egui::Rect::from_min_size(Pos2::new(grid.x0, grid.y0), egui::vec2(span, span));
-        painter.rect_filled(area, 0.0, style::tint(style::BG, style::BAR, 0.6));
-        let hover = self.matrix_hover(m);
-        let (hr, hc) = match hover {
-            Some(Hit::Cell(r, c)) => (Some(r), Some(c)),
-            Some(Hit::Row(r)) => (Some(r), None),
-            None => (None, None),
-        };
-        let stripe = style::ACCENT.gamma_multiply(0.08);
-        if let Some(r) = hr {
-            painter.rect_filled(egui::Rect::from_min_size(Pos2::new(grid.label_x, grid.y0 + r as f32 * grid.cell), egui::vec2(grid.label_w + span, grid.cell)), 0.0, stripe);
-        }
-        if let Some(c) = hc {
-            painter.rect_filled(egui::Rect::from_min_size(Pos2::new(grid.x0 + c as f32 * grid.cell, grid.y0), egui::vec2(grid.cell, span)), 0.0, stripe);
-        }
-        for i in 0..n {
-            painter.rect_filled(erect(grid.cell_rect(i, i)), 0.0, style::FRAME.gamma_multiply(0.35));
-        }
-        if grid.cell >= 6.0 {
-            for i in 0..=n {
-                let y = grid.y0 + i as f32 * grid.cell;
-                let x = grid.x0 + i as f32 * grid.cell;
-                let line = Stroke::new(0.5, style::FRAME.gamma_multiply(0.5));
-                painter.line_segment([Pos2::new(grid.x0, y), Pos2::new(grid.x0 + span, y)], line);
-                painter.line_segment([Pos2::new(x, grid.y0), Pos2::new(x, grid.y0 + span)], line);
-            }
-        }
-        let focused = self.focus.is_some();
-        for cell in &m.matrix.cells {
-            let base = match cell.dir {
-                Direction::Down => style::BOX_STROKE,
-                Direction::Up => style::EDGE_UP,
-                Direction::Sideways => style::EDGE_SIDEWAYS,
-            };
-            let share = cell.links as f32 / m.matrix.max_links.max(1) as f32;
-            let mut alpha = 0.35 + 0.65 * share;
-            if focused && m.marks[cell.row] == Mark::None && m.marks[cell.col] == Mark::None {
-                alpha *= 0.3;
-            }
-            let r = erect(grid.cell_rect(cell.row, cell.col)).shrink(grid.cell * 0.08);
-            painter.rect_filled(r, 1.0, base.gamma_multiply(alpha));
-            if grid.cell >= 16.0 {
-                painter.text(r.center(), Align2::CENTER_CENTER, cell.links.to_string(), FontId::proportional((grid.cell * 0.45).min(12.0)), style::TEXT);
-            }
-        }
-        if grid.cell >= 5.5 {
-            let size = (grid.cell * 0.85).clamp(7.0, 12.0);
-            for (i, (&row, name)) in m.matrix.rows.iter().zip(&m.names).enumerate() {
-                let color = match m.marks[i] {
-                    Mark::Down => style::REACH,
-                    Mark::Up => style::CALLER,
-                    Mark::Focus => style::ACCENT,
-                    Mark::None if focused => style::BOX_TITLE.gamma_multiply(0.4),
-                    Mark::None => style::BOX_TITLE,
-                };
-                let color = if self.selected == Some(row) { style::ACCENT } else { color };
-                let r = grid.row_rect(i);
-                let text = fit_label(name, r.w - 8.0, size);
-                painter.text(Pos2::new(r.right() - 4.0, r.y + r.h / 2.0), Align2::RIGHT_CENTER, text, FontId::proportional(size), color);
-            }
-        }
-    }
-
-    fn paint_matrix_tooltip(&self, painter: &egui::Painter) {
-        let Some(p) = self.pointer else { return };
-        let Some((m, hit)) = self.scene.matrix_at([p.x, p.y]) else { return };
-        let g = self.file.graph();
-        let rows = &m.matrix.rows;
-        let text = match hit {
-            Hit::Row(r) => format!("{}  ·  double-click to open", g.name(rows[r])),
-            Hit::Cell(r, c) => match m.matrix.cells.iter().find(|x| x.row == r && x.col == c) {
-                Some(x) => format!("{} → {}  ·  {} link{}", g.name(rows[r]), g.name(rows[c]), x.links, if x.links == 1 { "" } else { "s" }),
-                None => format!("{} → {}  ·  no dependency", g.name(rows[r]), g.name(rows[c])),
-            },
-        };
-        let galley = painter.layout_no_wrap(text, FontId::proportional(11.5), style::TEXT);
-        let at = p + egui::vec2(14.0, 14.0);
-        let bg = egui::Rect::from_min_size(at, galley.size() + egui::vec2(12.0, 8.0));
-        painter.rect_filled(bg, 4.0, style::BAR);
-        painter.rect_stroke(bg, 4.0, Stroke::new(1.0, style::FRAME), StrokeKind::Inside);
-        painter.galley(at + egui::vec2(6.0, 4.0), galley, style::TEXT);
     }
 
     fn paint_box(&self, painter: &egui::Painter, b: &crate::canvas::SceneBox) {

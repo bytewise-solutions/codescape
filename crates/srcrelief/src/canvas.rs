@@ -1,6 +1,5 @@
 use crate::camera::{Camera, WRect};
 use crate::focus::{Mark, Marks};
-use crate::matrix::{Grid, Hit, MATRIX_MIN_CHILDREN, MATRIX_UNTIL_CHILD_PX, Matrix, short_names};
 use srcrelief_format::{ArchivedGraph, NodeFlags, NodeId, NodeKind, SubKind};
 use srcrelief_layout::{ContainerLayout, Direction, LayoutCache, Rect, display_children, display_path};
 use srcrelief_rules::VisualRules;
@@ -60,21 +59,6 @@ pub struct SceneLabel {
     pub centered: bool,
 }
 
-#[derive(Clone, Debug, PartialEq)]
-pub struct SceneMatrix {
-    pub depth: u32,
-    pub container: NodeId,
-    pub matrix: Matrix,
-    pub names: Vec<String>,
-    pub grid: Grid,
-    pub marks: Vec<Mark>,
-}
-
-#[derive(Clone, Copy, Debug, Default, PartialEq)]
-pub struct SceneOptions {
-    pub matrix: bool,
-}
-
 #[derive(Clone, Copy, Debug, Default, PartialEq)]
 pub struct SceneStats {
     pub visited: usize,
@@ -88,20 +72,12 @@ pub struct Scene {
     pub edges: Vec<SceneEdge>,
     pub frames: Vec<SceneFrame>,
     pub labels: Vec<SceneLabel>,
-    pub matrices: Vec<SceneMatrix>,
     pub stats: SceneStats,
 }
 
 impl Scene {
     pub fn box_at(&self, p: [f32; 2]) -> Option<NodeId> {
         self.boxes.iter().rev().find(|b| b.rect.contains(p)).map(|b| b.node)
-    }
-
-    pub fn matrix_at(&self, p: [f32; 2]) -> Option<(&SceneMatrix, Hit)> {
-        self.matrices.iter().rev().find_map(|m| m.grid.hit(p).filter(|h| match *h {
-            Hit::Row(r) => r < m.matrix.rows.len(),
-            Hit::Cell(r, c) => r < m.matrix.rows.len() && c < m.matrix.rows.len(),
-        }).map(|h| (m, h)))
     }
 
     pub fn deepest_open_at(&self, p: [f32; 2]) -> Option<NodeId> {
@@ -186,7 +162,6 @@ struct Builder<'a> {
     view: Rect,
     vis: &'a VisualRules,
     marks: Option<&'a Marks>,
-    opts: SceneOptions,
     scene: Scene,
 }
 
@@ -204,28 +179,20 @@ impl Builder<'_> {
         }
     }
 
-    fn mean_child_px(&mut self, node: NodeId, rect: Rect) -> f32 {
+    fn children_legible(&mut self, node: NodeId, rect: Rect) -> bool {
         let layout = self.cache.shared(self.g, node);
         if layout.children.is_empty() || layout.size[0] <= 0.0 {
-            return 0.0;
+            return false;
         }
         let scale = (rect.w / layout.size[0]).min(rect.h / layout.size[1]);
-        layout.children.iter().map(|c| c.rect.w).sum::<f32>() / layout.children.len() as f32 * scale
+        let mean = layout.children.iter().map(|c| c.rect.w).sum::<f32>() / layout.children.len() as f32;
+        mean * scale >= MIN_CHILD_PX
     }
 
     fn open_container(&mut self, node: NodeId, world: WRect, depth: u32) {
         let screen = self.cam.world_to_screen_rect(world, self.view);
-        let child_px = self.mean_child_px(node, screen);
-        let legible = child_px >= MIN_CHILD_PX;
+        let legible = self.children_legible(node, screen);
         let layout = self.cache.shared(self.g, node);
-        if self.opts.matrix && layout.children.len() >= MATRIX_MIN_CHILDREN && child_px < MATRIX_UNTIL_CHILD_PX {
-            let matrix = Matrix::from_layout(&layout);
-            let grid = Grid::new(screen, matrix.rows.len());
-            let marks = matrix.rows.iter().map(|&r| self.mark(r)).collect();
-            let names = short_names(&matrix.rows.iter().map(|&r| self.g.name(r)).collect::<Vec<_>>());
-            self.scene.matrices.push(SceneMatrix { depth, container: node, matrix, names, grid, marks });
-            return;
-        }
         let xf = Xform::fit(&layout, world);
         for f in &layout.frames {
             let rect = self.cam.world_to_screen_rect(xf.rect(f.rect), self.view);
@@ -293,13 +260,9 @@ impl Builder<'_> {
 }
 
 pub fn build_scene(g: &ArchivedGraph, cache: &mut LayoutCache, cam: &Camera, view: Rect, vis: &VisualRules, marks: Option<&Marks>) -> Scene {
-    build_scene_with(g, cache, cam, view, vis, marks, SceneOptions::default())
-}
-
-pub fn build_scene_with(g: &ArchivedGraph, cache: &mut LayoutCache, cam: &Camera, view: Rect, vis: &VisualRules, marks: Option<&Marks>, opts: SceneOptions) -> Scene {
     let before = cache.computed();
     let world = root_world(cache, g);
-    let mut b = Builder { g, cache, cam, view, vis, marks, opts, scene: Scene::default() };
+    let mut b = Builder { g, cache, cam, view, vis, marks, scene: Scene::default() };
     b.open_container(g.root(), world, 0);
     let computed = b.cache.computed();
     let mut scene = b.scene;

@@ -1,7 +1,6 @@
 mod camera;
 mod focus;
 mod input;
-mod matrix;
 mod panels;
 mod reach;
 mod scene;
