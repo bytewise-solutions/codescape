@@ -4,7 +4,7 @@ mod walk;
 
 pub use gomod::{GoMod, parse_go_mod, parse_go_work};
 pub use gradle::{GradleSettings, SourceSets, parse_build_deps, parse_settings, parse_source_sets};
-pub use walk::{default_excludes, rel_path, walk_files};
+pub use walk::{default_excludes, rel_path, walk_files, walk_files_under};
 
 use anyhow::Result;
 use globset::GlobSet;
@@ -113,6 +113,13 @@ fn build_file(dir: &Path) -> Option<PathBuf> {
     ["build.gradle", "build.gradle.kts"].iter().map(|f| dir.join(f)).find(|p| p.is_file())
 }
 
+fn gradle_module(d: &mut Discovery, name: String, dir: PathBuf) -> usize {
+    let sets = build_file(&dir).map(|f| parse_source_sets(&read(&f))).unwrap_or_default();
+    let (source_roots, test_roots, dev_roots) = java_roots(&dir, &sets);
+    d.modules.push(DiscoveredModule { name, dir, lang: Lang::Java, build: BuildKind::Gradle, go_module_path: None, source_roots, test_roots, dev_roots });
+    d.modules.len() - 1
+}
+
 fn discover_gradle(root: &Path, build: &Path, d: &mut Discovery) {
     let Some(settings_path) = GRADLE_SETTINGS.iter().map(|f| build.join(f)).find(|p| p.is_file()) else { return };
     let settings = parse_settings(&read(&settings_path));
@@ -130,19 +137,16 @@ fn discover_gradle(root: &Path, build: &Path, d: &mut Discovery) {
         if !dir.is_dir() {
             continue;
         }
-        let sets = build_file(&dir).map(|f| parse_source_sets(&read(&f))).unwrap_or_default();
-        let (source_roots, test_roots, dev_roots) = java_roots(&dir, &sets);
-        by_path.insert(include.clone(), d.modules.len());
-        d.modules.push(DiscoveredModule {
-            name: format!("{prefix}{include}"),
-            dir,
-            lang: Lang::Java,
-            build: BuildKind::Gradle,
-            go_module_path: None,
-            source_roots,
-            test_roots,
-            dev_roots,
-        });
+        let idx = gradle_module(d, format!("{prefix}{include}"), dir);
+        by_path.insert(include.clone(), idx);
+    }
+    let root_sets = build_file(build).map(|f| parse_source_sets(&read(&f))).unwrap_or_default();
+    let (main, test, dev) = java_roots(build, &root_sets);
+    if !(main.is_empty() && test.is_empty() && dev.is_empty()) {
+        let fallback = build.file_name().map(|f| f.to_string_lossy().into_owned()).unwrap_or_else(|| "root".into());
+        let name = format!("{prefix}{}", settings.root_name.clone().unwrap_or(fallback));
+        let idx = gradle_module(d, name, build.to_path_buf());
+        by_path.insert(String::new(), idx);
     }
     for idx in first..d.modules.len() {
         let Some(bf) = build_file(&d.modules[idx].dir) else { continue };

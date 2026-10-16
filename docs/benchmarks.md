@@ -13,7 +13,7 @@ indexes it, opens it, and scripts a 300-step zoom from the whole map down to a s
 | Lines indexed | 1,019,962 | 1M |
 | Index time | 1.4 s | < 60 s |
 | Index size | 6.4 MiB, 30% of 21.5 MiB source | ≤ 30% |
-| Open + first scene | 1 ms | < 1 s |
+| Open + first scene (incl. checksum) | 4 ms | < 1 s |
 | Scene build while zooming | worst 0.65 ms, p99 0.19 ms | < 16 ms per frame |
 | Largest container layout (2,000 children) | 1 ms | < 100 ms |
 | Viewer peak RSS (window open, deep zoom) | 165 MiB | < 500 MiB |

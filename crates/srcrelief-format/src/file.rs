@@ -6,8 +6,8 @@ use std::ops::Range;
 use std::path::Path;
 
 pub const MAGIC: &[u8; 8] = b"SRCRLF01";
-pub const FORMAT_VERSION: u32 = 3;
-const HEADER: usize = 16;
+pub const FORMAT_VERSION: u32 = 4;
+const HEADER: usize = 48;
 
 #[derive(Debug, thiserror::Error)]
 pub enum FormatError {
@@ -25,6 +25,7 @@ pub fn write_graph(graph: &Graph, path: &Path) -> Result<(), FormatError> {
     f.write_all(MAGIC)?;
     f.write_all(&FORMAT_VERSION.to_le_bytes())?;
     f.write_all(&[0u8; 4])?;
+    f.write_all(blake3::hash(&bytes).as_bytes())?;
     f.write_all(&bytes)?;
     f.sync_all()?;
     Ok(())
@@ -48,6 +49,9 @@ impl ReliefFile {
         let found = u32::from_le_bytes(map[8..12].try_into().unwrap());
         if found != FORMAT_VERSION {
             return Err(FormatError::Version { found, expected: FORMAT_VERSION });
+        }
+        if map[12..16] != [0u8; 4] || blake3::hash(&map[HEADER..]).as_bytes() != &map[16..HEADER] {
+            return Err(FormatError::Corrupt("checksum mismatch".into()));
         }
         rkyv::access::<ArchivedGraph, rkyv::rancor::Error>(&map[HEADER..]).map_err(|e| FormatError::Corrupt(e.to_string()))?;
         Ok(ReliefFile { map })

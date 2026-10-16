@@ -6,6 +6,7 @@ use std::path::{Path, PathBuf};
 use std::time::SystemTime;
 
 pub const DETECTION_STAMP: &str = "(detection)";
+pub const INPUTS_STAMP: &str = "(inputs)";
 
 pub fn cache_path(project_dir: &Path) -> PathBuf {
     let canonical = project_dir.canonicalize().unwrap_or_else(|_| project_dir.to_path_buf());
@@ -23,16 +24,24 @@ fn is_input(p: &Path) -> bool {
         || matches!(name, "settings.gradle" | "settings.gradle.kts" | "build.gradle" | "build.gradle.kts" | "go.mod" | "go.work" | crate::config::CONFIG_FILE)
 }
 
-pub fn newest_input(project_dir: &Path, excludes: &GlobSet) -> Option<SystemTime> {
-    let mut newest: Option<SystemTime> = None;
+pub fn inputs_fingerprint(project_dir: &Path, excludes: &GlobSet) -> String {
+    let mut entries: Vec<(String, u64, u128)> = Vec::new();
     let _ = srcrelief_build::walk_files(project_dir, excludes, |p| {
         if is_input(p) {
-            if let Ok(t) = p.metadata().and_then(|m| m.modified()) {
-                newest = Some(newest.map_or(t, |n| n.max(t)));
+            if let Ok(m) = p.metadata() {
+                let mtime = m.modified().ok().and_then(|t| t.duration_since(SystemTime::UNIX_EPOCH).ok()).map_or(0, |d| d.as_nanos());
+                entries.push((srcrelief_build::rel_path(project_dir, p), m.len(), mtime));
             }
         }
     });
-    newest
+    entries.sort();
+    let mut h = blake3::Hasher::new();
+    for (p, len, mtime) in &entries {
+        h.update(p.as_bytes());
+        h.update(&len.to_le_bytes());
+        h.update(&mtime.to_le_bytes());
+    }
+    h.finalize().to_hex()[..16].to_string()
 }
 
 pub fn needs_reindex(project_dir: &Path, index: &Path, cfg: &ProjectConfig, packs: &Packs) -> bool {
@@ -42,7 +51,7 @@ pub fn needs_reindex(project_dir: &Path, index: &Path, cfg: &ProjectConfig, pack
     if !g.provenance().any(|(n, _, h)| n == DETECTION_STAMP && h == current) {
         return true;
     }
-    let Ok(built) = index.metadata().and_then(|m| m.modified()) else { return true };
-    let excludes = crate::pipeline::excludes(cfg);
-    newest_input(project_dir, &excludes).is_some_and(|t| t > built)
+    let dir = project_dir.canonicalize().unwrap_or_else(|_| project_dir.to_path_buf());
+    let inputs = inputs_fingerprint(&dir, &crate::pipeline::excludes(cfg));
+    !g.provenance().any(|(n, _, h)| n == INPUTS_STAMP && h == inputs)
 }

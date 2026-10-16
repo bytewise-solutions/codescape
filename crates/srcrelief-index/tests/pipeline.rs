@@ -176,3 +176,39 @@ fn user_pack_from_config_dir_tags_without_touching_the_project() {
     let packs = project_packs(&dir, &cfg).unwrap();
     assert!(needs_reindex(&dir, &out.path, &cfg, &packs), "a detection change needs a new index");
 }
+
+#[test]
+fn reindex_when_a_source_is_deleted() {
+    let tmp = tempfile::tempdir().unwrap();
+    let proj = tmp.path().join("p");
+    copy_dir(&fixture("go-resolve"), &proj);
+    let cfg = cfg_with_index(tmp.path());
+    let out = index_project(&proj, &cfg, &|_| {}).unwrap();
+    let packs = project_packs(&proj, &cfg).unwrap();
+    assert!(!needs_reindex(&proj, &out.path, &cfg, &packs));
+    std::fs::remove_file(proj.join("shared/bus.go")).unwrap();
+    assert!(needs_reindex(&proj, &out.path, &cfg, &packs));
+}
+
+#[test]
+fn project_excludes_are_relative_to_the_project_root() {
+    let tmp = tempfile::tempdir().unwrap();
+    let mut cfg = cfg_with_index(tmp.path());
+    cfg.exclude.push("svc-a/internal/repo/**".into());
+    let out = index_project(&fixture("go-resolve"), &cfg, &|_| {}).unwrap();
+    let file = ReliefFile::open(&out.path).unwrap();
+    let g = file.graph();
+    let svc = g.children(g.root()).find(|&m| g.name(m) == "svc-a").unwrap();
+    let pkgs = names(g, svc);
+    assert!(!pkgs.iter().any(|p| p.starts_with("internal/repo")), "{pkgs:?}");
+    assert!(pkgs.contains(&"internal/handler".to_string()));
+}
+
+#[test]
+fn unsupported_include_setting_is_an_error() {
+    let tmp = tempfile::tempdir().unwrap();
+    let cfg_path = tmp.path().join("srcrelief.toml");
+    std::fs::write(&cfg_path, "include = [\"src/**\"]\n").unwrap();
+    let err = ProjectConfig::load(&fixture("go-resolve"), Some(&cfg_path)).unwrap_err().to_string();
+    assert!(err.contains("include"), "{err}");
+}

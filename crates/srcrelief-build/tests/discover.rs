@@ -166,3 +166,78 @@ fn copy_dir(from: &Path, to: &Path) {
         }
     }
 }
+
+fn write(root: &Path, rel: &str, body: &str) {
+    let p = root.join(rel);
+    std::fs::create_dir_all(p.parent().unwrap()).unwrap();
+    std::fs::write(p, body).unwrap();
+}
+
+#[test]
+fn multi_line_include_is_read() {
+    let tmp = tempfile::tempdir().unwrap();
+    write(tmp.path(), "settings.gradle.kts", "rootProject.name = \"m\"\ninclude(\n    \":a\",\n    \":b\",\n)\n");
+    write(tmp.path(), "a/build.gradle.kts", "dependencies {\n    implementation(project(\":b\"))\n}\n");
+    write(tmp.path(), "a/src/main/java/a/A.java", "package a; class A {}");
+    write(tmp.path(), "b/src/main/java/b/B.java", "package b; class B {}");
+    let d = discover(tmp.path(), &default_excludes()).unwrap();
+    assert_eq!(names(&d), ["a", "b"]);
+    assert!(d.modules.iter().all(|m| m.build == BuildKind::Gradle));
+    assert_eq!(links(&d), [("a".to_string(), "b".to_string(), Scope::Main)]);
+    let groovy = parse_settings("include 'x',\n        'y'\n");
+    assert_eq!(groovy.includes, ["x", "y"]);
+}
+
+#[test]
+fn single_project_gradle_build_is_one_module_with_tests_apart() {
+    let tmp = tempfile::tempdir().unwrap();
+    write(tmp.path(), "settings.gradle.kts", "rootProject.name = \"single\"\n");
+    write(tmp.path(), "build.gradle.kts", "plugins { java }\n");
+    write(tmp.path(), "src/main/java/a/App.java", "package a; class App {}");
+    write(tmp.path(), "src/test/java/a/AppTest.java", "package a; class AppTest {}");
+    let d = discover(tmp.path(), &default_excludes()).unwrap();
+    assert_eq!(names(&d), ["single"]);
+    let m = module(&d, "single");
+    assert_eq!(m.build, BuildKind::Gradle);
+    assert_eq!(m.source_roots, [tmp.path().canonicalize().unwrap().join("src/main/java")]);
+    assert_eq!(m.test_roots, [tmp.path().canonicalize().unwrap().join("src/test/java")]);
+}
+
+#[test]
+fn root_project_sources_join_the_included_modules() {
+    let tmp = tempfile::tempdir().unwrap();
+    write(tmp.path(), "settings.gradle", "rootProject.name = 'rootsrc'\ninclude ':lib'\n");
+    write(tmp.path(), "build.gradle", "dependencies {\n    implementation project(':lib')\n}\n");
+    write(tmp.path(), "src/main/java/r/Main.java", "package r; class Main {}");
+    write(tmp.path(), "lib/src/main/java/l/L.java", "package l; class L {}");
+    let d = discover(tmp.path(), &default_excludes()).unwrap();
+    assert_eq!(names(&d), ["lib", "rootsrc"]);
+    assert_eq!(links(&d), [("rootsrc".to_string(), "lib".to_string(), Scope::Main)]);
+}
+
+#[test]
+fn excludes_match_paths_relative_to_the_walk_base() {
+    let tmp = tempfile::tempdir().unwrap();
+    write(tmp.path(), "b/src/main/java/b/B.java", "class B {}");
+    write(tmp.path(), "b/src/main/java/keep/K.java", "class K {}");
+    let mut gs = globset::GlobSetBuilder::new();
+    gs.add(globset::Glob::new("b/src/main/java/b/**").unwrap());
+    let ex = gs.build().unwrap();
+    let mut seen = Vec::new();
+    walk_files_under(tmp.path(), &tmp.path().join("b/src/main/java"), &ex, |p| seen.push(p.file_name().unwrap().to_string_lossy().into_owned())).unwrap();
+    assert_eq!(seen, ["K.java"]);
+}
+
+#[test]
+#[cfg(unix)]
+fn unreadable_directories_are_skipped() {
+    use std::os::unix::fs::PermissionsExt;
+    let tmp = tempfile::tempdir().unwrap();
+    copy_dir(&fixture("go-mono"), tmp.path());
+    let locked = tmp.path().join("locked/secret");
+    std::fs::create_dir_all(&locked).unwrap();
+    std::fs::set_permissions(&locked, std::fs::Permissions::from_mode(0o000)).unwrap();
+    let d = discover(tmp.path(), &default_excludes());
+    std::fs::set_permissions(&locked, std::fs::Permissions::from_mode(0o755)).unwrap();
+    assert_eq!(names(&d.unwrap()), ["shared", "svc-a", "svc-b"]);
+}

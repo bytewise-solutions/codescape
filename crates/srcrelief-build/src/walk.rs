@@ -26,17 +26,17 @@ fn walker(root: &Path) -> ignore::WalkBuilder {
 }
 
 pub fn walk_dirs(root: &Path, excludes: &GlobSet, mut visit: impl FnMut(&Path, &[String])) -> Result<()> {
-    let r = root.to_path_buf();
+    let base = root.to_path_buf();
     let ex = excludes.clone();
     let mut dirs: Vec<std::path::PathBuf> = Vec::new();
-    for entry in walker(root).filter_entry(move |e| !(e.file_type().is_some_and(|t| t.is_dir()) && excluded_dir(&r, e.path(), &ex))).build() {
-        let entry = entry?;
+    for entry in walker(root).filter_entry(move |e| !(e.file_type().is_some_and(|t| t.is_dir()) && excluded_dir(&base, e.path(), &ex))).build().flatten() {
         if entry.file_type().is_some_and(|t| t.is_dir()) {
             dirs.push(entry.into_path());
         }
     }
     for dir in dirs {
-        let names: Vec<String> = std::fs::read_dir(&dir)?
+        let Ok(read) = std::fs::read_dir(&dir) else { continue };
+        let names: Vec<String> = read
             .filter_map(|e| e.ok())
             .filter(|e| e.file_type().is_ok_and(|t| t.is_file()))
             .map(|e| e.file_name().to_string_lossy().into_owned())
@@ -46,11 +46,14 @@ pub fn walk_dirs(root: &Path, excludes: &GlobSet, mut visit: impl FnMut(&Path, &
     Ok(())
 }
 
-pub fn walk_files(root: &Path, excludes: &GlobSet, mut visit: impl FnMut(&Path)) -> Result<()> {
-    let r = root.to_path_buf();
+pub fn walk_files(root: &Path, excludes: &GlobSet, visit: impl FnMut(&Path)) -> Result<()> {
+    walk_files_under(root, root, excludes, visit)
+}
+
+pub fn walk_files_under(base: &Path, dir: &Path, excludes: &GlobSet, mut visit: impl FnMut(&Path)) -> Result<()> {
+    let base = base.to_path_buf();
     let ex = excludes.clone();
-    for entry in walker(root).filter_entry(move |e| !(e.file_type().is_some_and(|t| t.is_dir()) && excluded_dir(&r, e.path(), &ex))).build() {
-        let entry = entry?;
+    for entry in walker(dir).filter_entry(move |e| !(e.file_type().is_some_and(|t| t.is_dir()) && excluded_dir(&base, e.path(), &ex))).build().flatten() {
         if entry.file_type().is_some_and(|t| t.is_file()) {
             visit(entry.path());
         }

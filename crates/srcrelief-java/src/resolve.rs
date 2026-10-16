@@ -1,7 +1,7 @@
 use crate::parse::{JCall, JMethod, JType, JavaFile, Receiver, parse_java};
 use globset::GlobSet;
 use rayon::prelude::*;
-use srcrelief_build::{Discovery, rel_path, walk_files};
+use srcrelief_build::{Discovery, rel_path, walk_files_under};
 use srcrelief_facts::{CallFacts, ExtractStats, FileFacts, FnFacts, ProjectFacts, TypeFacts};
 use srcrelief_format::*;
 use std::collections::{HashMap, HashSet, VecDeque};
@@ -101,7 +101,7 @@ fn list_sources(d: &Discovery, excludes: &GlobSet) -> Vec<SourceFile> {
             .chain(m.dev_roots.iter().map(|r| (r, false, true)))
             .chain(m.source_roots.iter().map(|r| (r, false, false)));
         for (root, is_test, is_dev) in roots {
-            let _ = walk_files(root, excludes, |p| {
+            let _ = walk_files_under(&d.root, root, excludes, |p| {
                 if p.extension().is_some_and(|e| e == "java") && seen.insert(p.to_path_buf()) {
                     out.push(SourceFile { module: mi, path: p.to_path_buf(), is_test, is_dev });
                 }

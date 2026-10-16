@@ -13,3 +13,4 @@ anyhow.workspace = true
 
 [dev-dependencies]
 tempfile.workspace = true
+globset.workspace = true

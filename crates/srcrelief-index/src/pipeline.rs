@@ -1,4 +1,4 @@
-use crate::cache::{DETECTION_STAMP, index_path};
+use crate::cache::{DETECTION_STAMP, INPUTS_STAMP, index_path, inputs_fingerprint};
 use crate::config::ProjectConfig;
 use crate::summary::Summary;
 use anyhow::{Context, Result};
@@ -49,6 +49,7 @@ pub fn index_project(dir: &Path, cfg: &ProjectConfig, progress: &dyn Fn(Progress
     let start = Instant::now();
     let dir = dir.canonicalize().with_context(|| format!("opening {}", dir.display()))?;
     let excludes = excludes(cfg);
+    let inputs = inputs_fingerprint(&dir, &excludes);
     progress(Progress::Discovering);
     let d = discover(&dir, &excludes)?;
     let name = cfg.name.clone().unwrap_or_else(|| dir.file_name().map(|f| f.to_string_lossy().into_owned()).unwrap_or_default());
@@ -67,6 +68,7 @@ pub fn index_project(dir: &Path, cfg: &ProjectConfig, progress: &dyn Fn(Progress
         b.add_provenance(&p.name, &p.version, &p.hash);
     }
     b.add_provenance(DETECTION_STAMP, "", &detection_hash(&packs));
+    b.add_provenance(INPUTS_STAMP, "", &inputs);
     b.set_stats(Stats {
         files: stats.files,
         lines: stats.lines,

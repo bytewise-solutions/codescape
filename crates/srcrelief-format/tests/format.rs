@@ -207,3 +207,23 @@ fn leaf_and_childless_ranges_are_empty() {
     let last = (g.node_count() - 1) as NodeId;
     assert!(g.children(last).is_empty());
 }
+
+#[test]
+fn any_flipped_byte_is_rejected() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("g.relief");
+    let (mut b, [_, _, p1, f, g, _]) = two_module_graph();
+    b.add_edge(f, g, EdgeKind::Calls, Scope::Main, Confidence::Resolved, EdgeFlags::NONE);
+    b.add_tag(p1, "t");
+    write_graph(&b.finish(), &path).unwrap();
+    let bytes = std::fs::read(&path).unwrap();
+    let flipped = dir.path().join("f.relief");
+    for i in 8..bytes.len() {
+        for bit in [0u8, 7] {
+            let mut copy = bytes.clone();
+            copy[i] ^= 1 << bit;
+            std::fs::write(&flipped, &copy).unwrap();
+            assert!(ReliefFile::open(&flipped).is_err(), "flip at byte {i} bit {bit} was accepted");
+        }
+    }
+}

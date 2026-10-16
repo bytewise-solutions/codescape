@@ -6,6 +6,7 @@ use std::sync::LazyLock;
 pub struct GradleSettings {
     pub includes: Vec<String>,
     pub project_dirs: Vec<(String, String)>,
+    pub root_name: Option<String>,
 }
 
 #[derive(Debug, Default, PartialEq)]
@@ -15,7 +16,8 @@ pub struct SourceSets {
 
 static BLOCK_COMMENT: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"(?s)/\*.*?\*/").unwrap());
 static LINE_COMMENT: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"(?m)//.*$").unwrap());
-static INCLUDE: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"(?m)^\s*include\b\s*\(?([^\n)]*)").unwrap());
+static INCLUDE: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"(?m)^\s*include\b").unwrap());
+static ROOT_NAME: LazyLock<Regex> = LazyLock::new(|| Regex::new(r#"rootProject\.name\s*=\s*['"]([^'"]+)['"]"#).unwrap());
 static QUOTED: LazyLock<Regex> = LazyLock::new(|| Regex::new(r#"['"]([^'"]+)['"]"#).unwrap());
 static PROJECT_DIR: LazyLock<Regex> =
     LazyLock::new(|| Regex::new(r#"project\(\s*['"]([^'"]+)['"]\s*\)\.projectDir\s*=\s*(?:file|new File)\(\s*(?:[^,()]*,\s*)?['"]([^'"]+)['"]"#).unwrap());
@@ -39,8 +41,10 @@ fn normalize_path(p: &str) -> String {
 pub fn parse_settings(src: &str) -> GradleSettings {
     let src = strip_comments(src);
     let mut out = GradleSettings::default();
-    for cap in INCLUDE.captures_iter(&src) {
-        for q in QUOTED.captures_iter(&cap[1]) {
+    out.root_name = ROOT_NAME.captures(&src).map(|c| c[1].to_string());
+    for m in INCLUDE.find_iter(&src) {
+        let args = include_arguments(&src[m.end()..]);
+        for q in QUOTED.captures_iter(args) {
             let name = normalize_path(&q[1]);
             if !name.is_empty() && !out.includes.contains(&name) {
                 out.includes.push(name);
@@ -51,6 +55,22 @@ pub fn parse_settings(src: &str) -> GradleSettings {
         out.project_dirs.push((normalize_path(&cap[1]), cap[2].to_string()));
     }
     out
+}
+
+fn include_arguments(rest: &str) -> &str {
+    let trimmed = rest.trim_start_matches([' ', '\t']);
+    if let Some(inner) = trimmed.strip_prefix('(') {
+        let end = inner.find(')').unwrap_or(inner.len());
+        return &inner[..end];
+    }
+    let mut end = 0;
+    for line in trimmed.split_inclusive('\n') {
+        end += line.len();
+        if !line.trim_end().ends_with(',') {
+            break;
+        }
+    }
+    &trimmed[..end]
 }
 
 pub fn parse_build_deps(src: &str) -> Vec<(String, Scope)> {

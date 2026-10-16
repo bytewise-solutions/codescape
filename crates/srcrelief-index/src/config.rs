@@ -69,6 +69,9 @@ impl ProjectConfig {
         }
         let src = std::fs::read_to_string(&path).with_context(|| format!("reading {}", path.display()))?;
         let file: ConfigFile = toml::from_str(&src).map_err(|e| anyhow!("{}: {e}", path.display()))?;
+        if !file.include.is_empty() {
+            return Err(anyhow!("{}: `include` is not supported yet; list what to leave out under `exclude`", path.display()));
+        }
         let base = path.parent().unwrap_or(project_dir);
         let categories = file
             .categories

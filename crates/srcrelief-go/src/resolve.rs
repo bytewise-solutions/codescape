@@ -1,7 +1,7 @@
 use crate::parse::{CHAIN, GoCall, GoFile, GoFunc, parse_go};
 use globset::GlobSet;
 use rayon::prelude::*;
-use srcrelief_build::{Discovery, rel_path, walk_files};
+use srcrelief_build::{Discovery, rel_path, walk_files_under};
 use srcrelief_facts::{CallFacts, ExtractStats, FileFacts, FnFacts, Import, ProjectFacts, TypeFacts};
 use srcrelief_format::*;
 use std::collections::{HashMap, HashSet, VecDeque};
@@ -97,7 +97,7 @@ fn list_sources(d: &Discovery, excludes: &GlobSet) -> Vec<(usize, PathBuf)> {
     let go_dirs: Vec<(usize, &Path)> = d.modules.iter().enumerate().filter(|(_, m)| m.lang == Lang::Go).map(|(i, m)| (i, m.dir.as_path())).collect();
     let mut out = Vec::new();
     for &(mi, dir) in &go_dirs {
-        let _ = walk_files(dir, excludes, |p| {
+        let _ = walk_files_under(&d.root, dir, excludes, |p| {
             if p.extension().is_none_or(|e| e != "go") {
                 return;
             }
