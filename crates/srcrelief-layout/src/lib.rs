@@ -7,6 +7,7 @@ pub use size::box_size;
 use srcrelief_format::{ArchivedGraph, NodeFlags, NodeId};
 use srcrelief_rules::FrameRule;
 use std::collections::HashMap;
+use std::rc::Rc;
 
 #[derive(Clone, Copy, Debug, Default, PartialEq)]
 pub struct Rect {
@@ -122,7 +123,7 @@ impl ContainerLayout {
 pub struct LayoutCache {
     frames: Vec<FrameRule>,
     opts: LayoutOptions,
-    map: HashMap<NodeId, ContainerLayout>,
+    map: HashMap<NodeId, Rc<ContainerLayout>>,
     computed: usize,
 }
 
@@ -143,16 +144,22 @@ impl LayoutCache {
     }
 
     pub fn get(&self, node: NodeId) -> Option<&ContainerLayout> {
-        self.map.get(&node)
+        self.map.get(&node).map(|l| l.as_ref())
     }
 
     pub fn get_or_compute(&mut self, g: &ArchivedGraph, node: NodeId) -> &ContainerLayout {
-        if !self.map.contains_key(&node) {
-            let l = layout_container(g, node, &self.frames, &self.opts);
-            self.computed += 1;
-            self.map.insert(node, l);
-        }
+        self.shared(g, node);
         &self.map[&node]
+    }
+
+    pub fn shared(&mut self, g: &ArchivedGraph, node: NodeId) -> Rc<ContainerLayout> {
+        if let Some(l) = self.map.get(&node) {
+            return l.clone();
+        }
+        let l = Rc::new(layout_container(g, node, &self.frames, &self.opts));
+        self.computed += 1;
+        self.map.insert(node, l.clone());
+        l
     }
 
     pub fn computed(&self) -> usize {
