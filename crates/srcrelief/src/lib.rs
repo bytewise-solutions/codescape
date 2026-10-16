@@ -3,6 +3,7 @@ pub mod camera;
 pub mod canvas;
 pub mod focus;
 pub mod input;
+pub mod inspector;
 pub mod minimap;
 pub mod panels;
 pub mod reach;

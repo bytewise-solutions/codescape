@@ -5,6 +5,7 @@ use crate::focus::{Focus, FocusMode, History, Mark, UsageIndex, focus};
 use crate::search::{self, SearchIndex};
 use crate::shot::{Shot, ShotPlan, ShotStep};
 use crate::input::{Nav, SHORTCUTS, Step, interpret, nearest_in};
+use crate::inspector;
 use crate::source::{LINE_SPACING, SourceCache, Token, advance, file_font, highlight, initial_scroll, merge_spans, scroll_by};
 use crate::settings_window::{self, SettingsForm};
 use crate::view::{layout_options, toggle, view_items};
@@ -367,12 +368,6 @@ fn chip_rect(r: Rect) -> Rect {
     Rect::new(r.right() - 100.0, r.y + 6.0, 92.0, 18.0)
 }
 
-fn short_path(g: &ArchivedGraph, n: NodeId) -> String {
-    let path = g.path(n);
-    let tail: Vec<&str> = path.iter().skip(1).rev().take(2).map(|&p| g.name(p)).collect();
-    tail.into_iter().rev().collect::<Vec<_>>().join(" / ")
-}
-
 fn full_path(g: &ArchivedGraph, n: NodeId) -> String {
     g.path(n).iter().skip(1).map(|&p| g.name(p)).collect::<Vec<_>>().join(" / ")
 }
@@ -483,7 +478,7 @@ impl Project {
         }
         let focus = plan.focus.as_ref().and_then(|name| self.search.query(self.file.graph(), name, 1).first().copied());
         if let Some(n) = focus {
-            self.selected = Some(n);
+            self.set_focus(n, None, false, true);
             self.fly_to(n);
             if let (Some(z), Some(w)) = (plan.zoom, world_rect(self.file.graph(), &mut self.cache, n)) {
                 if let Some(t) = self.target.as_mut() {
@@ -833,110 +828,60 @@ impl Project {
         egui::ScrollArea::vertical().show(ui, |ui| {
             if let Some(i) = self.selected_entry {
                 ui.label(egui::RichText::new("ENTRY POINT").small().color(style::MUTED));
-                ui.heading(g.entry_label(i));
-                egui::Grid::new("entry").num_columns(2).show(ui, |ui| {
-                    ui.label("Kind");
-                    ui.label(g.entry_kind(i));
-                    ui.end_row();
-                    ui.label("Category");
-                    ui.label(g.entry_category(i).label());
-                    ui.end_row();
-                    ui.label("Lifecycle");
-                    ui.label(g.entry_lifecycle(i).label());
-                    ui.end_row();
-                    if let Some(h) = g.entry_handoff(i) {
-                        ui.label("Hands off to");
-                        ui.label(h);
-                        ui.end_row();
-                    }
-                    ui.label("Rule");
-                    ui.label(egui::RichText::new(g.entry_rule(i)).color(style::MUTED));
-                    ui.end_row();
-                });
-                ui.separator();
-            }
-            if self.focus.is_some() {
-                ui.horizontal_wrapped(|ui| {
-                    ui.label(egui::RichText::new("SHOW").small().color(style::MUTED));
-                    for (mode, label) in [(FocusMode::Neighbours, "neighbours"), (FocusMode::Reaches, "everything it reaches"), (FocusMode::UsedBy, "everywhere it's used")] {
-                        if ui.selectable_label(self.focus_mode == mode, label).clicked() && self.focus_mode != mode {
-                            self.focus_mode = mode;
-                            self.pending_refocus = true;
-                        }
-                    }
-                });
-                ui.horizontal(|ui| {
-                    if ui.button("Back (Alt+Left)").clicked() {
-                        self.pending_back = true;
-                    }
-                    if ui.button("Clear").clicked() {
-                        self.pending_clear = true;
-                    }
-                });
+                ui.label(egui::RichText::new(g.entry_label(i)).size(16.0).color(style::ENTRY)).on_hover_text(format!("found by {}", g.entry_rule(i)));
+                let mut line = format!("{} · {}", g.entry_kind(i).replace('-', " "), g.entry_lifecycle(i).label());
+                if let Some(h) = g.entry_handoff(i) {
+                    line.push_str(&format!(" · hands off to {h}"));
+                }
+                ui.label(egui::RichText::new(line).color(style::MUTED));
+                ui.add_space(6.0);
                 ui.separator();
             }
             let Some(n) = self.selected else {
                 ui.label(egui::RichText::new("Click a box to inspect it. Double-click to zoom into it.").color(style::MUTED));
                 return;
             };
-            let kind = match g.sub_kind(n) {
-                SubKind::None => format!("{:?}", g.kind(n)),
-                sub => format!("{sub:?}"),
-            };
-            let wiring = if g.flags(n).contains(NodeFlags::WIRING) { " · WIRING (DEPENDENCY INJECTION)" } else { "" };
-            ui.label(egui::RichText::new(format!("{}{wiring}", kind.to_uppercase())).small().color(style::MUTED));
-            ui.heading(g.name(n));
-            if let Some(f) = g.file(n) {
-                let (s, e) = g.span(n);
-                ui.label(egui::RichText::new(format!("{f}:{s}-{e}")).small().color(style::MUTED));
-            }
-            let parent = g.parent(n);
-            let (mut depends, mut used) = (0, 0);
-            if let Some(p) = parent {
-                for a in g.aggregates(p) {
-                    if a.a.to_native() == n {
-                        depends += 1;
-                    }
-                    if a.b.to_native() == n {
-                        used += 1;
-                    }
+            let h = inspector::header(g, n);
+            ui.horizontal(|ui| {
+                ui.label(egui::RichText::new(&h.kind).small().color(style::MUTED));
+                if self.focus.is_some() {
+                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                        if ui.small_button("Clear").on_hover_text("Esc").clicked() {
+                            self.pending_clear = true;
+                        }
+                        if ui.small_button("Back").on_hover_text("Alt+Left").clicked() {
+                            self.pending_back = true;
+                        }
+                    });
                 }
-            }
-            let hidden = self.cache.options().hidden;
-            let mut counts: HashMap<NodeKind, usize> = HashMap::new();
-            for c in g.children(n).filter(|&c| !g.flags(c).intersects(hidden)) {
-                *counts.entry(g.kind(c)).or_default() += 1;
-            }
-            egui::Grid::new("node").num_columns(2).show(ui, |ui| {
-                for (kind, label) in [(NodeKind::Module, "Modules"), (NodeKind::Package, "Packages"), (NodeKind::Type, "Types"), (NodeKind::Member, "Members")] {
-                    if let Some(c) = counts.get(&kind) {
-                        ui.label(label);
-                        ui.label(c.to_string());
-                        ui.end_row();
-                    }
-                }
-                ui.label("Lines");
-                ui.label(g.subtree_lines(n).to_string());
-                ui.end_row();
-                ui.label("Language");
-                ui.label(format!("{:?}", g.lang(n)));
-                ui.end_row();
-                ui.label("Depends on");
-                ui.label(format!("{depends} siblings"));
-                ui.end_row();
-                ui.label("Used by");
-                ui.label(format!("{used} siblings"));
-                ui.end_row();
-                if let Some(c) = self.app_counts.get(&n) {
-                    ui.label("Applications inside");
-                    ui.label(c.to_string());
-                    ui.end_row();
-                }
-
             });
-            let tags: Vec<&str> = g.tags(n).collect();
-            if !tags.is_empty() {
-                ui.label(format!("Tags: {}", tags.join(", ")));
+            ui.label(egui::RichText::new(&h.name).size(18.0).color(style::TEXT));
+            if !h.owners.is_empty() {
+                ui.horizontal_wrapped(|ui| {
+                    ui.spacing_mut().item_spacing.x = 4.0;
+                    for (k, (owner, name)) in h.owners.iter().enumerate() {
+                        if k > 0 {
+                            ui.label(egui::RichText::new("·").color(style::MUTED));
+                        }
+                        if ui.link(egui::RichText::new(name).small()).clicked() {
+                            self.pending_go = Some(*owner);
+                        }
+                    }
+                });
+            }
+            if let Some(loc) = &h.location {
+                ui.label(egui::RichText::new(loc).small().color(style::MUTED)).on_hover_text(g.file(n).unwrap_or(""));
+            }
+            let owns_entry = self.app_counts.contains_key(&n) || (0..g.entries().len()).any(|i| g.entries()[i].node.to_native() == n);
+            let chips = inspector::chips(g, n, owns_entry);
+            if !chips.is_empty() {
+                ui.add_space(4.0);
+                ui.horizontal_wrapped(|ui| {
+                    for c in chips {
+                        let text = egui::RichText::new(&c.label).small().color(style::TEXT);
+                        ui.add(egui::Button::new(text).fill(style::BAR).corner_radius(8.0).sense(Sense::hover())).on_hover_text(c.hint);
+                    }
+                });
             }
             if let Some(l) = self.cache.get(n) {
                 let up = l.up_edges();
@@ -944,29 +889,69 @@ impl Project {
                     ui.colored_label(style::EDGE_UP, format!("{up} upward dependencies inside"));
                 }
             }
-            if let Some(p) = parent {
+            if let Some(p) = g.parent(n) {
                 if let Some(l) = self.cache.get(p) {
                     for e in l.edges.iter().filter(|e| e.dir == Direction::Up && (e.a == n || e.b == n)) {
                         ui.colored_label(style::EDGE_UP, format!("Upward: {} -> {}", g.name(e.a), g.name(e.b)));
                     }
                 }
             }
-            for i in (0..g.entries().len()).filter(|&i| g.entries()[i].node.to_native() == n) {
-                ui.colored_label(style::ENTRY, format!("Entry point: {}", g.entry_label(i)));
-            }
             if let Some(f) = self.focus.as_ref().filter(|f| f.node == n) {
-                for (title, list, color) in [("USED BY", &f.callers, style::CALLER), ("USES", &f.calls, style::REACH)] {
-                    ui.add_space(8.0);
-                    ui.label(egui::RichText::new(format!("{title} ({})", list.len())).small().color(color));
-                    for &m in list.iter().take(LIST_LIMIT) {
-                        if ui.selectable_label(false, short_path(g, m)).on_hover_text(full_path(g, m)).clicked() {
-                            self.pending_go = Some(m);
+                for (title, list, color) in [("USES", &f.calls, style::REACH), ("USED BY", &f.callers, style::CALLER)] {
+                    ui.add_space(10.0);
+                    ui.horizontal(|ui| {
+                        ui.label(egui::RichText::new(format!("{title} ({})", list.len())).small().strong().color(color));
+                        if title == "USES" {
+                            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                                let modes = [(FocusMode::Neighbours, "neighbours"), (FocusMode::Reaches, "everything it reaches"), (FocusMode::UsedBy, "everywhere it's used")];
+                                let current = modes.iter().find(|(m, _)| *m == self.focus_mode).map_or("", |(_, l)| *l);
+                                egui::ComboBox::from_id_salt("focus-mode").selected_text(egui::RichText::new(current).small()).show_ui(ui, |ui| {
+                                    for (mode, label) in modes {
+                                        if ui.selectable_label(self.focus_mode == mode, label).clicked() && self.focus_mode != mode {
+                                            self.focus_mode = mode;
+                                            self.pending_refocus = true;
+                                        }
+                                    }
+                                });
+                            });
                         }
+                    });
+                    if list.is_empty() {
+                        ui.label(egui::RichText::new("nothing").small().color(style::MUTED));
                     }
-                    if list.len() > LIST_LIMIT {
-                        ui.label(egui::RichText::new(format!("… {} more", list.len() - LIST_LIMIT)).color(style::MUTED));
+                    for group in inspector::group_links(g, n, list) {
+                        egui::CollapsingHeader::new(egui::RichText::new(format!("{}  ({})", group.label, group.items.len())).small().color(style::MUTED))
+                            .id_salt((title, &group.label))
+                            .default_open(group.items.len() <= LIST_LIMIT)
+                            .show(ui, |ui| {
+                                for (m, label) in group.items.iter().take(LIST_LIMIT) {
+                                    if ui.selectable_label(false, label).on_hover_text(full_path(g, *m)).clicked() {
+                                        self.pending_go = Some(*m);
+                                    }
+                                }
+                                if group.items.len() > LIST_LIMIT {
+                                    ui.label(egui::RichText::new(format!("… {} more", group.items.len() - LIST_LIMIT)).color(style::MUTED));
+                                }
+                            });
                     }
                 }
+            }
+            let opts = self.cache.options().clone();
+            let (summary, kids) = inspector::inside(g, n, &|c| opts.hides(g, c));
+            if !kids.is_empty() && g.kind(n) != NodeKind::Member {
+                ui.add_space(10.0);
+                ui.label(egui::RichText::new("INSIDE").small().strong().color(style::MUTED));
+                ui.label(egui::RichText::new(summary).small().color(style::MUTED));
+                egui::CollapsingHeader::new(egui::RichText::new("list").small().color(style::MUTED)).id_salt(("inside", n)).default_open(kids.len() <= 12).show(ui, |ui| {
+                    for (c, name) in kids.iter().take(LIST_LIMIT) {
+                        if ui.selectable_label(false, name).clicked() {
+                            self.pending_go = Some(*c);
+                        }
+                    }
+                    if kids.len() > LIST_LIMIT {
+                        ui.label(egui::RichText::new(format!("… {} more", kids.len() - LIST_LIMIT)).color(style::MUTED));
+                    }
+                });
             }
         });
         if std::mem::take(&mut self.pending_refocus) {
@@ -1016,8 +1001,7 @@ impl Project {
             });
         });
         if let Some(n) = fly {
-            self.selected = Some(n);
-            self.fly_to(n);
+            self.set_focus(n, None, true, true);
             self.search_open = false;
         } else {
             self.search_open = open;
