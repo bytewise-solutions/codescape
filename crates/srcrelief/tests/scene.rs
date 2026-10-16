@@ -162,3 +162,52 @@ fn deepest_open_container_under_point() {
     let hit = s.box_at(api_box.rect.center()).unwrap();
     assert!(g.is_ancestor(api, hit), "box_at returns the deepest box under the point");
 }
+
+#[test]
+fn edges_hidden_until_children_are_legible() {
+    let mut b = GraphBuilder::new("p");
+    let m = b.add_node(b.root(), NodeKind::Module, SubKind::None, "huge", Lang::Java);
+    for i in 0..400 {
+        let p = b.add_node(m, NodeKind::Package, SubKind::None, &format!("p{i}"), Lang::Java);
+        let t = b.add_node(p, NodeKind::Type, SubKind::Class, "T", Lang::Java);
+        b.set_span(t, "f", 1, 50);
+    }
+    let dir = tempfile::tempdir().unwrap();
+    write_graph(&b.finish(), &dir.path().join("g")).unwrap();
+    let f = ReliefFile::open(&dir.path().join("g")).unwrap();
+    let g = f.graph();
+    let mut cache = LayoutCache::new(Vec::new(), LayoutOptions::default());
+    let huge = g.children(g.root()).start;
+    let world = world_rect(g, &mut cache, huge).unwrap();
+    let cam = Camera::fit(world, Rect::new(0.0, 0.0, 300.0, 200.0));
+    let s = build_scene(g, &mut cache, &cam, Rect::new(0.0, 0.0, 300.0, 200.0), &VisualRules::default(), None);
+    let bx = s.boxes.iter().find(|b| b.node == huge).unwrap();
+    assert!(bx.open, "a big box always shows its structure");
+    assert!(s.boxes.iter().any(|b| g.parent(b.node) == Some(huge)), "children drawn as a preview");
+    assert!(s.edges.iter().all(|e| g.parent(e.a) != Some(huge)), "but no arrows while 400 packages share 270 px");
+    assert!(s.labels.iter().all(|l| g.parent(l.node) != Some(huge)));
+}
+
+#[test]
+fn long_dotted_names_keep_their_tail_when_narrow() {
+    assert_eq!(fit_label("com.example.game.desktop.tools", 400.0, 12.0), "com.example.game.desktop.tools");
+    assert_eq!(fit_label("com.example.game.desktop.tools", 90.0, 12.0), "…desktop.tools");
+    assert_eq!(fit_label("com.example.game.desktop.tools", 20.0, 12.0), "…tools");
+    assert_eq!(fit_label("ViewManagerImpl", 20.0, 12.0), "ViewManagerImpl");
+}
+
+#[test]
+fn edges_carry_the_depth_of_their_container() {
+    let fx = fixture();
+    let g = fx.file.graph();
+    let mut cache = LayoutCache::new(Vec::new(), LayoutOptions::default());
+    let left = node(g, &["left"]);
+    let cam = Camera::fit(world_rect(g, &mut cache, left).unwrap(), VIEW);
+    let s = scene(g, &mut cache, &cam);
+    for e in &s.edges {
+        let a = s.boxes.iter().find(|b| b.node == e.a);
+        if let Some(a) = a {
+            assert_eq!(e.depth, a.depth);
+        }
+    }
+}

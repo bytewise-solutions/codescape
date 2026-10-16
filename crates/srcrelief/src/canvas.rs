@@ -7,6 +7,7 @@ use srcrelief_rules::VisualRules;
 pub const OPEN_THRESHOLD_PX: f32 = 220.0;
 pub const MIN_DRAW_PX: f32 = 3.0;
 pub const MIN_LABEL_PX: f32 = 7.0;
+pub const MIN_CHILD_PX: f32 = 36.0;
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct SceneBox {
@@ -22,6 +23,7 @@ pub struct SceneBox {
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct SceneEdge {
+    pub depth: u32,
     pub a: NodeId,
     pub b: NodeId,
     pub points: Vec<[f32; 2]>,
@@ -34,12 +36,14 @@ pub struct SceneEdge {
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct SceneFrame {
+    pub depth: u32,
     pub label: String,
     pub rect: Rect,
 }
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct SceneLabel {
+    pub depth: u32,
     pub node: NodeId,
     pub pos: [f32; 2],
     pub text: String,
@@ -115,6 +119,22 @@ pub fn world_rect(g: &ArchivedGraph, cache: &mut LayoutCache, node: NodeId) -> O
     Some(world)
 }
 
+pub fn fit_label(name: &str, width: f32, size: f32) -> String {
+    let char_w = size * 0.5;
+    let fits = |s: &str| s.chars().count() as f32 * char_w <= width;
+    if fits(name) || !name.contains('.') {
+        return name.to_string();
+    }
+    let segs: Vec<&str> = name.split('.').collect();
+    for k in 1..segs.len() {
+        let candidate = format!("…{}", segs[k..].join("."));
+        if fits(&candidate) {
+            return candidate;
+        }
+    }
+    format!("…{}", segs[segs.len() - 1])
+}
+
 fn summary(g: &ArchivedGraph, node: NodeId) -> String {
     let kids = g.children(node).filter(|&c| !g.flags(c).intersects(NodeFlags::MOCK | NodeFlags::TEST | NodeFlags::EXTERNAL)).count();
     let unit = match g.kind(node) {
@@ -143,22 +163,35 @@ impl Builder<'_> {
         self.highlight.is_some_and(|r| r.contains(n))
     }
 
+    fn children_legible(&mut self, node: NodeId, rect: Rect) -> bool {
+        let layout = self.cache.shared(self.g, node);
+        if layout.children.is_empty() || layout.size[0] <= 0.0 {
+            return false;
+        }
+        let scale = (rect.w / layout.size[0]).min(rect.h / layout.size[1]);
+        let mean = layout.children.iter().map(|c| c.rect.w).sum::<f32>() / layout.children.len() as f32;
+        mean * scale >= MIN_CHILD_PX
+    }
+
     fn open_container(&mut self, node: NodeId, world: Rect, depth: u32) {
+        let screen = self.cam.world_to_screen_rect(world, self.view);
+        let legible = self.children_legible(node, screen);
         let layout = self.cache.shared(self.g, node);
         let xf = Xform::fit(&layout, world);
         for f in &layout.frames {
             let rect = self.cam.world_to_screen_rect(xf.rect(f.rect), self.view);
             if rect.intersects(&self.view) {
-                self.scene.frames.push(SceneFrame { label: f.label.clone(), rect });
+                self.scene.frames.push(SceneFrame { depth: depth + 1, label: f.label.clone(), rect });
             }
         }
-        for e in &layout.edges {
+        for e in layout.edges.iter().filter(|_| legible) {
             let points: Vec<[f32; 2]> = e.points.iter().map(|p| self.cam.world_to_screen(xf.point(*p), self.view)).collect();
             let bbox = points.iter().skip(1).fold(Rect::new(points[0][0], points[0][1], 0.0, 0.0), |acc, p| acc.union(&Rect::new(p[0], p[1], 0.0, 0.0)));
             if !bbox.expand(2.0).intersects(&self.view) {
                 continue;
             }
             self.scene.edges.push(SceneEdge {
+                depth: depth + 1,
                 a: e.a,
                 b: e.b,
                 points,
@@ -195,7 +228,8 @@ impl Builder<'_> {
                 let detail = (rect.h >= 40.0).then(|| summary(g, node));
                 ([rect.x + 8.0, rect.y + 6.0], false, detail)
             };
-            self.scene.labels.push(SceneLabel { node, pos, text: g.name(node).to_string(), detail, size, centered });
+            let text = fit_label(g.name(node), rect.w - 16.0, size);
+            self.scene.labels.push(SceneLabel { depth, node, pos, text, detail, size, centered });
         }
         if open {
             self.open_container(node, world, depth);

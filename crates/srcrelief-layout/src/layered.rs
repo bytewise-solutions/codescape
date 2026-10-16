@@ -165,14 +165,15 @@ pub fn layout_container(g: &ArchivedGraph, node: NodeId, frames: &[FrameRule], o
     let height = y - GAP_Y + PAD + frame_top_room;
 
     let mut frame_boxes: Vec<FrameBox> = Vec::new();
-    let mut labels: Vec<&str> = groups.iter().flatten().map(|s| s.as_str()).collect();
-    labels.sort();
-    labels.dedup();
-    for label in labels {
-        let members: Vec<usize> = (0..n).filter(|&v| groups[v].as_deref() == Some(label)).collect();
-        let bbox = members.iter().skip(1).fold(rects[members[0]], |acc, &v| acc.union(&rects[v]));
-        let r = bbox.expand(FRAME_PAD);
-        frame_boxes.push(FrameBox { label: label.to_string(), rect: Rect::new(r.x, r.y - FRAME_LABEL, r.w, r.h + FRAME_LABEL) });
+    for (_, row) in &rows {
+        let mut labels: Vec<&str> = row.iter().filter_map(|&v| groups[v].as_deref()).collect();
+        labels.dedup();
+        for label in labels {
+            let members: Vec<usize> = row.iter().copied().filter(|&v| groups[v].as_deref() == Some(label)).collect();
+            let bbox = members.iter().skip(1).fold(rects[members[0]], |acc, &v| acc.union(&rects[v]));
+            let r = bbox.expand(FRAME_PAD);
+            frame_boxes.push(FrameBox { label: label.to_string(), rect: Rect::new(r.x, r.y - FRAME_LABEL, r.w, r.h + FRAME_LABEL) });
+        }
     }
 
     let row_of: HashMap<usize, usize> = rows.iter().enumerate().flat_map(|(ri, (_, r))| r.iter().map(move |&v| (v, ri))).collect();
@@ -188,9 +189,9 @@ pub fn layout_container(g: &ArchivedGraph, node: NodeId, frames: &[FrameRule], o
                 Direction::Down
             };
             let points = match dir {
-                Direction::Down => vec![[ra.center()[0], ra.bottom()], [rb.center()[0], rb.y]],
+                Direction::Down => vec![[toward(&ra, rb.center()[0]), ra.bottom()], [toward(&rb, ra.center()[0]), rb.y]],
                 Direction::Up => {
-                    let (from, to) = ([ra.center()[0], ra.y], [rb.center()[0], rb.bottom()]);
+                    let (from, to) = ([toward(&ra, rb.center()[0]), ra.y], [toward(&rb, ra.center()[0]), rb.bottom()]);
                     let mid = [(from[0] + to[0]) / 2.0 + GAP_X, (from[1] + to[1]) / 2.0];
                     vec![from, mid, to]
                 }
@@ -210,6 +211,11 @@ pub fn layout_container(g: &ArchivedGraph, node: NodeId, frames: &[FrameRule], o
         edges: laid_edges,
         frames: frame_boxes,
     }
+}
+
+fn toward(r: &Rect, x: f32) -> f32 {
+    let inset = (r.w * 0.15).min(16.0);
+    x.clamp(r.x + inset, r.right() - inset)
 }
 
 fn mark_back_edges(n: usize, edges: &mut [SibEdge], out: &[Vec<usize>]) {

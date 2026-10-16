@@ -94,12 +94,13 @@ fn auto_prefix_frames() {
     let g = graph(&["client", "core", "server-core", "server-game", "server-world"], &main_deps(&[("server-game", "server-core"), ("server-world", "server-core"), ("server-core", "core"), ("client", "core")]));
     let gr = g.file.graph();
     let l = layout_container(gr, gr.root(), &[FrameRule::AutoPrefix { sep: "-".into() }], &LayoutOptions::default());
-    assert_eq!(l.frames.len(), 1);
-    assert_eq!(l.frames[0].label, "server");
+    assert!(!l.frames.is_empty() && l.frames.iter().all(|f| f.label == "server"));
     for m in ["server-core", "server-game", "server-world"] {
         let r = l.children.iter().find(|c| c.node == g.ids[m]).unwrap().rect;
-        assert!(l.frames[0].rect.contains_rect(&r), "{m} outside frame");
+        assert!(l.frames.iter().any(|f| f.rect.contains_rect(&r)), "{m} outside every frame");
     }
+    let client = l.children.iter().find(|c| c.node == g.ids["client"]).unwrap().rect;
+    assert!(l.frames.iter().all(|f| !f.rect.contains_rect(&client)));
     let pattern = layout_container(gr, gr.root(), &[FrameRule::Pattern { glob: "c*".into(), label: "c-things".into() }], &LayoutOptions::default());
     assert_eq!(pattern.frames[0].label, "c-things");
 }
@@ -172,4 +173,40 @@ fn large_flat_container_under_budget() {
     assert!(elapsed.as_millis() < 100, "took {elapsed:?}");
     let aspect = l.size[0] / l.size[1];
     assert!((0.3..4.0).contains(&aspect), "aspect {aspect}");
+}
+
+#[test]
+fn frames_never_cover_non_members() {
+    let g = graph(
+        &["android", "client", "core", "desktop", "server-chat", "server-core", "server-game", "server-world"],
+        &main_deps(&[("server-game", "server-core"), ("server-world", "server-core"), ("server-chat", "server-core"), ("server-core", "core"), ("desktop", "client"), ("android", "client"), ("client", "core")]),
+    );
+    let gr = g.file.graph();
+    let l = layout_container(gr, gr.root(), &[FrameRule::AutoPrefix { sep: "-".into() }], &LayoutOptions::default());
+    assert!(!l.frames.is_empty());
+    for f in &l.frames {
+        assert_eq!(f.label, "server");
+        for c in &l.children {
+            let member = gr.name(c.node).starts_with("server-");
+            if !member {
+                assert!(!f.rect.intersects(&c.rect), "frame covers {}", gr.name(c.node));
+            }
+        }
+    }
+    for m in ["server-chat", "server-core", "server-game", "server-world"] {
+        let r = l.children.iter().find(|c| c.node == g.ids[m]).unwrap().rect;
+        assert!(l.frames.iter().any(|f| f.rect.contains_rect(&r)), "{m} not framed");
+    }
+}
+
+#[test]
+fn edge_endpoints_spread_along_box_sides() {
+    let g = graph(&["a", "b", "c", "core"], &main_deps(&[("a", "core"), ("b", "core"), ("c", "core")]));
+    let gr = g.file.graph();
+    let l = layout_container(gr, gr.root(), &[], &LayoutOptions::default());
+    let ends: Vec<f32> = l.edges.iter().map(|e| e.points.last().unwrap()[0]).collect();
+    assert_eq!(ends.len(), 3);
+    assert!(ends.iter().any(|x| (x - ends[0]).abs() > 5.0), "all arrows end at the same x: {ends:?}");
+    let core = l.children.iter().find(|c| c.node == g.ids["core"]).unwrap().rect;
+    assert!(ends.iter().all(|&x| x >= core.x && x <= core.right()));
 }
