@@ -22,3 +22,13 @@ fn search_ranks_exact_type_name_first() {
     assert_eq!(g.name(fuzzy[0]), "ViewManagerImpl");
     assert!(idx.query(g, "", 5).is_empty());
 }
+
+#[test]
+fn arrow_keys_move_the_selection_within_the_hits() {
+    use srcrelief::search::step_selection;
+    assert_eq!(step_selection(0, 3, true), 1);
+    assert_eq!(step_selection(2, 3, true), 2, "stays on the last hit");
+    assert_eq!(step_selection(1, 3, false), 0);
+    assert_eq!(step_selection(0, 3, false), 0);
+    assert_eq!(step_selection(5, 0, true), 0, "no hits");
+}

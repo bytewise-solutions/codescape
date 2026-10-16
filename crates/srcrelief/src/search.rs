@@ -42,3 +42,11 @@ impl SearchIndex {
         hits.into_iter().map(|(_, _, n)| n).collect()
     }
 }
+
+pub fn step_selection(current: usize, len: usize, down: bool) -> usize {
+    match (len, down) {
+        (0, _) => 0,
+        (_, true) => (current + 1).min(len - 1),
+        (_, false) => current.min(len - 1).saturating_sub(1),
+    }
+}

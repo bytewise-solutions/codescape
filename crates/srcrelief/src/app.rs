@@ -2,7 +2,7 @@ use crate::camera::Camera;
 use crate::canvas::{Scene, build_scene, root_world, world_rect};
 use crate::panels::{EntryGroupView, group_entries};
 use crate::focus::{Focus, FocusMode, History, Mark, UsageIndex, focus};
-use crate::search::SearchIndex;
+use crate::search::{self, SearchIndex};
 use crate::shot::{Shot, ShotPlan, ShotStep};
 use crate::input::{Nav, interpret};
 use crate::settings_window::{self, SettingsForm};
@@ -261,8 +261,6 @@ impl eframe::App for ReliefApp {
                 let menu = egui::Panel::top("top").show(ui, |ui| egui::MenuBar::new().ui(ui, |ui| {
                     let file = self.file_menu(ui, true);
                     project.view_menu(ui);
-                    ui.separator();
-                    project.breadcrumb(ui);
                     file
                 }).inner).inner;
                 let action = project.ui(ui).or(menu);
@@ -328,6 +326,7 @@ struct Project {
     search_text: String,
     search_open: bool,
     search_hits: Vec<NodeId>,
+    search_cursor: usize,
     settings: SettingsStore,
     packs: Vec<String>,
     settings_open: bool,
@@ -336,6 +335,12 @@ struct Project {
     totals: Totals,
     scene_ms: f32,
     last_frame: Instant,
+}
+
+fn chevron(painter: &egui::Painter, center: Pos2, up: bool) {
+    let dy = if up { -2.0 } else { 2.0 };
+    let pts = vec![center + egui::vec2(-4.0, -dy), center + egui::vec2(0.0, dy), center + egui::vec2(4.0, -dy)];
+    painter.add(Shape::line(pts, Stroke::new(1.5, style::MUTED)));
 }
 
 fn erect(r: Rect) -> egui::Rect {
@@ -439,6 +444,7 @@ impl Project {
             search_text: String::new(),
             search_open: false,
             search_hits: Vec::new(),
+            search_cursor: 0,
             settings,
             packs,
             settings_open: false,
@@ -561,6 +567,7 @@ impl Project {
         if ui.input(|i| i.modifiers.alt && i.key_pressed(Key::ArrowLeft)) {
             self.go_back();
         }
+        egui::Panel::top("breadcrumb").show(ui, |ui| ui.horizontal(|ui| self.breadcrumb(ui)));
         egui::Panel::bottom("status").show(ui, |ui| self.status_bar(ui));
         egui::Panel::left("entries").resizable(true).default_size(270.0).show(ui, |ui| self.entries_panel(ui));
         egui::Panel::right("inspector").resizable(true).default_size(290.0).show(ui, |ui| self.inspector(ui));
@@ -858,19 +865,29 @@ impl Project {
         let mut open = true;
         let mut fly = None;
         egui::Window::new("Jump to").open(&mut open).collapsible(false).resizable(false).anchor(Align2::CENTER_TOP, [0.0, 60.0]).show(ctx, |ui| {
+            let (down, up) = ui.input_mut(|i| (i.consume_key(egui::Modifiers::NONE, Key::ArrowDown), i.consume_key(egui::Modifiers::NONE, Key::ArrowUp)));
+            let moved = down || up;
+            if moved {
+                self.search_cursor = search::step_selection(self.search_cursor, self.search_hits.len(), down);
+            }
             let edit = ui.add(egui::TextEdit::singleline(&mut self.search_text).hint_text("type, package or module name").desired_width(380.0));
             edit.request_focus();
             if edit.changed() {
                 self.search_hits = self.search.query(self.file.graph(), &self.search_text, 30);
+                self.search_cursor = 0;
             }
             let g = self.file.graph();
             if ui.input(|i| i.key_pressed(Key::Enter)) {
-                fly = self.search_hits.first().copied();
+                fly = self.search_hits.get(self.search_cursor).copied();
             }
             egui::ScrollArea::vertical().max_height(360.0).show(ui, |ui| {
-                for &h in &self.search_hits {
+                for (i, &h) in self.search_hits.iter().enumerate() {
                     let path: Vec<&str> = g.path(h).iter().skip(1).map(|&p| g.name(p)).collect();
-                    if ui.selectable_label(false, format!("{}   {}", g.name(h), path[..path.len().saturating_sub(1)].join(" / "))).clicked() {
+                    let row = ui.selectable_label(i == self.search_cursor, format!("{}   {}", g.name(h), path[..path.len().saturating_sub(1)].join(" / ")));
+                    if moved && i == self.search_cursor {
+                        row.scroll_to_me(None);
+                    }
+                    if row.clicked() {
                         fly = Some(h);
                     }
                 }
@@ -1091,7 +1108,7 @@ impl Project {
     fn legend_rects(&self) -> (egui::Rect, egui::Rect) {
         let corner = Pos2::new(self.view.x + 10.0, self.view.bottom() - 10.0);
         if !self.settings.settings().view(View::Legend).value {
-            let chip = egui::Rect::from_min_size(corner - egui::vec2(0.0, 22.0), egui::vec2(70.0, 22.0));
+            let chip = egui::Rect::from_min_size(corner - egui::vec2(0.0, 22.0), egui::vec2(78.0, 22.0));
             return (chip, chip);
         }
         let opts = self.cache.options();
@@ -1105,7 +1122,8 @@ impl Project {
         let (top, close) = self.legend_rects();
         if !self.settings.settings().view(View::Legend).value {
             painter.rect_filled(top, 4.0, style::BAR);
-            painter.text(top.center(), Align2::CENTER_CENTER, "Legend ▴", FontId::proportional(11.0), style::MUTED);
+            painter.text(top.left_center() + egui::vec2(10.0, 0.0), Align2::LEFT_CENTER, "Legend", FontId::proportional(11.0), style::MUTED);
+            chevron(painter, top.right_center() - egui::vec2(14.0, 0.0), true);
             return;
         }
         let opts = self.cache.options();
@@ -1114,7 +1132,7 @@ impl Project {
         let half = items.len().div_ceil(2);
         let width = top.width();
         painter.rect_filled(top, 4.0, style::BAR);
-        painter.text(close.center(), Align2::CENTER_CENTER, "×", FontId::proportional(14.0), style::MUTED);
+        chevron(painter, close.center(), false);
         for (i, it) in items.iter().enumerate() {
             let col = (i / half) as f32;
             let x = top.min.x + 8.0 + col * (width / 2.0);
