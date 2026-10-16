@@ -1,6 +1,6 @@
 use srcrelief::camera::Camera;
 use srcrelief::canvas::*;
-use srcrelief::reach::ReachSet;
+use srcrelief::focus::{FocusMode, Mark, UsageIndex, focus};
 use srcrelief_format::*;
 use srcrelief_layout::{LayoutCache, LayoutOptions, Rect};
 use srcrelief_rules::VisualRules;
@@ -139,11 +139,16 @@ fn highlight_marks_reached_boxes() {
     let g = fx.file.graph();
     let mut cache = LayoutCache::new(Vec::new(), LayoutOptions::default());
     let cam = fit_all(g, &mut cache);
-    let mut reach = ReachSet::new(g.node_count());
-    reach.insert(node(g, &["right"]));
-    let s = build_scene(g, &mut cache, &cam, VIEW, &VisualRules::default(), Some(&reach));
-    assert!(s.boxes.iter().find(|b| b.node == node(g, &["right"])).unwrap().highlighted);
-    assert!(!s.boxes.iter().find(|b| b.node == node(g, &["left"])).unwrap().highlighted);
+    let idx = UsageIndex::new(g);
+    let f = focus(g, &idx, node(g, &["left", "left.impl", "T", "f"]), None, FocusMode::Neighbours);
+    let s = build_scene(g, &mut cache, &cam, VIEW, &VisualRules::default(), Some(&f.marks));
+    let right = s.boxes.iter().find(|b| b.node == node(g, &["right"])).unwrap();
+    assert_eq!(right.mark, Mark::Down, "left.impl calls into right");
+    assert!(!right.dimmed);
+    let left = s.boxes.iter().find(|b| b.node == node(g, &["left"])).unwrap();
+    assert_eq!(left.mark, Mark::Focus);
+    let unrelated = build_scene(g, &mut cache, &cam, VIEW, &VisualRules::default(), Some(&focus(g, &idx, node(g, &["right", "right.impl"]), None, FocusMode::Neighbours).marks));
+    assert!(unrelated.boxes.iter().find(|b| b.node == node(g, &["left"])).unwrap().dimmed);
 }
 
 #[test]

@@ -34,7 +34,9 @@ Nothing is written into the project. The index lives in the user cache folder
 | Zoom | `Ctrl` + wheel or pinch, around the pointer |
 | Zoom into a box | double-click it |
 | Inspect a box | click it (right panel) |
-| Trace an entry point | click it in the left panel: everything it reaches turns green |
+| Focus an entry point or a box | click it: the view frames it, what it calls turns green, what calls or sets it up turns blue, the rest dims |
+| Walk the code | click a row under *Set up / called by* or *Calls* in the inspector; `Alt+Left` or **Back** retraces |
+| See everything involved | inspector **Show**: *neighbours*, *everything it reaches*, *everywhere it's used* |
 | Jump to a name | `Ctrl+K`, type, `Enter` |
 | Go back up | click a breadcrumb segment, or the minimap |
 
@@ -53,6 +55,8 @@ enough to read.
 - **Dependency injection is set aside.** Code recognised as wiring (Google Wire's generated injectors and provider
   sets, Dagger components/modules) is hidden with its arrows, so it never changes the layering. Tick **wiring** in
   the status bar to show it muted, with faint dotted arrows. Highlighting an entry point still follows wiring.
+- **Error and exception types are set aside** (Java `*Exception` and subclasses of Exception/Throwable/Error, Go
+  types with an `Error()` method or named `*Error`); tick **errors** to show them in their own row.
 - **Test code is out:** test sources, test helpers (files importing `testing`/testify or JUnit/Mockito, folders such
   as `testutil`/`testdata`) and test mains are not drawn or listed. Tick **test deps** to see test-only dependencies.
 

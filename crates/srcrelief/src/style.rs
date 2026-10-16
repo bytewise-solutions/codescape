@@ -66,3 +66,5 @@ pub const LEGEND: &[(&str, Color32)] = &[
     ("constructor", CONSTRUCTOR),
     ("wiring (DI)", WIRING),
 ];
+
+pub const CALLER: Color32 = Color32::from_rgb(110, 165, 255);

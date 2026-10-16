@@ -1,7 +1,7 @@
 use crate::camera::Camera;
 use crate::canvas::{Scene, build_scene, root_world, world_rect};
 use crate::panels::{EntryGroupView, group_entries};
-use crate::reach::{ReachSet, compute_reach};
+use crate::focus::{Focus, FocusMode, History, Mark, UsageIndex, focus};
 use crate::search::SearchIndex;
 use crate::shot::{Shot, ShotPlan, ShotStep};
 use crate::input::{Nav, interpret};
@@ -240,7 +240,14 @@ struct Project {
     scene: Scene,
     selected: Option<NodeId>,
     selected_entry: Option<usize>,
-    reach: Option<ReachSet>,
+    focus: Option<Focus>,
+    focus_mode: FocusMode,
+    usage: UsageIndex,
+    history: History,
+    pending_refocus: bool,
+    pending_back: bool,
+    pending_clear: bool,
+    pending_go: Option<NodeId>,
     groups: Vec<EntryGroupView>,
     search: SearchIndex,
     search_text: String,
@@ -265,6 +272,18 @@ fn pos(p: [f32; 2]) -> Pos2 {
     Pos2::new(p[0], p[1])
 }
 
+const LIST_LIMIT: usize = 60;
+
+fn short_path(g: &ArchivedGraph, n: NodeId) -> String {
+    let path = g.path(n);
+    let tail: Vec<&str> = path.iter().skip(1).rev().take(2).map(|&p| g.name(p)).collect();
+    tail.into_iter().rev().collect::<Vec<_>>().join(" / ")
+}
+
+fn full_path(g: &ArchivedGraph, n: NodeId) -> String {
+    g.path(n).iter().skip(1).map(|&p| g.name(p)).collect::<Vec<_>>().join(" / ")
+}
+
 fn lifecycle_badge(l: Lifecycle) -> &'static str {
     match l {
         Lifecycle::Once => "once",
@@ -281,6 +300,7 @@ impl Project {
         let g = file.graph();
         let groups = group_entries(g, &visual);
         let search = SearchIndex::new(g);
+        let usage = UsageIndex::new(g);
         let mut app_counts: HashMap<NodeId, usize> = HashMap::new();
         let mut totals = Totals { modules: 0, packages: 0, types: 0, lines: g.subtree_lines(g.root()), apps: 0, tools: 0, tests: 0 };
         for i in 0..g.entries().len() {
@@ -323,7 +343,14 @@ impl Project {
             scene: Scene::default(),
             selected: None,
             selected_entry: None,
-            reach: None,
+            focus: None,
+            focus_mode: FocusMode::Neighbours,
+            usage,
+            history: History::default(),
+            pending_refocus: false,
+            pending_back: false,
+            pending_clear: false,
+            pending_go: None,
             groups,
             search,
             search_text: String::new(),
@@ -360,15 +387,42 @@ impl Project {
     }
 
     fn select_entry(&mut self, i: usize) {
+        let node = self.file.graph().entries()[i].node.to_native();
+        self.set_focus(node, Some(i), true, true);
+    }
+
+    fn set_focus(&mut self, node: NodeId, entry: Option<usize>, fly: bool, record: bool) {
         let g = self.file.graph();
-        self.selected_entry = Some(i);
-        let node = g.entries()[i].node.to_native();
+        self.focus = Some(focus(g, &self.usage, node, entry, self.focus_mode));
         self.selected = Some(node);
-        self.reach = Some(compute_reach(g, i));
-        let path = g.path(node);
-        if let Some(&module) = path.get(1) {
-            self.fly_to(module);
+        self.selected_entry = entry;
+        if record {
+            self.history.push(node);
         }
+        if fly {
+            let hidden = self.cache.options().effective_hidden();
+            let leaf = !g.children(node).any(|c| !g.flags(c).intersects(hidden));
+            let frame = if leaf { g.parent(node).filter(|&p| p != g.root()).unwrap_or(node) } else { node };
+            self.fly_to(frame);
+        }
+    }
+
+    fn refocus(&mut self) {
+        if let Some(f) = &self.focus {
+            let (node, entry) = (f.node, f.entry);
+            self.set_focus(node, entry, false, false);
+        }
+    }
+
+    fn go_back(&mut self) {
+        if let Some(n) = self.history.back() {
+            self.set_focus(n, None, true, false);
+        }
+    }
+
+    fn clear_focus(&mut self) {
+        self.focus = None;
+        self.selected_entry = None;
     }
 
     fn ui(&mut self, ui: &mut egui::Ui) -> Option<Action> {
@@ -378,6 +432,9 @@ impl Project {
         }
         if ui.input(|i| i.key_pressed(Key::Escape)) {
             self.search_open = false;
+        }
+        if ui.input(|i| i.modifiers.alt && i.key_pressed(Key::ArrowLeft)) {
+            self.go_back();
         }
         egui::Panel::top("top").show(ui, |ui| {
             ui.horizontal(|ui| {
@@ -459,6 +516,12 @@ impl Project {
                 self.include_test_edges = tests;
                 let mut opts = *self.cache.options();
                 opts.include_test_edges = tests;
+                self.cache.set_options(opts);
+            }
+            let mut errors = self.cache.options().show_noise;
+            if ui.checkbox(&mut errors, "errors").on_hover_text("show exception and error types").changed() {
+                let mut opts = *self.cache.options();
+                opts.show_noise = errors;
                 self.cache.set_options(opts);
             }
             let mut wiring = self.cache.options().show_wiring;
@@ -557,24 +620,30 @@ impl Project {
                         ui.label(h);
                         ui.end_row();
                     }
-                    if let Some(r) = &self.reach {
-                        let modules = g.children(g.root()).filter(|&m| r.contains(m)).count();
-                        let types = (0..g.node_count() as NodeId).filter(|&n| g.kind(n) == NodeKind::Type && r.contains(n)).count();
-                        ui.label("Modules reached");
-                        ui.label(modules.to_string());
-                        ui.end_row();
-                        ui.label("Types reached");
-                        ui.label(types.to_string());
-                        ui.end_row();
-                    }
                     ui.label("Rule");
                     ui.label(egui::RichText::new(g.entry_rule(i)).color(style::MUTED));
                     ui.end_row();
                 });
-                if ui.button("Clear highlight").clicked() {
-                    self.reach = None;
-                    self.selected_entry = None;
-                }
+                ui.separator();
+            }
+            if self.focus.is_some() {
+                ui.horizontal_wrapped(|ui| {
+                    ui.label(egui::RichText::new("SHOW").small().color(style::MUTED));
+                    for (mode, label) in [(FocusMode::Neighbours, "neighbours"), (FocusMode::Reaches, "everything it reaches"), (FocusMode::UsedBy, "everywhere it's used")] {
+                        if ui.selectable_label(self.focus_mode == mode, label).clicked() && self.focus_mode != mode {
+                            self.focus_mode = mode;
+                            self.pending_refocus = true;
+                        }
+                    }
+                });
+                ui.horizontal(|ui| {
+                    if ui.button("Back (Alt+Left)").clicked() {
+                        self.pending_back = true;
+                    }
+                    if ui.button("Clear").clicked() {
+                        self.pending_clear = true;
+                    }
+                });
                 ui.separator();
             }
             let Some(n) = self.selected else {
@@ -634,11 +703,7 @@ impl Project {
                     ui.label(c.to_string());
                     ui.end_row();
                 }
-                if let Some(r) = &self.reach {
-                    ui.label("Reached by selection");
-                    ui.label(if r.contains(n) { "yes" } else { "no" });
-                    ui.end_row();
-                }
+
             });
             let tags: Vec<&str> = g.tags(n).collect();
             if !tags.is_empty() {
@@ -660,7 +725,33 @@ impl Project {
             for i in (0..g.entries().len()).filter(|&i| g.entries()[i].node.to_native() == n) {
                 ui.colored_label(style::ENTRY, format!("Entry point: {}", g.entry_label(i)));
             }
+            if let Some(f) = self.focus.as_ref().filter(|f| f.node == n) {
+                for (title, list, color) in [("SET UP / CALLED BY", &f.callers, style::CALLER), ("CALLS", &f.calls, style::REACH)] {
+                    ui.add_space(8.0);
+                    ui.label(egui::RichText::new(format!("{title} ({})", list.len())).small().color(color));
+                    for &m in list.iter().take(LIST_LIMIT) {
+                        if ui.selectable_label(false, short_path(g, m)).on_hover_text(full_path(g, m)).clicked() {
+                            self.pending_go = Some(m);
+                        }
+                    }
+                    if list.len() > LIST_LIMIT {
+                        ui.label(egui::RichText::new(format!("… {} more", list.len() - LIST_LIMIT)).color(style::MUTED));
+                    }
+                }
+            }
         });
+        if std::mem::take(&mut self.pending_refocus) {
+            self.refocus();
+        }
+        if std::mem::take(&mut self.pending_back) {
+            self.go_back();
+        }
+        if std::mem::take(&mut self.pending_clear) {
+            self.clear_focus();
+        }
+        if let Some(m) = self.pending_go.take() {
+            self.set_focus(m, None, true, true);
+        }
     }
 
     fn search_window(&mut self, ctx: &egui::Context) {
@@ -725,13 +816,14 @@ impl Project {
                 Nav::None => {}
             }
         }
+        let mut clicked_box = None;
         if resp.clicked() {
             if let Some(p) = resp.interact_pointer_pos() {
                 let root = self.cache.shared(g, g.root());
                 if let Some(w) = minimap::world_at(&root, self.view, [p.x, p.y]) {
                     self.target = Some(Camera { center: w, zoom: self.cam.zoom });
                 } else {
-                    self.selected = self.scene.box_at([p.x, p.y]);
+                    clicked_box = self.scene.box_at([p.x, p.y]);
                 }
             }
         }
@@ -751,14 +843,17 @@ impl Project {
             ui.ctx().request_repaint();
         }
         let started = Instant::now();
-        self.scene = build_scene(g, &mut self.cache, &self.cam, self.view, &self.visual, self.reach.as_ref());
+        self.scene = build_scene(g, &mut self.cache, &self.cam, self.view, &self.visual, self.focus.as_ref().map(|f| &f.marks));
         self.scene_ms = started.elapsed().as_secs_f32() * 1000.0;
         self.paint(&painter);
         let root = self.cache.shared(g, g.root());
         minimap::draw(&painter, &root, &self.cam, self.view);
         self.paint_legend(&painter);
+        if let Some(n) = clicked_box {
+            self.set_focus(n, None, false, true);
+        }
         if let Some(n) = fly {
-            self.fly_to(n);
+            self.set_focus(n, None, true, true);
         }
     }
 
@@ -797,13 +892,20 @@ impl Project {
             style::kind_stroke(b.sub)
         };
         let fill = if external { Color32::from_rgb(43, 43, 43) } else { style::tint(style::depth_fill(b.depth, b.open), accent, if b.open { 0.05 } else { 0.12 }) };
+        let fill = if b.dimmed { style::tint(fill, style::BG, 0.6) } else { fill };
         painter.rect_filled(r, 3.0, fill);
         let mut stroke = Stroke::new(if b.open { 1.5 } else { 1.0 }, accent);
         if let Some(c) = b.tag_color {
             stroke.color = Color32::from_rgb(c[0], c[1], c[2]);
         }
-        if b.highlighted {
-            stroke = Stroke::new(2.0, style::REACH);
+        match b.mark {
+            Mark::Down => stroke = Stroke::new(2.0, style::REACH),
+            Mark::Up => stroke = Stroke::new(2.0, style::CALLER),
+            Mark::Focus => stroke = Stroke::new(1.5, style::ACCENT),
+            Mark::None => {}
+        }
+        if b.dimmed {
+            stroke.color = stroke.color.gamma_multiply(0.3);
         }
         if self.selected == Some(b.node) {
             stroke = Stroke::new(2.5, style::ACCENT);
@@ -828,9 +930,15 @@ impl Project {
         if e.test_only {
             dashed = true;
         }
-        let width = if e.highlighted { 2.2 } else { (1.0 + (e.weight as f32).log10() * 0.4).min(2.5) };
-        if e.highlighted {
-            color = style::REACH;
+        let marked = e.mark != Mark::None;
+        let width = if marked { 2.2 } else { (1.0 + (e.weight as f32).log10() * 0.4).min(2.5) };
+        match e.mark {
+            Mark::Down | Mark::Focus => color = style::REACH,
+            Mark::Up => color = style::CALLER,
+            Mark::None => {}
+        }
+        if e.dimmed {
+            color = color.gamma_multiply(0.2);
         }
         let wiring_only = e.weight == 0 && e.implements == 0 && e.wiring > 0;
         let implements_only = e.weight == 0 && e.implements > 0;
@@ -876,6 +984,7 @@ impl Project {
         let Some(b) = self.scene.boxes.iter().find(|b| b.node == l.node) else { return };
         let clip = painter.with_clip_rect(erect(b.rect).shrink(2.0).intersect(erect(self.view)));
         let color = if b.flags.contains(NodeFlags::EXTERNAL) { style::MUTED } else { style::BOX_TITLE };
+        let color = if b.dimmed { color.gamma_multiply(0.35) } else { color };
         clip.text(pos(l.pos), Align2::LEFT_TOP, &l.text, FontId::proportional(l.size), color);
         if let Some(d) = &l.detail {
             let mut detail = d.clone();
