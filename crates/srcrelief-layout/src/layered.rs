@@ -1,6 +1,8 @@
+use crate::order::{Ordering, minimize};
 use crate::{ChildBox, ContainerLayout, Direction, FrameBox, LaidEdge, LayoutOptions, Rect, box_size};
 use globset::Glob;
-use srcrelief_format::{ArchivedGraph, NodeId, SCOPE_MAIN, SCOPE_TEST};
+use srcrelief_format::{ArchivedGraph, Category, NodeId, SCOPE_MAIN, SCOPE_TEST, SubKind};
+use std::collections::HashSet;
 use srcrelief_rules::FrameRule;
 use std::collections::HashMap;
 
@@ -10,7 +12,6 @@ const GAP_X: f32 = 40.0;
 const GAP_Y: f32 = 80.0;
 const FRAME_PAD: f32 = 12.0;
 const FRAME_LABEL: f32 = 16.0;
-const BARYCENTER_SWEEPS: usize = 4;
 const MIN_LAYER_CAP: usize = 8;
 
 struct SibEdge {
@@ -18,17 +19,33 @@ struct SibEdge {
     b: usize,
     calls: u32,
     deps: u32,
+    wiring: u32,
+    implements: u32,
     undeclared: bool,
     test_only: bool,
+    layering: bool,
     back: bool,
 }
 
+fn entry_owners(g: &ArchivedGraph) -> HashSet<NodeId> {
+    let mut out = HashSet::new();
+    for i in 0..g.entries().len() {
+        if g.entry_category(i) == Category::Application && matches!(g.entry_kind(i), "main" | "framework-annotation") {
+            out.extend(g.path(g.entries()[i].node.to_native()));
+        }
+    }
+    out
+}
+
 pub fn layout_container(g: &ArchivedGraph, node: NodeId, frames: &[FrameRule], opts: &LayoutOptions) -> ContainerLayout {
-    let kids: Vec<NodeId> = g.children(node).filter(|&c| !g.flags(c).intersects(opts.hidden)).collect();
+    let hidden = opts.effective_hidden();
+    let kids: Vec<NodeId> = g.children(node).filter(|&c| !g.flags(c).intersects(hidden)).collect();
     let n = kids.len();
     if n == 0 {
         return ContainerLayout { size: [0.0, 0.0], header: HEADER, ..Default::default() };
     }
+    let owners = entry_owners(g);
+    let pinned: Vec<bool> = kids.iter().map(|k| owners.contains(k)).collect();
     let index: HashMap<NodeId, usize> = kids.iter().enumerate().map(|(i, &k)| (k, i)).collect();
     let mut edges: Vec<SibEdge> = Vec::new();
     for agg in g.aggregates(node) {
@@ -37,18 +54,26 @@ pub fn layout_container(g: &ArchivedGraph, node: NodeId, frames: &[FrameRule], o
         if test_only && !opts.include_test_edges {
             continue;
         }
-        edges.push(SibEdge { a, b, calls: agg.calls.to_native(), deps: agg.deps.to_native(), undeclared: agg.undeclared, test_only, back: false });
+        let (calls, deps, wiring, implements) = (agg.calls.to_native(), agg.deps.to_native(), agg.wiring.to_native(), agg.implements.to_native());
+        let structural = calls + deps + implements > 0;
+        if !structural && !opts.show_wiring {
+            continue;
+        }
+        let wiring = if opts.show_wiring { wiring } else { 0 };
+        edges.push(SibEdge { a, b, calls, deps, wiring, implements, undeclared: agg.undeclared, test_only, layering: structural && !pinned[b], back: false });
     }
 
     let mut out: Vec<Vec<usize>> = vec![Vec::new(); n];
     for (ei, e) in edges.iter().enumerate() {
-        out[e.a].push(ei);
+        if e.layering {
+            out[e.a].push(ei);
+        }
     }
     mark_back_edges(n, &mut edges, &out);
 
     let mut succ: Vec<Vec<usize>> = vec![Vec::new(); n];
     let mut indeg = vec![0usize; n];
-    for e in edges.iter().filter(|e| !e.back) {
+    for e in edges.iter().filter(|e| e.layering && !e.back) {
         succ[e.a].push(e.b);
         indeg[e.b] += 1;
     }
@@ -79,51 +104,29 @@ pub fn layout_container(g: &ArchivedGraph, node: NodeId, frames: &[FrameRule], o
     for i in 0..n {
         layers[layer[i] as usize].push(i);
     }
-    let mut pos = vec![0f32; n];
-    for l in &layers {
-        for (p, &v) in l.iter().enumerate() {
-            pos[v] = p as f32;
-        }
-    }
-    let mut neighbors: Vec<Vec<usize>> = vec![Vec::new(); n];
-    for e in &edges {
-        neighbors[e.a].push(e.b);
-        neighbors[e.b].push(e.a);
-    }
-    for sweep in 0..BARYCENTER_SWEEPS {
-        let order: Vec<usize> = if sweep % 2 == 0 { (1..layer_count).collect() } else { (0..layer_count.saturating_sub(1)).rev().collect() };
-        for li in order {
-            let reference = if sweep % 2 == 0 { li - 1 } else { li + 1 };
-            let mut keyed: Vec<(f32, usize)> = layers[li]
-                .iter()
-                .map(|&v| {
-                    let adj: Vec<f32> = neighbors[v].iter().filter(|&&w| layer[w] as usize == reference).map(|&w| pos[w]).collect();
-                    let key = if adj.is_empty() { pos[v] } else { adj.iter().sum::<f32>() / adj.len() as f32 };
-                    (key, v)
-                })
-                .collect();
-            keyed.sort_by(|x, y| x.0.total_cmp(&y.0).then(x.1.cmp(&y.1)));
-            layers[li] = keyed.into_iter().map(|(_, v)| v).collect();
-            for (p, &v) in layers[li].iter().enumerate() {
-                pos[v] = p as f32;
-            }
-        }
-    }
 
     let groups = group_names(g, &kids, frames);
-    for l in layers.iter_mut() {
-        let mut first_pos: HashMap<&str, f32> = HashMap::new();
-        for &v in l.iter() {
-            if let Some(gname) = groups[v].as_deref() {
-                first_pos.entry(gname).or_insert(pos[v]);
-            }
-        }
-        l.sort_by(|&x, &y| {
-            let kx = groups[x].as_deref().map_or(pos[x], |gname| first_pos[gname]);
-            let ky = groups[y].as_deref().map_or(pos[y], |gname| first_pos[gname]);
-            kx.total_cmp(&ky).then(pos[x].total_cmp(&pos[y]))
-        });
+    let mut group_ids: HashMap<&str, u32> = HashMap::new();
+    let group_keys: Vec<Option<u32>> = groups
+        .iter()
+        .map(|gname| gname.as_deref().map(|s| {
+            let next = group_ids.len() as u32;
+            *group_ids.entry(s).or_insert(next)
+        }))
+        .collect();
+    let mut pinned_names: Vec<(&str, usize)> = (0..n).filter(|&i| pinned[i]).map(|i| (g.name(kids[i]), i)).collect();
+    pinned_names.sort();
+    let mut first_keys: Vec<Option<u32>> = vec![None; n];
+    for (rank, (_, i)) in pinned_names.iter().enumerate() {
+        first_keys[*i] = Some(rank as u32);
     }
+    for i in 0..n {
+        if first_keys[i].is_none() && g.sub_kind(kids[i]) == SubKind::Constructor {
+            first_keys[i] = Some(u32::MAX);
+        }
+    }
+    let order_edges: Vec<(usize, usize)> = edges.iter().filter(|e| e.calls + e.deps + e.implements > 0).map(|e| (e.a, e.b)).collect();
+    let layers = minimize(&layers, &layer, &order_edges, &Ordering { first_keys, groups: group_keys, max_sweeps: 0 });
 
     let sizes: Vec<[f32; 2]> = kids.iter().map(|&k| box_size(g, k)).collect();
     let area: f32 = sizes.iter().map(|s| (s[0] + GAP_X) * (s[1] + GAP_Y)).sum();
@@ -181,7 +184,7 @@ pub fn layout_container(g: &ArchivedGraph, node: NodeId, frames: &[FrameRule], o
         .iter()
         .map(|e| {
             let (ra, rb) = (rects[e.a], rects[e.b]);
-            let dir = if e.back {
+            let dir = if e.back || layer[e.a] > layer[e.b] {
                 Direction::Up
             } else if layer[e.a] == layer[e.b] || row_of[&e.a] == row_of[&e.b] {
                 Direction::Sideways
@@ -200,17 +203,40 @@ pub fn layout_container(g: &ArchivedGraph, node: NodeId, frames: &[FrameRule], o
                     vec![from, to]
                 }
             };
-            LaidEdge { a: kids[e.a], b: kids[e.b], calls: e.calls, deps: e.deps, dir, undeclared: e.undeclared, test_only: e.test_only, points }
+            LaidEdge { a: kids[e.a], b: kids[e.b], calls: e.calls, deps: e.deps, wiring: e.wiring, implements: e.implements, dir, undeclared: e.undeclared, test_only: e.test_only, points }
         })
         .collect();
 
     ContainerLayout {
         size: [content_w + 2.0 * PAD, height.max(HEADER + 2.0 * PAD)],
         header: HEADER,
-        children: (0..n).map(|v| ChildBox { node: kids[v], rect: rects[v], layer: layer[v] }).collect(),
+        children: (0..n).map(|v| ChildBox { node: kids[v], rect: rects[v], layer: layer[v], pinned: pinned[v] }).collect(),
         edges: laid_edges,
         frames: frame_boxes,
     }
+}
+
+pub fn count_crossings(l: &ContainerLayout) -> usize {
+    let segs: Vec<([f32; 2], [f32; 2])> = l.edges.iter().filter_map(|e| Some((*e.points.first()?, *e.points.last()?))).collect();
+    let cross = |a: [f32; 2], b: [f32; 2], c: [f32; 2]| (b[0] - a[0]) * (c[1] - a[1]) - (b[1] - a[1]) * (c[0] - a[0]);
+    let near = |p: [f32; 2], q: [f32; 2]| (p[0] - q[0]).abs() < 1.0 && (p[1] - q[1]).abs() < 1.0;
+    let mut total = 0;
+    for i in 0..segs.len() {
+        for j in i + 1..segs.len() {
+            let ((p1, p2), (q1, q2)) = (segs[i], segs[j]);
+            if near(p1, q1) || near(p1, q2) || near(p2, q1) || near(p2, q2) {
+                continue;
+            }
+            let d1 = cross(q1, q2, p1);
+            let d2 = cross(q1, q2, p2);
+            let d3 = cross(p1, p2, q1);
+            let d4 = cross(p1, p2, q2);
+            if d1 * d2 < 0.0 && d3 * d4 < 0.0 {
+                total += 1;
+            }
+        }
+    }
+    total
 }
 
 fn toward(r: &Rect, x: f32) -> f32 {

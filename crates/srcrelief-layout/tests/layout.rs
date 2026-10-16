@@ -210,3 +210,180 @@ fn edge_endpoints_spread_along_box_sides() {
     let core = l.children.iter().find(|c| c.node == g.ids["core"]).unwrap().rect;
     assert!(ends.iter().all(|&x| x >= core.x && x <= core.right()));
 }
+
+fn with_entries(modules: &[&str], deps: &[(&str, &str)], apps: &[&str]) -> G {
+    let mut b = GraphBuilder::new("p");
+    let mut ids = HashMap::new();
+    for m in modules {
+        let id = b.add_node(b.root(), NodeKind::Module, SubKind::None, m, Lang::Java);
+        let pkg = b.add_node(id, NodeKind::Package, SubKind::None, "p", Lang::Java);
+        let t = b.add_node(pkg, NodeKind::Type, SubKind::Class, "T", Lang::Java);
+        b.set_span(t, "f", 1, 100);
+        let main = b.add_node(t, NodeKind::Member, SubKind::Method, "main", Lang::Java);
+        if apps.contains(m) {
+            b.add_entry(EntryPointSpec { node: main, kind: "main".into(), category: Category::Application, label: m.to_string(), parent: None, lifecycle: Lifecycle::Once, order: 0, rule: "r".into(), handoff: None });
+        }
+        ids.insert(m.to_string(), id);
+    }
+    for (a, c) in deps {
+        b.add_edge(ids[*a], ids[*c], EdgeKind::DependsOn, Scope::Main, Confidence::Resolved, EdgeFlags::NONE);
+    }
+    let dir = tempfile::tempdir().unwrap();
+    write_graph(&b.finish(), &dir.path().join("g.relief")).unwrap();
+    let file = ReliefFile::open(&dir.path().join("g.relief")).unwrap();
+    let g = file.graph();
+    let ids = g.children(g.root()).map(|c| (g.name(c).to_string(), c)).collect();
+    G { _dir: dir, file, ids }
+}
+
+#[test]
+fn pinned_entry_owners_take_the_top_row_alphabetically() {
+    let g = with_entries(&["util", "zeta", "core", "bot", "desktop", "client"], &[("bot", "desktop"), ("desktop", "client"), ("zeta", "core"), ("client", "core"), ("util", "core")], &["zeta", "bot", "desktop"]);
+    let gr = g.file.graph();
+    let l = layout_container(gr, gr.root(), &[], &LayoutOptions::default());
+    let row = |n: &str| l.children.iter().find(|c| c.node == g.ids[n]).unwrap();
+    for app in ["bot", "desktop", "zeta"] {
+        assert_eq!(row(app).layer, 0, "{app}");
+        assert!(row(app).pinned);
+    }
+    assert!(!row("util").pinned);
+    let mut top: Vec<&ChildBox> = l.children.iter().filter(|c| c.pinned).collect();
+    top.sort_by(|a, b| a.rect.x.total_cmp(&b.rect.x));
+    let names: Vec<&str> = top.iter().map(|c| gr.name(c.node)).collect();
+    assert_eq!(names, ["bot", "desktop", "zeta"]);
+    let bot_desktop = l.edges.iter().find(|e| e.a == g.ids["bot"] && e.b == g.ids["desktop"]).unwrap();
+    assert_eq!(bot_desktop.dir, Direction::Sideways);
+    assert!(row("client").layer >= 1 && row("core").layer > row("client").layer);
+}
+
+#[test]
+fn pinned_edges_do_not_hang() {
+    let g = with_entries(&["a", "b", "c"], &[("a", "b"), ("b", "a"), ("b", "c"), ("c", "a")], &["a", "b"]);
+    let gr = g.file.graph();
+    let l = layout_container(gr, gr.root(), &[], &LayoutOptions::default());
+    assert_eq!(l.children.len(), 3);
+    assert!(l.children.iter().filter(|c| c.pinned).all(|c| c.layer == 0));
+}
+
+fn wired_graph() -> G {
+    let mut b = GraphBuilder::new("p");
+    let mut ids = HashMap::new();
+    for m in ["cmd", "billing", "auth", "core"] {
+        let id = b.add_node(b.root(), NodeKind::Package, SubKind::None, m, Lang::Go);
+        let f = b.add_node(id, NodeKind::Member, SubKind::Function, "f", Lang::Go);
+        b.set_span(f, "f", 1, 40);
+        ids.insert(m, (id, f));
+    }
+    let wire = b.add_node(ids["cmd"].0, NodeKind::Member, SubKind::Function, "initializeApp", Lang::Go);
+    b.add_flags(wire, NodeFlags::WIRING);
+    for m in ["billing", "auth", "core"] {
+        b.add_edge(wire, ids[m].1, EdgeKind::Calls, Scope::Main, Confidence::Resolved, EdgeFlags::NONE);
+    }
+    b.add_edge(ids["billing"].1, ids["core"].1, EdgeKind::Calls, Scope::Main, Confidence::Resolved, EdgeFlags::NONE);
+    b.add_edge(ids["auth"].1, ids["billing"].1, EdgeKind::Calls, Scope::Main, Confidence::Resolved, EdgeFlags::NONE);
+    let dir = tempfile::tempdir().unwrap();
+    write_graph(&b.finish(), &dir.path().join("g.relief")).unwrap();
+    let file = ReliefFile::open(&dir.path().join("g.relief")).unwrap();
+    let g = file.graph();
+    let ids = g.children(g.root()).map(|c| (g.name(c).to_string(), c)).collect();
+    G { _dir: dir, file, ids }
+}
+
+#[test]
+fn wiring_never_moves_boxes() {
+    let g = wired_graph();
+    let gr = g.file.graph();
+    let hidden = layout_container(gr, gr.root(), &[], &LayoutOptions::default());
+    assert!(hidden.edges.iter().all(|e| e.wiring == 0), "wiring arrows hidden by default");
+    let shown = layout_container(gr, gr.root(), &[], &LayoutOptions { show_wiring: true, ..Default::default() });
+    assert_eq!(shown.edges.iter().filter(|e| e.wiring > 0).count(), 3);
+    let rects = |l: &ContainerLayout| -> Vec<(NodeId, u32)> {
+        let mut v: Vec<(NodeId, u32)> = l.children.iter().map(|c| (c.node, c.layer)).collect();
+        v.sort();
+        v
+    };
+    assert_eq!(rects(&hidden), rects(&shown));
+    let cmd = hidden.children.iter().find(|c| c.node == g.ids["cmd"]).unwrap();
+    assert_eq!(cmd.layer, 0);
+    let core = hidden.children.iter().find(|c| c.node == g.ids["core"]).unwrap();
+    assert_eq!(core.layer, 2, "auth -> billing -> core, wiring does not stretch it");
+}
+
+#[test]
+fn constructors_first_in_their_layer() {
+    let mut b = GraphBuilder::new("p");
+    let t = b.add_node(b.root(), NodeKind::Type, SubKind::Struct, "checkoutService", Lang::Go);
+    for (name, sub) in [("Run", SubKind::Method), ("Alpha", SubKind::Method), ("NewCheckoutService", SubKind::Constructor)] {
+        let m = b.add_node(t, NodeKind::Member, sub, name, Lang::Go);
+        b.set_span(m, "f", 1, 5);
+    }
+    let dir = tempfile::tempdir().unwrap();
+    write_graph(&b.finish(), &dir.path().join("g")).unwrap();
+    let f = ReliefFile::open(&dir.path().join("g")).unwrap();
+    let g = f.graph();
+    let t = g.children(g.root()).start;
+    let l = layout_container(g, t, &[], &LayoutOptions::default());
+    let leftmost = l.children.iter().min_by(|a, b| (a.layer, a.rect.y as i64, a.rect.x as i64).cmp(&(b.layer, b.rect.y as i64, b.rect.x as i64))).unwrap();
+    assert_eq!(g.name(leftmost.node), "NewCheckoutService");
+}
+
+#[test]
+fn swap_removes_obvious_crossing() {
+    let mut b = GraphBuilder::new("p");
+    let t = b.add_node(b.root(), NodeKind::Type, SubKind::Class, "TickClock", Lang::Java);
+    let mut ids = HashMap::new();
+    for name in ["<init>", "tick", "getRate", "getElapsed", "elapsedMillis", "advance", "setRate", "awaitReady"] {
+        let m = b.add_node(t, NodeKind::Member, SubKind::Method, name, Lang::Java);
+        b.set_span(m, "f", 1, 6);
+        ids.insert(name, m);
+    }
+    for (a, c) in [("<init>", "setRate"), ("tick", "advance"), ("tick", "elapsedMillis"), ("elapsedMillis", "awaitReady")] {
+        b.add_edge(ids[a], ids[c], EdgeKind::Calls, Scope::Main, Confidence::Resolved, EdgeFlags::NONE);
+    }
+    let dir = tempfile::tempdir().unwrap();
+    write_graph(&b.finish(), &dir.path().join("g")).unwrap();
+    let f = ReliefFile::open(&dir.path().join("g")).unwrap();
+    let g = f.graph();
+    let t = g.children(g.root()).start;
+    let l = layout_container(g, t, &[], &LayoutOptions::default());
+    assert_eq!(count_crossings(&l), 0);
+}
+
+#[test]
+fn random_graphs_have_30_percent_fewer_crossings() {
+    use srcrelief_layout::order::{Ordering, barycenter_poc, crossings, minimize};
+    let mut seed: u64 = 42;
+    let mut rnd = |n: usize| {
+        seed ^= seed << 13;
+        seed ^= seed >> 7;
+        seed ^= seed << 17;
+        (seed % n as u64) as usize
+    };
+    let (mut before, mut after) = (0usize, 0usize);
+    for _ in 0..40 {
+        let layers_n = 4 + rnd(5);
+        let mut layers: Vec<Vec<usize>> = Vec::new();
+        let mut layer_of = Vec::new();
+        let mut next = 0;
+        for l in 0..layers_n {
+            let width = 3 + rnd(8);
+            layers.push((next..next + width).collect());
+            layer_of.extend(std::iter::repeat_n(l as u32, width));
+            next += width;
+        }
+        let mut edges = Vec::new();
+        for l in 0..layers_n - 1 {
+            for &u in &layers[l] {
+                for _ in 0..1 + rnd(3) {
+                    let v = layers[l + 1][rnd(layers[l + 1].len())];
+                    edges.push((u, v));
+                }
+            }
+        }
+        let poc = barycenter_poc(&layers, &layer_of, &edges);
+        let best = minimize(&layers, &layer_of, &edges, &Ordering::default());
+        before += crossings(&poc, &layer_of, &edges);
+        after += crossings(&best, &layer_of, &edges);
+    }
+    assert!(after * 10 <= before * 7, "crossings {before} -> {after}");
+}

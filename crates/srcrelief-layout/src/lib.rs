@@ -1,7 +1,8 @@
 mod layered;
+pub mod order;
 mod size;
 
-pub use layered::layout_container;
+pub use layered::{count_crossings, layout_container};
 pub use size::box_size;
 
 use srcrelief_format::{ArchivedGraph, NodeFlags, NodeId};
@@ -68,11 +69,18 @@ pub enum Direction {
 pub struct LayoutOptions {
     pub include_test_edges: bool,
     pub hidden: NodeFlags,
+    pub show_wiring: bool,
 }
 
 impl Default for LayoutOptions {
     fn default() -> Self {
-        LayoutOptions { include_test_edges: false, hidden: NodeFlags::EXTERNAL | NodeFlags::MOCK | NodeFlags::TEST }
+        LayoutOptions { include_test_edges: false, hidden: NodeFlags::EXTERNAL | NodeFlags::MOCK | NodeFlags::TEST | NodeFlags::WIRING, show_wiring: false }
+    }
+}
+
+impl LayoutOptions {
+    pub fn effective_hidden(&self) -> NodeFlags {
+        if self.show_wiring { NodeFlags(self.hidden.0 & !NodeFlags::WIRING.0) } else { self.hidden }
     }
 }
 
@@ -81,6 +89,7 @@ pub struct ChildBox {
     pub node: NodeId,
     pub rect: Rect,
     pub layer: u32,
+    pub pinned: bool,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -89,6 +98,8 @@ pub struct LaidEdge {
     pub b: NodeId,
     pub calls: u32,
     pub deps: u32,
+    pub wiring: u32,
+    pub implements: u32,
     pub dir: Direction,
     pub undeclared: bool,
     pub test_only: bool,
