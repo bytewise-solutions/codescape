@@ -1,0 +1,7 @@
+name = "dagger"
+version = "0.1.0"
+languages = ["java"]
+
+[[rule]]
+id = "dagger.wiring"
+wiring = { annotations = ["Component", "Subcomponent", "Module", "Provides", "Binds", "BindsInstance", "IntoSet", "IntoMap"], type_prefixes = ["Dagger"] }

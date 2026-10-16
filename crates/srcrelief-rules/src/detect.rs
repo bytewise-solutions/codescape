@@ -30,6 +30,7 @@ struct Ctx<'a> {
     mains: Vec<MainEntry>,
     reach: HashMap<NodeId, usize>,
     handled: HashSet<NodeId>,
+    test_files: HashSet<&'a str>,
     stats: DetectStats,
 }
 
@@ -42,6 +43,7 @@ pub fn apply_detection(packs: &Packs, facts: &ProjectFacts, sources: &dyn Fn(&st
         mains: Vec::new(),
         reach: HashMap::new(),
         handled: HashSet::new(),
+        test_files: HashSet::new(),
         stats: DetectStats::default(),
     };
     for f in &facts.files {
@@ -51,6 +53,7 @@ pub fn apply_detection(packs: &Packs, facts: &ProjectFacts, sources: &dyn Fn(&st
         }
     }
     let before = b.entries().len();
+    cx.classify(sources, b);
     cx.name_tags(b);
     cx.dispatch(b);
     cx.mains(b);
@@ -105,6 +108,105 @@ impl<'a> Ctx<'a> {
         facts.files.iter().flat_map(|f| f.functions.iter().map(move |func| (f, func)))
     }
 
+    fn classify(&mut self, sources: &dyn Fn(&str) -> Option<Vec<u8>>, b: &mut GraphBuilder) {
+        let facts = self.facts;
+        let mut wiring_files: HashSet<&'a str> = HashSet::new();
+        let mut wiring_calls: HashSet<(NodeId, NodeId)> = HashSet::new();
+        let mut wiring_nodes: Vec<NodeId> = Vec::new();
+        for file in &facts.files {
+            let imports = |prefixes: &[String]| file.imports.iter().any(|i| prefixes.iter().any(|p| i.path == *p || i.path.starts_with(&format!("{p}/")) || i.path.starts_with(&format!("{p}."))));
+            let dirs: Vec<&str> = file.rel_path.split('/').collect();
+            let dirs = &dirs[..dirs.len().saturating_sub(1)];
+            for (_, rule) in self.packs.rules_for(file.lang) {
+                match rule {
+                    Rule::TestCode { file_imports, dir_names } => {
+                        if imports(file_imports) || dirs.iter().any(|d| dir_names.iter().any(|n| n == d)) {
+                            self.test_files.insert(file.rel_path.as_str());
+                        }
+                    }
+                    Rule::Wiring { file_markers, file_imports, calls, annotations, type_prefixes } => {
+                        let marked = !file_markers.is_empty()
+                            && sources(&file.rel_path).is_some_and(|src| {
+                                let head = String::from_utf8_lossy(&src[..src.len().min(1024)]).into_owned();
+                                file_markers.iter().any(|m| head.contains(m.as_str()))
+                            });
+                        if marked || imports(file_imports) {
+                            wiring_files.insert(file.rel_path.as_str());
+                        }
+                        for t in &file.types {
+                            let simple = t.fqn.rsplit('.').next().unwrap_or(&t.fqn);
+                            if t.annotations.iter().any(|a| annotations.contains(&a.name)) || type_prefixes.iter().any(|p| simple.starts_with(p.as_str())) {
+                                wiring_nodes.push(t.node);
+                            }
+                        }
+                        for f in &file.functions {
+                            if f.annotations.iter().any(|a| annotations.contains(&a.name)) {
+                                wiring_nodes.push(f.node);
+                            }
+                        }
+                        for c in &file.calls {
+                            let qualified = c.receiver_var.as_ref().map(|r| format!("{r}.{}", c.method));
+                            let by_name = qualified.as_ref().is_some_and(|q| calls.contains(q));
+                            let by_prefix = c.receiver_var.as_ref().into_iter().chain(c.receiver_type.as_ref()).any(|r| {
+                                let simple = r.rsplit('.').next().unwrap_or(r);
+                                type_prefixes.iter().any(|p| simple.starts_with(p.as_str()))
+                            });
+                            if by_name || by_prefix {
+                                if let Some(t) = c.target {
+                                    wiring_calls.insert((c.caller, t));
+                                }
+                            }
+                        }
+                    }
+                    _ => {}
+                }
+            }
+        }
+        for file in &facts.files {
+            let flag = if self.test_files.contains(file.rel_path.as_str()) {
+                NodeFlags::TEST
+            } else if wiring_files.contains(file.rel_path.as_str()) {
+                NodeFlags::WIRING
+            } else {
+                continue;
+            };
+            for t in &file.types {
+                b.add_flags(t.node, flag);
+            }
+            for f in &file.functions {
+                b.add_flags(f.node, flag);
+            }
+        }
+        for n in wiring_nodes {
+            b.add_flags(n, NodeFlags::WIRING);
+        }
+        let mut importers: HashMap<(NodeId, NodeId), (bool, bool)> = HashMap::new();
+        for file in &facts.files {
+            let Some(p) = file.package else { continue };
+            let wiring = wiring_files.contains(file.rel_path.as_str());
+            let test = self.test_files.contains(file.rel_path.as_str()) || file.is_test;
+            for &q in &file.import_targets {
+                let slot = importers.entry((p, q)).or_insert((true, true));
+                slot.0 &= wiring;
+                slot.1 &= test;
+            }
+        }
+        for e in b.edges_mut() {
+            if wiring_calls.contains(&(e.from, e.to)) {
+                e.flags |= EdgeFlags::WIRING;
+            }
+            if e.kind == EdgeKind::DependsOn {
+                if let Some(&(all_wiring, all_test)) = importers.get(&(e.from, e.to)) {
+                    if all_test {
+                        e.scope = Scope::Test;
+                    } else if all_wiring {
+                        e.flags |= EdgeFlags::WIRING;
+                    }
+                }
+            }
+        }
+    }
+
     fn name_tags(&mut self, b: &mut GraphBuilder) {
         for (_, rule) in self.packs.rules() {
             let Rule::NameTag { kinds, pattern, tag } = rule else { continue };
@@ -143,7 +245,7 @@ impl<'a> Ctx<'a> {
     }
 
     fn category_for(&self, file: &FileFacts, default: Category) -> Category {
-        if file.is_test {
+        if file.is_test || self.test_files.contains(file.rel_path.as_str()) {
             return Category::Test;
         }
         let mut cat = if file.is_dev { Category::DevTool } else { default };

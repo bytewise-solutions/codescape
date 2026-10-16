@@ -9,9 +9,11 @@ const BUILTINS: &[(&str, &str)] = &[
     ("java-core", include_str!("../../../rules/java-core/pack.toml")),
     ("libgdx", include_str!("../../../rules/libgdx/pack.toml")),
     ("spring-boot", include_str!("../../../rules/spring-boot/pack.toml")),
+    ("dagger", include_str!("../../../rules/dagger/pack.toml")),
     ("go-core", include_str!("../../../rules/go-core/pack.toml")),
     ("fiber", include_str!("../../../rules/fiber/pack.toml")),
     ("rabbitmq-amqp091", include_str!("../../../rules/rabbitmq-amqp091/pack.toml")),
+    ("google-wire", include_str!("../../../rules/google-wire/pack.toml")),
     ("default-visuals", include_str!("../../../rules/default-visuals/pack.toml")),
 ];
 
@@ -35,6 +37,8 @@ pub enum Rule {
     Dispatch { from_override: String, to_override: String },
     NameTag { kinds: Vec<String>, pattern: String, tag: String },
     Query { language: Lang, query: String, capture: String, kind: String, label: String },
+    Wiring { file_markers: Vec<String>, file_imports: Vec<String>, calls: Vec<String>, annotations: Vec<String>, type_prefixes: Vec<String> },
+    TestCode { file_imports: Vec<String>, dir_names: Vec<String> },
 }
 
 #[derive(Clone, Debug)]
@@ -89,6 +93,32 @@ struct RuleFile {
     dispatch: Option<DispatchFile>,
     name_tag: Option<NameTagFile>,
     query: Option<QueryFile>,
+    wiring: Option<WiringFile>,
+    test_code: Option<TestCodeFile>,
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct WiringFile {
+    #[serde(default)]
+    file_markers: Vec<String>,
+    #[serde(default)]
+    file_imports: Vec<String>,
+    #[serde(default)]
+    calls: Vec<String>,
+    #[serde(default)]
+    annotations: Vec<String>,
+    #[serde(default)]
+    type_prefixes: Vec<String>,
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct TestCodeFile {
+    #[serde(default)]
+    file_imports: Vec<String>,
+    #[serde(default)]
+    dir_names: Vec<String>,
 }
 
 #[derive(Deserialize)]
@@ -296,6 +326,8 @@ impl RuleFile {
             self.dispatch.is_some(),
             self.name_tag.is_some(),
             self.query.is_some(),
+            self.wiring.is_some(),
+            self.test_code.is_some(),
         ]
         .iter()
         .filter(|b| **b)
@@ -350,6 +382,12 @@ impl RuleFile {
         if let Some(n) = self.name_tag {
             regex::Regex::new(&n.pattern).with_context(|| format!("bad pattern in rule `{}`", self.id))?;
             return Ok(Rule::NameTag { kinds: n.kinds, pattern: n.pattern, tag: n.tag });
+        }
+        if let Some(w) = self.wiring {
+            return Ok(Rule::Wiring { file_markers: w.file_markers, file_imports: w.file_imports, calls: w.calls, annotations: w.annotations, type_prefixes: w.type_prefixes });
+        }
+        if let Some(t) = self.test_code {
+            return Ok(Rule::TestCode { file_imports: t.file_imports, dir_names: t.dir_names });
         }
         let q = self.query.unwrap();
         let dir = dir.ok_or_else(|| anyhow!("rule `{}`: query rules need a pack directory", self.id))?;
