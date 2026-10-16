@@ -176,10 +176,10 @@ pub struct Edge {
 pub struct Agg {
     pub a: u32,
     pub b: u32,
-    pub calls: u32,
-    pub deps: u32,
-    pub wiring: u32,
-    pub implements: u32,
+    pub calls: u16,
+    pub deps: u16,
+    pub wiring: u16,
+    pub implements: u16,
     pub scope_mask: u8,
     pub undeclared: bool,
 }

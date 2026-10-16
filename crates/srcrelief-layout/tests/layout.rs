@@ -413,3 +413,16 @@ fn squeezed_layers_keep_forward_edges_down() {
     assert!(l.children.iter().map(|c| c.layer).max().unwrap() < 11, "a 12-long chain is squeezed");
     assert!(l.edges.iter().all(|e| e.dir == Direction::Down), "{:?}", l.edges.iter().map(|e| e.dir).collect::<Vec<_>>());
 }
+
+#[test]
+fn frames_skip_non_members_between_pinned_and_unpinned_members() {
+    let g = with_entries(&["android", "server-chat", "server-game", "server-world", "core"], &[("server-game", "core"), ("server-world", "core"), ("android", "core"), ("server-chat", "core")], &["server-game", "server-world"]);
+    let gr = g.file.graph();
+    let l = layout_container(gr, gr.root(), &[FrameRule::AutoPrefix { sep: "-".into() }], &LayoutOptions::default());
+    let android = l.child(g.ids["android"]).unwrap().rect;
+    assert!(l.frames.iter().all(|f| !f.rect.intersects(&android)), "android sits between server members but is not one");
+    for m in ["server-chat", "server-game", "server-world"] {
+        let r = l.child(g.ids[m]).unwrap().rect;
+        assert!(l.frames.iter().any(|f| f.rect.contains_rect(&r)), "{m} framed");
+    }
+}

@@ -188,6 +188,7 @@ fn open_rejects_wrong_version_and_truncation() {
 fn records_are_compact() {
     assert!(std::mem::size_of::<ArchivedNode>() <= 40, "node is {} bytes", std::mem::size_of::<ArchivedNode>());
     assert!(std::mem::size_of::<ArchivedEdge>() <= 12, "edge is {} bytes", std::mem::size_of::<ArchivedEdge>());
+    assert!(std::mem::size_of::<ArchivedAgg>() <= 20, "aggregate is {} bytes", std::mem::size_of::<ArchivedAgg>());
 }
 
 #[test]
@@ -315,4 +316,16 @@ fn constructor_sub_kind_roundtrips() {
     let g = file.graph();
     let t = find(g, g.root(), "T");
     assert_eq!(g.sub_kind(find(g, t, "NewT")), SubKind::Constructor);
+}
+
+#[test]
+fn aggregate_counts_saturate() {
+    let (mut b, [_, _, _, f, g, _]) = two_module_graph();
+    let (t, u) = (b.parent(f).unwrap(), b.parent(g).unwrap());
+    for _ in 0..70_000 {
+        b.add_edge(t, u, EdgeKind::Calls, Scope::Main, Confidence::Resolved, EdgeFlags::NONE);
+    }
+    let (_d, file) = roundtrip(b);
+    let gr = file.graph();
+    assert_eq!(gr.aggregates(gr.root())[0].calls.to_native(), u16::MAX);
 }

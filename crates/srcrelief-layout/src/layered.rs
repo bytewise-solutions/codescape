@@ -54,7 +54,7 @@ pub fn layout_container(g: &ArchivedGraph, node: NodeId, frames: &[FrameRule], o
         if test_only && !opts.include_test_edges {
             continue;
         }
-        let (calls, deps, wiring, implements) = (agg.calls.to_native(), agg.deps.to_native(), agg.wiring.to_native(), agg.implements.to_native());
+        let (calls, deps, wiring, implements) = (agg.calls.to_native() as u32, agg.deps.to_native() as u32, agg.wiring.to_native() as u32, agg.implements.to_native() as u32);
         let structural = calls + deps + implements > 0;
         if !structural && !opts.show_wiring {
             continue;
@@ -171,13 +171,20 @@ pub fn layout_container(g: &ArchivedGraph, node: NodeId, frames: &[FrameRule], o
 
     let mut frame_boxes: Vec<FrameBox> = Vec::new();
     for (_, row) in &rows {
-        let mut labels: Vec<&str> = row.iter().filter_map(|&v| groups[v].as_deref()).collect();
-        labels.dedup();
-        for label in labels {
-            let members: Vec<usize> = row.iter().copied().filter(|&v| groups[v].as_deref() == Some(label)).collect();
-            let bbox = members.iter().skip(1).fold(rects[members[0]], |acc, &v| acc.union(&rects[v]));
+        let mut start = 0;
+        while start < row.len() {
+            let Some(label) = groups[row[start]].as_deref() else {
+                start += 1;
+                continue;
+            };
+            let mut end = start + 1;
+            while end < row.len() && groups[row[end]].as_deref() == Some(label) {
+                end += 1;
+            }
+            let bbox = row[start + 1..end].iter().fold(rects[row[start]], |acc, &v| acc.union(&rects[v]));
             let r = bbox.expand(FRAME_PAD);
             frame_boxes.push(FrameBox { label: label.to_string(), rect: Rect::new(r.x, r.y - FRAME_LABEL, r.w, r.h + FRAME_LABEL) });
+            start = end;
         }
     }
 

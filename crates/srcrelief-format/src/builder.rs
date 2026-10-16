@@ -305,15 +305,17 @@ impl GraphBuilder {
                 .entry((container, a, b))
                 .or_insert(Agg { a, b, calls: 0, deps: 0, wiring: 0, implements: 0, scope_mask: 0, undeclared: false });
             let kind = EdgeKind::from_u8(e.kind);
-            if EdgeFlags(e.flags).contains(EdgeFlags::WIRING) {
-                agg.wiring += e.count;
+            let add = e.count.min(u16::MAX as u32) as u16;
+            let slot = if EdgeFlags(e.flags).contains(EdgeFlags::WIRING) {
+                &mut agg.wiring
             } else if matches!(kind, EdgeKind::Implements | EdgeKind::Inherits) {
-                agg.implements += e.count;
+                &mut agg.implements
             } else if kind.is_call_like() {
-                agg.calls += e.count;
+                &mut agg.calls
             } else {
-                agg.deps += e.count;
-            }
+                &mut agg.deps
+            };
+            *slot = slot.saturating_add(add);
             agg.scope_mask |= Scope::from_u8(e.scope).mask();
             agg.undeclared |= EdgeFlags(e.flags).contains(EdgeFlags::UNDECLARED);
         }

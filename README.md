@@ -29,8 +29,9 @@ Nothing is written into the project. The index lives in the user cache folder
 
 | Action | How |
 |---|---|
-| Pan | drag |
-| Zoom | mouse wheel or pinch, around the pointer |
+| Pan | drag, or two-finger swipe on a trackpad |
+| Scroll | mouse wheel (vertical), `Shift` + wheel (horizontal) |
+| Zoom | `Ctrl` + wheel or pinch, around the pointer |
 | Zoom into a box | double-click it |
 | Inspect a box | click it (right panel) |
 | Trace an entry point | click it in the left panel: everything it reaches turns green |
@@ -39,6 +40,21 @@ Nothing is written into the project. The index lives in the user cache folder
 
 A container opens to show its children once it is big enough; arrows inside appear once the children are large
 enough to read.
+
+### What you see
+
+- **Entry points on top.** Inside every container, the children that hold an application entry point sit on the
+  top row, alphabetically, so a project looks the same from one day to the next. Everything else layers below by
+  dependency; red arrows point upward (a layering violation), amber ones join two boxes of the same layer.
+- **Box colours by kind:** interface (teal), class/struct (blue), enum/record (violet), function/method (grey),
+  constructor (dim blue). A legend sits above the minimap.
+- **Implements / inherits** arrows are dotted with a hollow triangle at the interface, like UML.
+- **Constructors live inside their type.** A Go `func NewX(...) *X` is shown inside `X`, not as a box of its own.
+- **Dependency injection is set aside.** Code recognised as wiring (Google Wire's generated injectors and provider
+  sets, Dagger components/modules) is hidden with its arrows, so it never changes the layering. Tick **wiring** in
+  the status bar to show it muted, with faint dotted arrows. Highlighting an entry point still follows wiring.
+- **Test code is out:** test sources, test helpers (files importing `testing`/testify or JUnit/Mockito, folders such
+  as `testutil`/`testdata`) and test mains are not drawn or listed. Tick **test deps** to see test-only dependencies.
 
 ### Index from the command line
 
@@ -79,7 +95,8 @@ category = "dev-tool"          # application, dev-tool or test
 
 Framework knowledge (which methods a framework calls back, what registers an HTTP route, how things are coloured)
 lives in **rule packs**, not in SrcRelief's code. The built-in packs in `rules/` use exactly the format you would
-write yourself: `java-core`, `libgdx`, `spring-boot`, `go-core`, `fiber`, `rabbitmq-amqp091`, `default-visuals`.
+write yourself: `java-core`, `libgdx`, `spring-boot`, `dagger`, `go-core`, `fiber`, `rabbitmq-amqp091`,
+`google-wire`, `default-visuals`.
 
 Packs load in this order, later ones overriding earlier rules with the same `id`:
 built-in → `~/.config/srcrelief/rules/<pack>/` → `<project>/.srcrelief/rules/<pack>/` → `[packs] dirs`.
@@ -120,6 +137,8 @@ Each rule has exactly one matcher:
 | `dispatch = { from_override, to_override }` | an implied call the framework makes (e.g. `Game.render` → `Screen.render`) |
 | `name_tag = { kinds, pattern, tag }` | tags on modules, packages, types or members |
 | `query = { language, file, capture, kind, label }` | entry points from a tree-sitter query |
+| `wiring = { file_markers, file_imports, calls, annotations, type_prefixes }` | marks dependency-injection code as wiring |
+| `test_code = { file_imports, dir_names }` | marks test helpers as test code |
 
 Lifecycles: `once`, `repeating`, `on-event`, `later`, `unknown`. Visual rules (`tag_style`, `frame` with
 `auto_prefix` or `pattern`, `hide_tags`, `fold_tags`, `entry_group`) apply without re-indexing; detection rules
