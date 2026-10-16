@@ -1,0 +1,11 @@
+name = "go-core"
+version = "0.1.0"
+languages = ["go"]
+
+[[rule]]
+id = "go-core.main"
+main = { category = "application" }
+
+[[rule]]
+id = "go-core.tools"
+path = { glob = "**/tools/**", category = "dev-tool" }

@@ -1,0 +1,15 @@
+name = "java-core"
+version = "0.1.0"
+languages = ["java"]
+
+[[rule]]
+id = "java-core.main"
+main = { category = "application" }
+
+[[rule]]
+id = "java-core.tools"
+path = { glob = "**/tools/**", category = "dev-tool" }
+
+[[rule]]
+id = "java-core.tests"
+path = { glob = "**/src/test/**", category = "test" }

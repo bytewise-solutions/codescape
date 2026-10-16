@@ -1,0 +1,7 @@
+name = "fiber"
+version = "0.1.0"
+languages = ["go"]
+
+[[rule]]
+id = "fiber.route"
+call_route = { methods = ["Get", "Post", "Put", "Patch", "Delete", "Head", "Options", "All"], group_methods = ["Group", "Route"], receiver_types = ["fiber.Router", "*fiber.App", "fiber.App", "*fiber.Group", "fiber.Group"], file_imports = "github.com/gofiber/fiber", path_arg = 0, handler_arg = "last", label = "{METHOD} {path}" }

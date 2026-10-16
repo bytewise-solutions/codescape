@@ -1,0 +1,47 @@
+name = "default-visuals"
+version = "0.1.0"
+
+[visual]
+hide_tags = []
+fold_tags = ["noise:logging"]
+
+[[visual.frame]]
+auto_prefix = "-"
+
+[[visual.tag_style]]
+tag = "undeclared"
+color = [233, 162, 59]
+badge = "undeclared"
+
+[[visual.tag_style]]
+tag = "external"
+color = [125, 133, 148]
+
+[[visual.entry_group]]
+label = "Applications"
+kinds = ["main", "framework-annotation", "framework-callback"]
+categories = ["application"]
+
+[[visual.entry_group]]
+label = "HTTP routes"
+kinds = ["http-route"]
+collapsed = true
+
+[[visual.entry_group]]
+label = "Message handlers"
+kinds = ["message-handler"]
+collapsed = true
+
+[[visual.entry_group]]
+label = "Dev tools"
+categories = ["dev-tool"]
+collapsed = true
+
+[[visual.entry_group]]
+label = "Tests"
+categories = ["test"]
+collapsed = true
+
+[[visual.entry_group]]
+label = "Other"
+collapsed = true

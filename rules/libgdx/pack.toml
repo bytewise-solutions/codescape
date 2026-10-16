@@ -1,0 +1,22 @@
+name = "libgdx"
+version = "0.1.0"
+languages = ["java"]
+
+[[rule]]
+id = "libgdx.application"
+supertype = { types = ["com.badlogic.gdx.Game", "com.badlogic.gdx.ApplicationAdapter", "com.badlogic.gdx.ApplicationListener"], callbacks = [
+    { method = "create", lifecycle = "once", order = 1 },
+    { method = "resize", lifecycle = "on-event", order = 2 },
+    { method = "render", lifecycle = "repeating", order = 3 },
+    { method = "pause", lifecycle = "later", order = 4 },
+    { method = "resume", lifecycle = "later", order = 5 },
+    { method = "dispose", lifecycle = "later", order = 6 },
+] }
+
+[[rule]]
+id = "libgdx.backends"
+instantiates = { types = ["com.badlogic.gdx.backends.lwjgl3.Lwjgl3Application", "com.badlogic.gdx.backends.headless.HeadlessApplication"], handoff = "libGDX" }
+
+[[rule]]
+id = "libgdx.screen-dispatch"
+dispatch = { from_override = "com.badlogic.gdx.Game.render", to_override = "com.badlogic.gdx.Screen.render" }

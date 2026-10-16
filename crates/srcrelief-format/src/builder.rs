@@ -194,6 +194,11 @@ impl GraphBuilder {
         (f != NONE).then(|| self.strings.list[f as usize].as_str())
     }
 
+    pub fn span(&self, id: NodeId) -> (u32, u32) {
+        let n = &self.nodes[id as usize];
+        (n.start_line, n.end_line)
+    }
+
     pub fn set_stats(&mut self, stats: Stats) {
         self.stats = stats;
     }

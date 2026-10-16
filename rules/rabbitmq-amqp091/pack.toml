@@ -1,0 +1,7 @@
+name = "rabbitmq-amqp091"
+version = "0.1.0"
+languages = ["go"]
+
+[[rule]]
+id = "rabbitmq-amqp091.consume"
+call_handler = { methods = ["Consume", "ConsumeWithContext"], receiver_types = ["*amqp.Channel", "amqp.Channel", "*amqp091.Channel"], file_imports = "github.com/rabbitmq/amqp091-go", kind = "message-handler", label = "consume {arg0} in {caller}" }

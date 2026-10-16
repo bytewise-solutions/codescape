@@ -1,0 +1,31 @@
+name = "spring-boot"
+version = "0.1.0"
+languages = ["java"]
+
+[[rule]]
+id = "spring-boot.application"
+annotation = { names = ["SpringBootApplication"], handoff = "Spring Boot" }
+
+[[rule]]
+id = "spring-boot.get"
+annotation_route = { names = ["GetMapping"], method = "GET", prefix_from_type = ["RequestMapping"] }
+
+[[rule]]
+id = "spring-boot.post"
+annotation_route = { names = ["PostMapping"], method = "POST", prefix_from_type = ["RequestMapping"] }
+
+[[rule]]
+id = "spring-boot.put"
+annotation_route = { names = ["PutMapping"], method = "PUT", prefix_from_type = ["RequestMapping"] }
+
+[[rule]]
+id = "spring-boot.patch"
+annotation_route = { names = ["PatchMapping"], method = "PATCH", prefix_from_type = ["RequestMapping"] }
+
+[[rule]]
+id = "spring-boot.delete"
+annotation_route = { names = ["DeleteMapping"], method = "DELETE", prefix_from_type = ["RequestMapping"] }
+
+[[rule]]
+id = "spring-boot.request"
+annotation_route = { names = ["RequestMapping"], method = "ANY", prefix_from_type = ["RequestMapping"] }
