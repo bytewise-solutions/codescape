@@ -39,6 +39,7 @@ pub enum Rule {
     Query { language: Lang, query: String, capture: String, kind: String, label: String },
     Wiring { file_markers: Vec<String>, file_imports: Vec<String>, calls: Vec<String>, annotations: Vec<String>, type_prefixes: Vec<String>, requires_imports: Vec<String> },
     TestCode { file_imports: Vec<String>, dir_names: Vec<String> },
+    Noise { name_suffixes: Vec<String>, supertype_suffixes: Vec<String>, methods: Vec<String> },
 }
 
 #[derive(Clone, Debug)]
@@ -95,6 +96,18 @@ struct RuleFile {
     query: Option<QueryFile>,
     wiring: Option<WiringFile>,
     test_code: Option<TestCodeFile>,
+    noise: Option<NoiseFile>,
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct NoiseFile {
+    #[serde(default)]
+    name_suffixes: Vec<String>,
+    #[serde(default)]
+    supertype_suffixes: Vec<String>,
+    #[serde(default)]
+    methods: Vec<String>,
 }
 
 #[derive(Deserialize)]
@@ -330,6 +343,7 @@ impl RuleFile {
             self.query.is_some(),
             self.wiring.is_some(),
             self.test_code.is_some(),
+            self.noise.is_some(),
         ]
         .iter()
         .filter(|b| **b)
@@ -387,6 +401,9 @@ impl RuleFile {
         }
         if let Some(w) = self.wiring {
             return Ok(Rule::Wiring { file_markers: w.file_markers, file_imports: w.file_imports, calls: w.calls, annotations: w.annotations, type_prefixes: w.type_prefixes, requires_imports: w.requires_imports });
+        }
+        if let Some(n) = self.noise {
+            return Ok(Rule::Noise { name_suffixes: n.name_suffixes, supertype_suffixes: n.supertype_suffixes, methods: n.methods });
         }
         if let Some(t) = self.test_code {
             return Ok(Rule::TestCode { file_imports: t.file_imports, dir_names: t.dir_names });

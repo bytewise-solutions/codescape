@@ -472,3 +472,30 @@ fn only_pinned_boxes_refuse_to_wrap() {
     let app = l.child(g.ids["app"]).unwrap().rect;
     assert!(l.children.iter().filter(|c| !c.pinned).all(|c| c.rect.y > app.y), "pinned row sits above the rest");
 }
+
+#[test]
+fn error_types_hidden_by_default_and_shown_without_moving_others() {
+    let mut b = GraphBuilder::new("p");
+    let pkg = b.add_node(b.root(), NodeKind::Package, SubKind::None, "billing", Lang::Java);
+    let mut ids = Vec::new();
+    for name in ["Checkout", "Invoice", "PaymentException"] {
+        let t = b.add_node(pkg, NodeKind::Type, SubKind::Class, name, Lang::Java);
+        b.set_span(t, "f", 1, 60);
+        ids.push(t);
+    }
+    b.add_flags(ids[2], NodeFlags::NOISE);
+    b.add_edge(ids[0], ids[1], EdgeKind::Calls, Scope::Main, Confidence::Resolved, EdgeFlags::NONE);
+    b.add_edge(ids[0], ids[2], EdgeKind::Instantiates, Scope::Main, Confidence::Resolved, EdgeFlags::NONE);
+    let dir = tempfile::tempdir().unwrap();
+    write_graph(&b.finish(), &dir.path().join("g")).unwrap();
+    let f = ReliefFile::open(&dir.path().join("g")).unwrap();
+    let g = f.graph();
+    let pkg = g.children(g.root()).start;
+    let off = layout_container(g, pkg, &[], &LayoutOptions::default());
+    assert_eq!(off.children.len(), 2);
+    let on = layout_container(g, pkg, &[], &LayoutOptions { show_noise: true, ..Default::default() });
+    assert_eq!(on.children.len(), 3);
+    for c in &off.children {
+        assert_eq!(on.child(c.node).unwrap().rect, c.rect);
+    }
+}

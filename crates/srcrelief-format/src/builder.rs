@@ -240,6 +240,14 @@ impl GraphBuilder {
             }
         }
 
+        for &old in &order {
+            let inherited = NodeFlags(self.nodes[old as usize].flags.0 & (NodeFlags::WIRING.0 | NodeFlags::NOISE.0));
+            if inherited.0 != 0 {
+                for &c in &self.children[old as usize] {
+                    self.nodes[c as usize].flags |= inherited;
+                }
+            }
+        }
         for &old in order.iter().rev() {
             let kids = &self.children[old as usize];
             if old == 0 || kids.is_empty() || self.nodes[old as usize].kind == NodeKind::Type {
@@ -265,6 +273,9 @@ impl GraphBuilder {
             if touching.contains(NodeFlags::WIRING) {
                 flags |= EdgeFlags::WIRING;
             }
+            if touching.contains(NodeFlags::NOISE) {
+                flags |= EdgeFlags::NOISE;
+            }
             let slot = merged.entry((from, to, e.kind as u8, scope as u8)).or_insert((e.confidence as u8, 0, 0));
             slot.0 = slot.0.min(e.confidence as u8);
             slot.1 |= flags.0;
@@ -286,6 +297,9 @@ impl GraphBuilder {
 
         let mut agg_map: HashMap<(u32, u32, u32), Agg> = HashMap::new();
         for (from, e) in &sorted {
+            if EdgeFlags(e.flags).contains(EdgeFlags::NOISE) {
+                continue;
+            }
             let (mut a, mut b) = (*from, e.to);
             while depth[a as usize] > depth[b as usize] {
                 a = parent_new[a as usize];

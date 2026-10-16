@@ -481,3 +481,24 @@ fn wire_import_beside_real_types_keeps_the_file() {
     assert!(!fx.b.flags(query).contains(NodeFlags::WIRING));
     assert!(fx.b.flags(provider).contains(NodeFlags::WIRING), "a provider-only file is still wiring");
 }
+
+#[test]
+fn error_types_are_noise() {
+    let mut fx = Fx::new();
+    let j = fx.file("core", "core/src/main/java/c/Errors.java", Lang::Java, false, &[]);
+    let not_found = fx.ty(j, "c.NotFoundException", &["java.lang.RuntimeException"], &[]);
+    let custom = fx.ty(j, "c.Fault", &["c.NotFoundException"], &[]);
+    let service = fx.ty(j, "c.Service", &[], &[]);
+    let gofile = fx.file("svc", "svc/errors.go", Lang::Go, false, &[]);
+    let by_method = fx.ty(gofile, "x.validation", &[], &[]);
+    fx.func(gofile, Some(by_method), "Error", false, None, &[]);
+    let by_name = fx.ty(gofile, "x.QuotaError", &[], &[]);
+    let plain = fx.ty(gofile, "x.Handler", &[], &[]);
+    fx.run(&builtins());
+    for n in [not_found, custom, by_method, by_name] {
+        assert!(fx.b.flags(n).contains(NodeFlags::NOISE), "{} should be noise", fx.b.name(n));
+    }
+    for n in [service, plain] {
+        assert!(!fx.b.flags(n).contains(NodeFlags::NOISE), "{} is real", fx.b.name(n));
+    }
+}

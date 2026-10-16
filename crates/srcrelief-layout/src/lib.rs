@@ -70,17 +70,30 @@ pub struct LayoutOptions {
     pub include_test_edges: bool,
     pub hidden: NodeFlags,
     pub show_wiring: bool,
+    pub show_noise: bool,
 }
 
 impl Default for LayoutOptions {
     fn default() -> Self {
-        LayoutOptions { include_test_edges: false, hidden: NodeFlags::EXTERNAL | NodeFlags::MOCK | NodeFlags::TEST | NodeFlags::WIRING, show_wiring: false }
+        LayoutOptions {
+            include_test_edges: false,
+            hidden: NodeFlags::EXTERNAL | NodeFlags::MOCK | NodeFlags::TEST | NodeFlags::WIRING | NodeFlags::NOISE,
+            show_wiring: false,
+            show_noise: false,
+        }
     }
 }
 
 impl LayoutOptions {
     pub fn effective_hidden(&self) -> NodeFlags {
-        if self.show_wiring { NodeFlags(self.hidden.0 & !NodeFlags::WIRING.0) } else { self.hidden }
+        let mut keep = 0;
+        if self.show_wiring {
+            keep |= NodeFlags::WIRING.0;
+        }
+        if self.show_noise {
+            keep |= NodeFlags::NOISE.0;
+        }
+        NodeFlags(self.hidden.0 & !keep)
     }
 }
 

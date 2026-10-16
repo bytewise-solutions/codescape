@@ -17,3 +17,7 @@ path = { glob = "**/src/test/**", category = "test" }
 [[rule]]
 id = "java-core.test-code"
 test_code = { file_imports = ["org.junit", "org.testng", "org.mockito", "org.assertj"], dir_names = ["test", "tests", "testutil", "testutils", "testfixtures"] }
+
+[[rule]]
+id = "java-core.exceptions"
+noise = { name_suffixes = ["Exception"], supertype_suffixes = ["Exception", "Throwable", "java.lang.Error"] }

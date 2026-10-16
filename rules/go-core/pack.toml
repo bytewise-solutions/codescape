@@ -13,3 +13,7 @@ path = { glob = "**/tools/**", category = "dev-tool" }
 [[rule]]
 id = "go-core.test-code"
 test_code = { file_imports = ["testing", "github.com/stretchr/testify", "go.uber.org/mock", "github.com/golang/mock"], dir_names = ["test", "tests", "testutil", "testutils", "testdata", "testhelpers", "testing", "testsupport"] }
+
+[[rule]]
+id = "go-core.errors"
+noise = { name_suffixes = ["Error"], methods = ["Error"] }

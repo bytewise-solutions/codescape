@@ -38,8 +38,8 @@ fn entry_owners(g: &ArchivedGraph) -> HashSet<NodeId> {
 }
 
 pub fn layout_container(g: &ArchivedGraph, node: NodeId, frames: &[FrameRule], opts: &LayoutOptions) -> ContainerLayout {
-    let base = layout_structure(g, node, frames, &LayoutOptions { show_wiring: false, ..*opts });
-    if !opts.show_wiring {
+    let base = layout_structure(g, node, frames, &LayoutOptions { show_wiring: false, show_noise: false, ..*opts });
+    if !opts.show_wiring && !opts.show_noise {
         return base;
     }
     add_wiring(g, node, base, opts)
@@ -49,7 +49,7 @@ fn add_wiring(g: &ArchivedGraph, node: NodeId, mut l: ContainerLayout, opts: &La
     let hidden = opts.effective_hidden();
     let extra: Vec<NodeId> = g
         .children(node)
-        .filter(|&c| g.flags(c).contains(srcrelief_format::NodeFlags::WIRING) && !g.flags(c).intersects(hidden))
+        .filter(|&c| g.flags(c).intersects(srcrelief_format::NodeFlags::WIRING | srcrelief_format::NodeFlags::NOISE) && !g.flags(c).intersects(hidden))
         .collect();
     let top = if l.children.is_empty() { HEADER + PAD } else { l.size[1] - PAD + GAP_Y };
     let layer = l.children.iter().map(|c| c.layer + 1).max().unwrap_or(0);

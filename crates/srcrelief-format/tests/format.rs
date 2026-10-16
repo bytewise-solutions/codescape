@@ -346,3 +346,15 @@ fn types_keep_their_own_visibility() {
     assert!(!g.flags(find(g, pkg, "Config")).intersects(NodeFlags::TEST | NodeFlags::WIRING));
     assert!(!g.flags(find(g, pkg, "Options")).intersects(NodeFlags::TEST | NodeFlags::WIRING));
 }
+
+#[test]
+fn edges_touching_noise_are_set_aside() {
+    let (mut b, [_, _, _, f, g, _]) = two_module_graph();
+    let err = b.parent(g).unwrap();
+    b.add_flags(err, NodeFlags::NOISE);
+    b.add_edge(f, err, EdgeKind::Instantiates, Scope::Main, Confidence::Resolved, EdgeFlags::NONE);
+    b.add_edge(f, g, EdgeKind::Calls, Scope::Main, Confidence::Resolved, EdgeFlags::NONE);
+    let (_d, file) = roundtrip(b);
+    let gr = file.graph();
+    assert!(gr.aggregates(gr.root()).is_empty(), "nothing but noise links the two modules");
+}

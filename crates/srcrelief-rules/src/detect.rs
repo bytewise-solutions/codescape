@@ -183,6 +183,7 @@ impl<'a> Ctx<'a> {
         for n in wiring_nodes {
             b.add_flags(n, NodeFlags::WIRING);
         }
+        self.mark_noise(b);
         let mut importers: HashMap<(NodeId, NodeId), (bool, bool)> = HashMap::new();
         for file in &facts.files {
             let Some(p) = file.package else { continue };
@@ -204,6 +205,40 @@ impl<'a> Ctx<'a> {
                         e.scope = Scope::Test;
                     } else if all_wiring {
                         e.flags |= EdgeFlags::WIRING;
+                    }
+                }
+            }
+        }
+    }
+
+    fn supertype_ends_with(&self, fqn: &str, suffixes: &[String]) -> bool {
+        let mut seen = HashSet::new();
+        let mut q: VecDeque<String> = self.types.get(fqn).map(|t| t.supertypes.iter().cloned().collect()).unwrap_or_default();
+        while let Some(cur) = q.pop_front() {
+            if suffixes.iter().any(|s| cur.ends_with(s.as_str())) {
+                return true;
+            }
+            if !seen.insert(cur.clone()) {
+                continue;
+            }
+            if let Some(t) = self.types.get(cur.as_str()) {
+                q.extend(t.supertypes.iter().cloned());
+            }
+        }
+        false
+    }
+
+    fn mark_noise(&self, b: &mut GraphBuilder) {
+        for file in &self.facts.files {
+            for (_, rule) in self.packs.rules_for(file.lang) {
+                let Rule::Noise { name_suffixes, supertype_suffixes, methods } = rule else { continue };
+                for t in &file.types {
+                    let simple = t.fqn.rsplit('.').next().unwrap_or(&t.fqn);
+                    let by_name = name_suffixes.iter().any(|s| simple.ends_with(s.as_str()) && simple.len() > s.len());
+                    let by_super = self.supertype_ends_with(&t.fqn, supertype_suffixes);
+                    let by_method = file.functions.iter().any(|f| f.owner == Some(t.node) && methods.contains(&f.name));
+                    if by_name || by_super || by_method {
+                        b.add_flags(t.node, NodeFlags::NOISE);
                     }
                 }
             }
