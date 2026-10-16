@@ -4,7 +4,7 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 const MIN_CODE_PT: f32 = 5.0;
-const MAX_CODE_PT: f32 = 13.0;
+pub const MAX_CODE_PT: f32 = 13.0;
 pub const LINE_SPACING: f32 = 1.25;
 const TAB: &str = "    ";
 
@@ -27,15 +27,35 @@ pub struct Code {
     pub lines: Vec<String>,
 }
 
+#[derive(Clone, Debug, PartialEq)]
+pub struct Window {
+    pub code: Code,
+    pub own: std::ops::Range<usize>,
+}
+
+pub fn context_window(total: usize, start: usize, end: usize, capacity: usize) -> (usize, usize) {
+    let end = end.min(total);
+    let own = end + 1 - start;
+    if capacity <= own {
+        return (start, end);
+    }
+    let extra = capacity - own;
+    let first = start.saturating_sub(extra / 2).max(1);
+    let last = (end + extra - (start - first)).min(total);
+    let left = extra - (start - first) - (last - end);
+    (first.saturating_sub(left).max(1), last)
+}
+
 pub struct SourceCache {
     root: PathBuf,
     files: HashMap<String, Option<Arc<Vec<String>>>>,
     spans: HashMap<(String, u32, u32), Option<Arc<Code>>>,
+    windows: HashMap<(String, u32, u32), (usize, Arc<Window>)>,
 }
 
 impl SourceCache {
     pub fn new(root: &Path) -> SourceCache {
-        SourceCache { root: root.to_path_buf(), files: HashMap::new(), spans: HashMap::new() }
+        SourceCache { root: root.to_path_buf(), files: HashMap::new(), spans: HashMap::new(), windows: HashMap::new() }
     }
 
     pub fn span(&mut self, file: &str, start: u32, end: u32) -> Option<Arc<Code>> {
@@ -49,6 +69,26 @@ impl SourceCache {
         });
         self.spans.insert(key, code.clone());
         code
+    }
+
+    pub fn cached_window(&mut self, file: &str, start: u32, end: u32, capacity: usize) -> Option<Arc<Window>> {
+        let key = (file.to_string(), start, end);
+        if let Some((_, w)) = self.windows.get(&key).filter(|(c, _)| *c == capacity) {
+            return Some(w.clone());
+        }
+        let w = Arc::new(self.window(file, start, end, capacity)?);
+        self.windows.insert(key, (capacity, w.clone()));
+        Some(w)
+    }
+
+    pub fn window(&mut self, file: &str, start: u32, end: u32, capacity: usize) -> Option<Window> {
+        let all = self.read(file).filter(|a| start >= 1 && end >= start && (start as usize) <= a.len())?;
+        let end = (end as usize).min(all.len());
+        let (first, last) = context_window(all.len(), start as usize, end, capacity);
+        let own = &all[start as usize - 1..end];
+        let indent = own.iter().filter(|l| !l.trim().is_empty()).map(|l| l.len() - l.trim_start().len()).min().unwrap_or(0);
+        let lines = all[first - 1..last].iter().map(|l| l[indent.min(l.len() - l.trim_start().len())..].trim_end().to_string()).collect();
+        Some(Window { code: Code { first_line: first as u32, lines }, own: start as usize - first..end - first + 1 })
     }
 
     fn read(&mut self, file: &str) -> Option<Arc<Vec<String>>> {

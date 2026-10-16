@@ -40,3 +40,26 @@ fn highlighting_marks_keywords_strings_and_comments() {
     let java = highlight(&["public final class A extends B {"], Lang::Java);
     assert!(java[0].iter().any(|(t, k)| t == "extends" && *k == Token::Keyword));
 }
+
+#[test]
+fn spare_room_shows_the_lines_around_the_span() {
+    assert_eq!(context_window(100, 40, 49, 10), (40, 49), "just the span");
+    assert_eq!(context_window(100, 40, 49, 20), (35, 54), "five more on each side");
+    assert_eq!(context_window(100, 3, 12, 20), (1, 20), "the top of the file takes the missing lines below");
+    assert_eq!(context_window(100, 95, 99, 20), (81, 100));
+    assert_eq!(context_window(30, 10, 20, 500), (1, 30), "the whole file once it fits");
+    assert_eq!(context_window(100, 40, 49, 4), (40, 49), "never cuts the span itself");
+}
+
+#[test]
+fn a_window_keeps_the_span_indent_and_marks_its_lines() {
+    let dir = tempfile::tempdir().unwrap();
+    std::fs::write(dir.path().join("a.go"), "package a\n\ntype S struct{}\n\nfunc (s *S) Run() {\n\treturn\n}\n\nfunc other() {}\n").unwrap();
+    let mut cache = SourceCache::new(dir.path());
+    let w = cache.window("a.go", 5, 7, 20).unwrap();
+    assert_eq!(w.code.first_line, 1);
+    assert_eq!(w.own, 4..7, "lines 5-7 of the file");
+    assert_eq!(w.code.lines[4], "func (s *S) Run() {");
+    assert_eq!(w.code.lines[5], "    return");
+    assert_eq!(w.code.lines.len(), 9);
+}

@@ -5,7 +5,7 @@ use crate::focus::{Focus, FocusMode, History, Mark, UsageIndex, focus};
 use crate::search::{self, SearchIndex};
 use crate::shot::{Shot, ShotPlan, ShotStep};
 use crate::input::{Nav, SHORTCUTS, Step, interpret, nearest_in};
-use crate::source::{SourceCache, Token, code_font, highlight};
+use crate::source::{MAX_CODE_PT, SourceCache, Token, code_font, highlight};
 use crate::settings_window::{self, SettingsForm};
 use crate::view::{layout_options, toggle, view_items};
 use crate::{minimap, style};
@@ -483,6 +483,13 @@ impl Project {
         if let Some(n) = focus {
             self.selected = Some(n);
             self.fly_to(n);
+            if let (Some(z), Some(w)) = (plan.zoom, world_rect(self.file.graph(), &mut self.cache, n)) {
+                if let Some(t) = self.target.as_mut() {
+                    t.zoom *= z;
+                    let half = [self.view.w as f64 / 2.0 / t.zoom, self.view.h as f64 / 2.0 / t.zoom];
+                    t.center = [w.x + half[0], w.y + half[1]];
+                }
+            }
         }
         self.settings_open |= plan.settings;
     }
@@ -1301,25 +1308,41 @@ impl Project {
         let g = self.file.graph();
         let Some(file) = g.file(b.node) else { return };
         let (start, end) = g.span(b.node);
-        let Some(code) = self.source.borrow_mut().span(file, start, end) else { return };
-        let Some(size) = code_font(b.rect.h - TOP - 6.0, code.lines.len()) else { return };
+        let room = b.rect.h - TOP - 6.0;
+        let mut source = self.source.borrow_mut();
+        let Some(own) = source.span(file, start, end) else { return };
+        let Some(size) = code_font(room, own.lines.len()) else { return };
+        let line_h = size * crate::source::LINE_SPACING;
+        let capacity = (room / line_h) as usize;
+        let window = (size >= MAX_CODE_PT && capacity > own.lines.len()).then(|| source.cached_window(file, start, end, capacity)).flatten();
+        drop(source);
+        let (first_line, lines, mine) = match &window {
+            Some(w) => (w.code.first_line, &w.code.lines, w.own.clone()),
+            None => (own.first_line, &own.lines, 0..own.lines.len()),
+        };
         let area = erect(b.rect).shrink(2.0).intersect(erect(self.view));
         let clip = painter.with_clip_rect(area);
         let mono = FontId::monospace(size);
-        let fade = |c: Color32| if b.dimmed { c.gamma_multiply(0.35) } else { c };
-        let gutter = format!("{}", code.first_line as usize + code.lines.len()).len() as f32 * size * 0.62 + 10.0;
-        let lines: Vec<&str> = code.lines.iter().map(String::as_str).collect();
-        let line_h = size * crate::source::LINE_SPACING;
-        for (i, segments) in highlight(&lines, g.lang(b.node)).into_iter().enumerate() {
-            let y = b.rect.y + TOP + i as f32 * line_h;
-            if y > self.view.bottom() {
-                break;
-            }
-            if y + line_h < self.view.y {
-                continue;
-            }
-            let number = (code.first_line as usize + i).to_string();
-            clip.text(Pos2::new(b.rect.x + 8.0 + gutter - 6.0, y), Align2::RIGHT_TOP, number, mono.clone(), fade(style::MUTED.gamma_multiply(0.6)));
+        let fade = |c: Color32, i: usize| {
+            let c = if mine.contains(&i) { c } else { c.gamma_multiply(0.5) };
+            if b.dimmed { c.gamma_multiply(0.35) } else { c }
+        };
+        let gutter = format!("{}", first_line as usize + lines.len()).len() as f32 * size * 0.62 + 10.0;
+        let top = b.rect.y + TOP;
+        if window.is_some() {
+            let band = egui::Rect::from_min_size(Pos2::new(b.rect.x + 4.0, top + mine.start as f32 * line_h - 1.0), egui::vec2(b.rect.w - 8.0, mine.len() as f32 * line_h + 2.0));
+            clip.rect_filled(band, 2.0, style::BOX_STROKE.gamma_multiply(0.12));
+        }
+        let first_visible = ((self.view.y - top) / line_h).floor().max(0.0) as usize;
+        let last_visible = (((self.view.bottom() - top) / line_h).ceil().max(0.0) as usize).min(lines.len());
+        if first_visible >= last_visible {
+            return;
+        }
+        let text: Vec<&str> = lines[..last_visible].iter().map(String::as_str).collect();
+        for (i, segments) in highlight(&text, g.lang(b.node)).into_iter().enumerate().skip(first_visible) {
+            let y = top + i as f32 * line_h;
+            let number = (first_line as usize + i).to_string();
+            clip.text(Pos2::new(b.rect.x + 8.0 + gutter - 6.0, y), Align2::RIGHT_TOP, number, mono.clone(), fade(style::MUTED.gamma_multiply(0.6), i));
             let mut job = egui::text::LayoutJob::default();
             for (text, kind) in segments {
                 let color = match kind {
@@ -1328,7 +1351,7 @@ impl Project {
                     Token::String => style::CODE_STRING,
                     Token::Comment => style::MUTED,
                 };
-                job.append(&text, 0.0, egui::TextFormat { font_id: mono.clone(), color: fade(color), ..Default::default() });
+                job.append(&text, 0.0, egui::TextFormat { font_id: mono.clone(), color: fade(color, i), ..Default::default() });
             }
             clip.galley(Pos2::new(b.rect.x + 8.0 + gutter, y), clip.layout_job(job), style::TEXT);
         }

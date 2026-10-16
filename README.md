@@ -69,7 +69,9 @@ enough to read.
   constructor (dim blue). A legend sits in the bottom-left corner; close it with its × or **View ▸ Legend**.
 - **Code when you zoom in.** A function, method or type whose members are not shown displays its own source lines,
   with line numbers and keywords, strings and comments highlighted, once the box is large enough to read them; the
-  text grows as you keep zooming. Lines are read from the project folder as they are on disk.
+  text grows as you keep zooming. Past normal text size, zooming further brings in the surrounding lines of the file,
+  faded, around the box's own lines, until the whole file shows. Lines are read from the project folder as they are on
+  disk.
 - **Quiet arrows.** Every dependency is drawn, but faint, slightly stronger for the heaviest ones in a container. Hover
   or select a box and its own arrows light up at full strength, as thick as the number of classes they link. Turn
   **View ▸ Quiet arrows** off to draw every arrow by its weight instead.
@@ -103,7 +105,7 @@ Prints modules, their links, entry points grouped as in the viewer, the call-res
 ### Screenshots without a person at the window
 
 ```sh
-srcrelief <dir> --screenshot out.png [--focus NAME] [--entry LABEL] [--settings]
+srcrelief <dir> --screenshot out.png [--focus NAME] [--entry LABEL] [--zoom FACTOR] [--settings]
 ```
 
 Renders one frame after zooming to the first node matching `NAME`, selecting an entry point and/or opening the

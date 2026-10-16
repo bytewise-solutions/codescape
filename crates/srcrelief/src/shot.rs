@@ -10,6 +10,7 @@ pub struct ShotPlan {
     pub focus: Option<String>,
     pub entry: Option<String>,
     pub settings: bool,
+    pub zoom: Option<f64>,
 }
 
 pub struct Shot {

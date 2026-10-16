@@ -15,6 +15,8 @@ struct Args {
     entry: Option<String>,
     #[arg(long, help = "With --screenshot: open the project settings window")]
     settings: bool,
+    #[arg(long, help = "With --screenshot and --focus: zoom this many times closer than the framed view")]
+    zoom: Option<f64>,
 }
 
 fn main() -> eframe::Result {
@@ -24,6 +26,6 @@ fn main() -> eframe::Result {
         renderer: eframe::Renderer::Wgpu,
         ..Default::default()
     };
-    let shot = args.screenshot.map(|path| srcrelief::shot::ShotPlan { path, focus: args.focus, entry: args.entry, settings: args.settings });
+    let shot = args.screenshot.map(|path| srcrelief::shot::ShotPlan { path, focus: args.focus, entry: args.entry, settings: args.settings, zoom: args.zoom });
     eframe::run_native("SrcRelief", options, Box::new(move |cc| Ok(Box::new(srcrelief::app::ReliefApp::new(cc, args.dir, args.config, shot)))))
 }
