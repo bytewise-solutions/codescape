@@ -14,7 +14,6 @@ const BUILTINS: &[(&str, &str)] = &[
     ("fiber", include_str!("../../../rules/fiber/pack.toml")),
     ("rabbitmq-amqp091", include_str!("../../../rules/rabbitmq-amqp091/pack.toml")),
     ("google-wire", include_str!("../../../rules/google-wire/pack.toml")),
-    ("externals", include_str!("../../../rules/externals/pack.toml")),
     ("layers", include_str!("../../../rules/layers/pack.toml")),
     ("significance", include_str!("../../../rules/significance/pack.toml")),
     ("default-visuals", include_str!("../../../rules/default-visuals/pack.toml")),
@@ -45,9 +44,6 @@ pub enum Rule {
     Noise { name_suffixes: Vec<String>, supertype_suffixes: Vec<String>, methods: Vec<String> },
     AnnotationTag { names: Vec<String>, tag: String },
     EntryOwnerTag { kinds: Vec<String>, tag: String },
-    ChannelPublisher { methods: Vec<String>, receiver_types: Vec<String>, file_imports: String },
-    ChannelConsumer { kinds: Vec<String> },
-    ExternalSystem { file_imports: Vec<String>, name: String, project_imports: Vec<String> },
     Significance { component_annotations: Vec<String>, constructor_annotations: Vec<String>, accessor_pattern: String, detail_packages: String, hub_min_packages: usize },
 }
 
@@ -109,34 +105,6 @@ struct RuleFile {
     annotation_tag: Option<AnnotationTagFile>,
     entry_owner_tag: Option<EntryOwnerTagFile>,
     significance: Option<SignificanceFile>,
-    channel_publisher: Option<ChannelPublisherFile>,
-    channel_consumer: Option<ChannelConsumerFile>,
-    external_system: Option<ExternalSystemFile>,
-}
-
-#[derive(Deserialize)]
-#[serde(deny_unknown_fields)]
-struct ChannelPublisherFile {
-    methods: Vec<String>,
-    #[serde(default)]
-    receiver_types: Vec<String>,
-    #[serde(default)]
-    file_imports: String,
-}
-
-#[derive(Deserialize)]
-#[serde(deny_unknown_fields)]
-struct ChannelConsumerFile {
-    kinds: Vec<String>,
-}
-
-#[derive(Deserialize)]
-#[serde(deny_unknown_fields)]
-struct ExternalSystemFile {
-    file_imports: Vec<String>,
-    name: String,
-    #[serde(default)]
-    project_imports: Vec<String>,
 }
 
 #[derive(Deserialize)]
@@ -420,9 +388,6 @@ impl RuleFile {
             self.annotation_tag.is_some(),
             self.entry_owner_tag.is_some(),
             self.significance.is_some(),
-            self.channel_publisher.is_some(),
-            self.channel_consumer.is_some(),
-            self.external_system.is_some(),
         ]
         .iter()
         .filter(|b| **b)
@@ -480,15 +445,6 @@ impl RuleFile {
         }
         if let Some(w) = self.wiring {
             return Ok(Rule::Wiring { file_markers: w.file_markers, file_imports: w.file_imports, calls: w.calls, annotations: w.annotations, type_prefixes: w.type_prefixes, requires_imports: w.requires_imports });
-        }
-        if let Some(c) = self.channel_publisher {
-            return Ok(Rule::ChannelPublisher { methods: c.methods, receiver_types: c.receiver_types, file_imports: c.file_imports });
-        }
-        if let Some(c) = self.channel_consumer {
-            return Ok(Rule::ChannelConsumer { kinds: c.kinds });
-        }
-        if let Some(e) = self.external_system {
-            return Ok(Rule::ExternalSystem { file_imports: e.file_imports, name: e.name, project_imports: e.project_imports });
         }
         if let Some(s) = self.significance {
             for p in [&s.accessor_pattern, &s.detail_packages] {

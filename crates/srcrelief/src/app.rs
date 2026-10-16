@@ -5,7 +5,6 @@ use crate::focus::{Focus, FocusMode, History, Mark, UsageIndex, focus};
 use crate::search::SearchIndex;
 use crate::shot::{Shot, ShotPlan, ShotStep};
 use crate::input::{Nav, interpret};
-use crate::overview::{self, End, Overview};
 use crate::{minimap, style};
 use egui::{Align2, Color32, FontId, Key, Pos2, Sense, Shape, Stroke, StrokeKind};
 use srcrelief_format::*;
@@ -259,8 +258,6 @@ struct Project {
     totals: Totals,
     scene_ms: f32,
     last_frame: Instant,
-    overview: Option<Overview>,
-    show_overview: bool,
 }
 
 fn erect(r: Rect) -> egui::Rect {
@@ -368,8 +365,6 @@ impl Project {
             totals,
             scene_ms: 0.0,
             last_frame: Instant::now(),
-            overview: None,
-            show_overview: false,
         })
     }
 
@@ -381,7 +376,6 @@ impl Project {
     }
 
     fn apply_plan(&mut self, plan: &ShotPlan) {
-        self.show_overview = plan.overview;
         let entry = plan.entry.as_ref().and_then(|label| {
             let g = self.file.graph();
             (0..g.entries().len()).find(|&i| g.entry_label(i) == label)
@@ -461,21 +455,13 @@ impl Project {
                     if ui.button("Jump to… (Ctrl+K)").clicked() {
                         self.search_open = true;
                     }
-                    ui.toggle_value(&mut self.show_overview, "Overview")
-                        .on_hover_text("experimental: applications, the channels between them and the systems they use");
                 });
             });
         });
         egui::Panel::bottom("status").show(ui, |ui| self.status_bar(ui));
         egui::Panel::left("entries").resizable(true).default_size(270.0).show(ui, |ui| self.entries_panel(ui));
         egui::Panel::right("inspector").resizable(true).default_size(290.0).show(ui, |ui| self.inspector(ui));
-        egui::CentralPanel::default().frame(egui::Frame::NONE.fill(style::BG)).show(ui, |ui| {
-            if self.show_overview {
-                self.overview_canvas(ui);
-            } else {
-                self.canvas(ui);
-            }
-        });
+        egui::CentralPanel::default().frame(egui::Frame::NONE.fill(style::BG)).show(ui, |ui| self.canvas(ui));
         if self.search_open {
             self.search_window(ui.ctx());
         }
@@ -882,128 +868,6 @@ impl Project {
         }
         if let Some(n) = fly {
             self.set_focus(n, None, true, true);
-        }
-    }
-
-    fn overview_canvas(&mut self, ui: &mut egui::Ui) {
-        let (resp, painter) = ui.allocate_painter(ui.available_size(), Sense::click());
-        self.view = rect_of(resp.rect);
-        let g = self.file.graph();
-        let o = self.overview.get_or_insert_with(|| overview::build(g));
-        let placed = overview::layout(o, self.view.w, self.view.h - 30.0);
-        let s = (self.view.h / placed.size[1]).min(self.view.w / placed.size[0]).min(1.0);
-        let origin = Pos2::new(self.view.x + (self.view.w - placed.size[0] * s) / 2.0, self.view.y);
-        let map = |r: Rect| egui::Rect::from_min_size(origin + egui::vec2(r.x * s, r.y * s), egui::vec2(r.w * s, r.h * s));
-        let font = |size: f32| FontId::proportional((size * s).max(8.0));
-        painter.rect_filled(resp.rect, 0.0, style::BG);
-        for l in &o.links {
-            let (Some(a), Some(b)) = (placed.rect(l.from), placed.rect(l.to)) else { continue };
-            let (a, b) = (map(a), map(b));
-            let down = a.center().y < b.center().y;
-            let (p0, p3) = if down { (a.center_bottom(), b.center_top()) } else { (a.center_top(), b.center_bottom()) };
-            let bend = (p3.y - p0.y) * 0.5;
-            let (p1, p2) = (p0 + egui::vec2(0.0, bend), p3 - egui::vec2(0.0, bend));
-            let pts: Vec<Pos2> = (0..=24)
-                .map(|i| {
-                    let t = i as f32 / 24.0;
-                    let u = 1.0 - t;
-                    (p0.to_vec2() * u * u * u + p1.to_vec2() * 3.0 * u * u * t + p2.to_vec2() * 3.0 * u * t * t + p3.to_vec2() * t * t * t).to_pos2()
-                })
-                .collect();
-            let color = match l.label {
-                "publishes" => style::REACH,
-                "consumes" => style::CALLER,
-                _ => style::EDGE,
-            };
-            let stroke = Stroke::new(1.4, color);
-            if l.inferred {
-                painter.extend(Shape::dashed_line(&pts, stroke, 6.0, 4.0));
-            } else {
-                painter.add(Shape::line(pts.clone(), stroke));
-            }
-            let dir = (pts[24] - pts[22]).normalized();
-            let side = egui::vec2(-dir.y, dir.x) * 3.6;
-            painter.add(Shape::convex_polygon(vec![p3, p3 - dir * 8.0 + side, p3 - dir * 8.0 - side], color, Stroke::NONE));
-        }
-        let mut hovered: Option<End> = None;
-        let pointer = resp.hover_pos();
-        for &(end, r) in &placed.boxes {
-            let r = map(r);
-            if pointer.is_some_and(|p| r.contains(p)) {
-                hovered = Some(end);
-            }
-            match end {
-                End::App(a) => {
-                    let pts = [r.left_top(), r.right_top(), r.right_bottom(), r.left_bottom(), r.left_top()];
-                    painter.extend(Shape::dashed_line(&pts, Stroke::new(1.2, style::ENTRY), 6.0, 3.0));
-                    painter.text(r.left_top() + egui::vec2(10.0, 8.0) * s, Align2::LEFT_TOP, &o.apps[a].label, font(14.0), style::ENTRY);
-                }
-                End::Component(a, c) => {
-                    let comp = &o.apps[a].components[c];
-                    painter.rect_filled(r, 4.0, style::BOX_FILL);
-                    painter.rect_stroke(r, 4.0, Stroke::new(1.2, style::BOX_STROKE), StrokeKind::Inside);
-                    let clip = painter.with_clip_rect(r.shrink(3.0));
-                    clip.text(r.left_top() + egui::vec2(8.0, 8.0) * s, Align2::LEFT_TOP, &comp.label, font(12.5), style::BOX_TITLE);
-                    clip.text(r.left_top() + egui::vec2(8.0, 28.0) * s, Align2::LEFT_TOP, &comp.detail, font(10.5), style::MUTED);
-                }
-                End::Channel(c) => {
-                    painter.rect_filled(r, r.height() / 2.0, style::BAR);
-                    painter.rect_stroke(r, r.height() / 2.0, Stroke::new(1.2, style::ACCENT), StrokeKind::Inside);
-                    painter.text(r.center(), Align2::CENTER_CENTER, &o.channels[c].label, font(12.0), style::TEXT);
-                }
-                End::External(x) => {
-                    painter.rect_filled(r, 2.0, Color32::from_rgb(43, 43, 43));
-                    painter.rect_stroke(r, 2.0, Stroke::new(1.2, style::EXTERNAL), StrokeKind::Inside);
-                    painter.text(r.center(), Align2::CENTER_CENTER, &o.externals[x], font(12.0), style::TEXT);
-                }
-                End::Clients => {
-                    painter.rect_filled(r, 2.0, Color32::from_rgb(43, 43, 43));
-                    painter.rect_stroke(r, 2.0, Stroke::new(1.2, style::EXTERNAL), StrokeKind::Inside);
-                    painter.text(r.center(), Align2::CENTER_CENTER, o.label(End::Clients), font(12.0), style::TEXT);
-                }
-            }
-        }
-        for (first, caption) in [(End::Channel(0), "CHANNELS"), (End::External(0), "EXTERNAL SYSTEMS")] {
-            if let Some(r) = placed.rect(first) {
-                painter.text(Pos2::new(self.view.x + 12.0, map(r).top() - 16.0 * s), Align2::LEFT_TOP, caption, font(10.0), style::MUTED);
-            }
-        }
-        let mut x = self.view.x + 12.0;
-        let y = self.view.bottom() - 14.0;
-        for (color, dashed, text) in [
-            (style::REACH, false, "publishes"),
-            (style::CALLER, true, "consumes (inferred from names)"),
-            (style::EDGE, false, "calls or uses, read from the code"),
-        ] {
-            let (a, b) = (Pos2::new(x, y), Pos2::new(x + 22.0, y));
-            if dashed {
-                painter.extend(Shape::dashed_line(&[a, b], Stroke::new(1.4, color), 5.0, 3.0));
-            } else {
-                painter.line_segment([a, b], Stroke::new(1.4, color));
-            }
-            let r = painter.text(Pos2::new(x + 28.0, y), Align2::LEFT_CENTER, text, FontId::proportional(10.5), style::MUTED);
-            x = r.right() + 18.0;
-        }
-        painter.text(Pos2::new(x, y), Align2::LEFT_CENTER, "· click a component to open it in the map", FontId::proportional(10.5), style::MUTED);
-        let target = match hovered {
-            Some(End::Component(a, c)) => {
-                let comp = &o.apps[a].components[c];
-                Some((comp.node, Some(comp.entry)))
-            }
-            Some(End::App(a)) => Some((o.apps[a].node, Some(o.apps[a].entry))),
-            Some(End::Channel(c)) => o.channels[c].publishers.first().map(|&n| (n, None)),
-            _ => None,
-        };
-        if target.is_some() {
-            ui.ctx().set_cursor_icon(egui::CursorIcon::PointingHand);
-        }
-        if let (true, Some((node, entry))) = (resp.clicked(), target) {
-            self.show_overview = false;
-            if self.needs_fit {
-                self.cam = Camera::fit(root_world(&mut self.cache, g), self.view);
-                self.needs_fit = false;
-            }
-            self.set_focus(node, entry, true, true);
         }
     }
 

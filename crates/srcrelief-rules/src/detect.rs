@@ -4,34 +4,9 @@ use crate::routes::{PrefixFlow, join};
 use globset::Glob;
 use srcrelief_facts::{CallFacts, FileFacts, FnFacts, ProjectFacts, TypeFacts};
 use srcrelief_format::*;
-use std::collections::{BTreeSet, HashMap, HashSet, VecDeque};
+use std::collections::{HashMap, HashSet, VecDeque};
 
 pub const FALLBACK_RULE: &str = "builtin.fallback-callback";
-
-const STEM_SUFFIXES: [&str; 12] = ["impl", "service", "producer", "publisher", "consumer", "subscriber", "listener", "handler", "worker", "sender", "client", "app"];
-
-pub fn channel_stem(type_name: &str) -> String {
-    let mut s: String = type_name.chars().filter(|c| c.is_alphanumeric()).collect::<String>().to_lowercase();
-    loop {
-        let Some(suffix) = STEM_SUFFIXES.iter().find(|x| s.len() > x.len() && s.ends_with(*x)) else { break };
-        s.truncate(s.len() - suffix.len());
-    }
-    s
-}
-
-pub fn channel_label(type_name: &str) -> String {
-    let mut words: Vec<String> = Vec::new();
-    for c in type_name.chars().filter(|c| c.is_alphanumeric()) {
-        match words.last_mut() {
-            Some(w) if !c.is_uppercase() => w.push(c),
-            _ => words.push(c.to_lowercase().collect()),
-        }
-    }
-    while words.len() > 1 && words.last().is_some_and(|w| STEM_SUFFIXES.contains(&w.as_str())) {
-        words.pop();
-    }
-    words.join("_")
-}
 const COMPONENT_ROLES: [&str; 3] = ["layer:handler", "layer:service", "layer:repository"];
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -387,43 +362,6 @@ impl<'a> Ctx<'a> {
                         }
                     }
                 }
-                Rule::ChannelPublisher { methods, receiver_types, file_imports } => {
-                    for owner in self.channel_publishers(b, methods, receiver_types, file_imports) {
-                        b.add_tag(owner, &format!("channel:out:{}", channel_stem(b.name(owner))));
-                        self.stats.tags += 1;
-                    }
-                }
-                Rule::ChannelConsumer { kinds } => {
-                    let owners: Vec<NodeId> = b
-                        .entries()
-                        .iter()
-                        .filter(|e| kinds.contains(&e.kind))
-                        .filter_map(|e| match b.node_kind(e.node) {
-                            NodeKind::Type => Some(e.node),
-                            _ => b.parent(e.node).filter(|&p| b.node_kind(p) == NodeKind::Type),
-                        })
-                        .collect();
-                    for owner in owners {
-                        b.add_tag(owner, &format!("channel:in:{}", channel_stem(b.name(owner))));
-                        self.stats.tags += 1;
-                    }
-                }
-                Rule::ExternalSystem { file_imports, name, project_imports } => {
-                    let tag = format!("external:{name}");
-                    let imports = |file: &FileFacts, prefixes: &[String]| file.imports.iter().any(|i| prefixes.iter().any(|p| i.path == *p || i.path.starts_with(&format!("{p}/")) || i.path.starts_with(&format!("{p}."))));
-                    if !project_imports.is_empty() && !self.facts.files.iter().any(|f| imports(f, project_imports)) {
-                        continue;
-                    }
-                    for file in &self.facts.files {
-                        if !imports(file, file_imports) {
-                            continue;
-                        }
-                        for n in file.types.iter().map(|t| t.node).chain(file.functions.iter().map(|f| f.node)) {
-                            b.add_tag(n, &tag);
-                            self.stats.tags += 1;
-                        }
-                    }
-                }
                 Rule::EntryOwnerTag { kinds, tag } => {
                     let owners: Vec<NodeId> = b
                         .entries()
@@ -706,60 +644,6 @@ impl<'a> Ctx<'a> {
                 }
             }
         }
-    }
-
-    fn channel_publishers(&self, b: &GraphBuilder, methods: &[String], receiver_types: &[String], file_imports: &str) -> BTreeSet<NodeId> {
-        let owner_of = |n: NodeId| b.parent(n).filter(|&p| b.node_kind(p) == NodeKind::Type);
-        let live = |n: NodeId| !b.flags(n).intersects(NodeFlags::TEST | NodeFlags::MOCK);
-        let calls: Vec<&CallFacts> = self.facts.files.iter().flat_map(|f| &f.calls).filter(|c| live(c.caller)).collect();
-        let mut transport: HashSet<NodeId> = HashSet::new();
-        let mut publishers = BTreeSet::new();
-        for f in &self.facts.files {
-            for c in f.calls.iter().filter(|c| live(c.caller) && methods.contains(&c.method) && Self::receiver_ok(f, c, receiver_types, file_imports)) {
-                let params: Vec<&str> = f.functions.iter().find(|x| x.node == c.caller).map(|x| x.params.iter().map(|(n, _)| n.as_str()).collect()).unwrap_or_default();
-                if c.ident_args.iter().take(2).flatten().any(|a| params.contains(&a.as_str())) {
-                    transport.insert(c.caller);
-                } else if let Some(o) = owner_of(c.caller) {
-                    publishers.insert(o);
-                }
-            }
-        }
-        loop {
-            let before = transport.len();
-            for c in &calls {
-                if c.target.is_some_and(|t| transport.contains(&t) && owner_of(t).is_some() && owner_of(t) == owner_of(c.caller)) {
-                    transport.insert(c.caller);
-                }
-            }
-            if transport.len() == before {
-                break;
-            }
-        }
-        let wrappers: HashSet<NodeId> = transport.iter().filter_map(|&f| owner_of(f)).collect();
-        let names: HashSet<&str> = transport.iter().map(|&f| b.name(f)).collect();
-        let mut fronts: HashMap<NodeId, Vec<NodeId>> = HashMap::new();
-        for e in b.edges().iter().filter(|e| e.kind == EdgeKind::Implements && wrappers.contains(&e.from)) {
-            fronts.entry(e.to).or_default().push(e.from);
-        }
-        let mut used: HashSet<NodeId> = HashSet::new();
-        for c in &calls {
-            let (Some(t), Some(caller_owner)) = (c.target, owner_of(c.caller)) else { continue };
-            let Some(target_owner) = owner_of(t) else { continue };
-            let behind: Vec<NodeId> = if transport.contains(&t) {
-                vec![target_owner]
-            } else if names.contains(b.name(t)) {
-                fronts.get(&target_owner).cloned().unwrap_or_default()
-            } else {
-                continue;
-            };
-            if behind.is_empty() || wrappers.contains(&caller_owner) || fronts.contains_key(&caller_owner) {
-                continue;
-            }
-            publishers.insert(caller_owner);
-            used.extend(behind);
-        }
-        publishers.extend(wrappers.difference(&used));
-        publishers
     }
 
     fn receiver_ok(file: &FileFacts, c: &CallFacts, receiver_types: &[String], file_imports: &str) -> bool {
