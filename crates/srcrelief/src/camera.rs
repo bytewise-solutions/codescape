@@ -1,14 +1,38 @@
 use srcrelief_layout::Rect;
 
-pub const MIN_ZOOM: f32 = 1e-5;
-pub const MAX_ZOOM: f32 = 40.0;
-const FIT_MARGIN: f32 = 0.9;
-const SPEED: f32 = 12.0;
+pub const MIN_ZOOM: f64 = 1e-6;
+pub const MAX_ZOOM: f64 = 1e8;
+const FIT_MARGIN: f64 = 0.9;
+const SPEED: f64 = 12.0;
+
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
+pub struct WRect {
+    pub x: f64,
+    pub y: f64,
+    pub w: f64,
+    pub h: f64,
+}
+
+impl WRect {
+    pub fn new(x: f64, y: f64, w: f64, h: f64) -> WRect {
+        WRect { x, y, w, h }
+    }
+
+    pub fn center(&self) -> [f64; 2] {
+        [self.x + self.w / 2.0, self.y + self.h / 2.0]
+    }
+}
+
+impl From<Rect> for WRect {
+    fn from(r: Rect) -> WRect {
+        WRect::new(r.x as f64, r.y as f64, r.w as f64, r.h as f64)
+    }
+}
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct Camera {
-    pub center: [f32; 2],
-    pub zoom: f32,
+    pub center: [f64; 2],
+    pub zoom: f64,
 }
 
 impl Default for Camera {
@@ -17,49 +41,54 @@ impl Default for Camera {
     }
 }
 
+fn view_center(view: Rect) -> [f64; 2] {
+    let c = view.center();
+    [c[0] as f64, c[1] as f64]
+}
+
 impl Camera {
-    pub fn world_to_screen(&self, p: [f32; 2], view: Rect) -> [f32; 2] {
-        let c = view.center();
-        [(p[0] - self.center[0]) * self.zoom + c[0], (p[1] - self.center[1]) * self.zoom + c[1]]
+    pub fn world_to_screen(&self, p: [f64; 2], view: Rect) -> [f32; 2] {
+        let c = view_center(view);
+        [((p[0] - self.center[0]) * self.zoom + c[0]) as f32, ((p[1] - self.center[1]) * self.zoom + c[1]) as f32]
     }
 
-    pub fn screen_to_world(&self, p: [f32; 2], view: Rect) -> [f32; 2] {
-        let c = view.center();
-        [(p[0] - c[0]) / self.zoom + self.center[0], (p[1] - c[1]) / self.zoom + self.center[1]]
+    pub fn screen_to_world(&self, p: [f32; 2], view: Rect) -> [f64; 2] {
+        let c = view_center(view);
+        [(p[0] as f64 - c[0]) / self.zoom + self.center[0], (p[1] as f64 - c[1]) / self.zoom + self.center[1]]
     }
 
-    pub fn world_to_screen_rect(&self, r: Rect, view: Rect) -> Rect {
+    pub fn world_to_screen_rect(&self, r: WRect, view: Rect) -> Rect {
         let tl = self.world_to_screen([r.x, r.y], view);
-        Rect::new(tl[0], tl[1], r.w * self.zoom, r.h * self.zoom)
+        Rect::new(tl[0], tl[1], (r.w * self.zoom) as f32, (r.h * self.zoom) as f32)
     }
 
-    pub fn screen_to_world_rect(&self, r: Rect, view: Rect) -> Rect {
+    pub fn screen_to_world_rect(&self, r: Rect, view: Rect) -> WRect {
         let tl = self.screen_to_world([r.x, r.y], view);
-        Rect::new(tl[0], tl[1], r.w / self.zoom, r.h / self.zoom)
+        WRect::new(tl[0], tl[1], r.w as f64 / self.zoom, r.h as f64 / self.zoom)
     }
 
-    pub fn zoom_at(&mut self, screen: [f32; 2], factor: f32, view: Rect) {
+    pub fn zoom_at(&mut self, screen: [f32; 2], factor: f64, view: Rect) {
         let anchor = self.screen_to_world(screen, view);
         self.zoom = (self.zoom * factor).clamp(MIN_ZOOM, MAX_ZOOM);
-        let c = view.center();
-        self.center = [anchor[0] - (screen[0] - c[0]) / self.zoom, anchor[1] - (screen[1] - c[1]) / self.zoom];
+        let c = view_center(view);
+        self.center = [anchor[0] - (screen[0] as f64 - c[0]) / self.zoom, anchor[1] - (screen[1] as f64 - c[1]) / self.zoom];
     }
 
     pub fn pan_by(&mut self, screen_delta: [f32; 2]) {
-        self.center[0] -= screen_delta[0] / self.zoom;
-        self.center[1] -= screen_delta[1] / self.zoom;
+        self.center[0] -= screen_delta[0] as f64 / self.zoom;
+        self.center[1] -= screen_delta[1] as f64 / self.zoom;
     }
 
-    pub fn fit(target: Rect, view: Rect) -> Camera {
-        let zx = view.w / target.w.max(1e-6);
-        let zy = view.h / target.h.max(1e-6);
-        Camera { center: target.center(), zoom: (zx.min(zy) * FIT_MARGIN).clamp(MIN_ZOOM, MAX_ZOOM) }
+    pub fn fit(target: impl Into<WRect>, view: Rect) -> Camera {
+        let t: WRect = target.into();
+        let zx = view.w as f64 / t.w.max(1e-12);
+        let zy = view.h as f64 / t.h.max(1e-12);
+        Camera { center: t.center(), zoom: (zx.min(zy) * FIT_MARGIN).clamp(MIN_ZOOM, MAX_ZOOM) }
     }
 
     pub fn animate_to(&mut self, target: &Camera, dt: f32) -> bool {
-        let t = 1.0 - (-dt * SPEED).exp();
-        let log_zoom = self.zoom.ln() + (target.zoom.ln() - self.zoom.ln()) * t;
-        self.zoom = log_zoom.exp();
+        let t = 1.0 - (-(dt as f64) * SPEED).exp();
+        self.zoom = (self.zoom.ln() + (target.zoom.ln() - self.zoom.ln()) * t).exp();
         self.center[0] += (target.center[0] - self.center[0]) * t;
         self.center[1] += (target.center[1] - self.center[1]) * t;
         let dx = (target.center[0] - self.center[0]) * self.zoom;

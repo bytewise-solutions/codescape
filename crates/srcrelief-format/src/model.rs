@@ -152,8 +152,6 @@ pub struct Stats {
 pub struct Node {
     pub name: u32,
     pub parent: u32,
-    pub first_child: u32,
-    pub child_count: u32,
     pub kind: u8,
     pub sub: u8,
     pub lang: u8,
@@ -162,15 +160,10 @@ pub struct Node {
     pub file: u32,
     pub start_line: u32,
     pub end_line: u32,
-    pub agg_start: u32,
-    pub agg_len: u32,
-    pub tag_start: u32,
-    pub tag_len: u32,
 }
 
 #[derive(Archive, Serialize, Deserialize, Debug, Clone, Copy)]
 pub struct Edge {
-    pub from: u32,
     pub to: u32,
     pub kind: u8,
     pub scope: u8,
@@ -226,10 +219,13 @@ pub struct Graph {
     pub strings: Vec<u8>,
     pub str_offsets: Vec<u32>,
     pub nodes: Vec<Node>,
+    pub child_offsets: Vec<u32>,
     pub edges: Vec<Edge>,
     pub edge_index: Vec<u32>,
     pub aggs: Vec<Agg>,
+    pub agg_offsets: Vec<u32>,
     pub tags: Vec<u32>,
+    pub tag_offsets: Vec<u32>,
     pub entries: Vec<EntryPoint>,
     pub stats: GraphStats,
     pub provenance: Vec<PackStamp>,

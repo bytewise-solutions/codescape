@@ -1,7 +1,11 @@
 use srcrelief::camera::Camera;
 use srcrelief_layout::Rect;
 
-fn close(a: [f32; 2], b: [f32; 2]) -> bool {
+fn close(a: [f64; 2], b: [f64; 2]) -> bool {
+    (a[0] - b[0]).abs() < 1e-3 && (a[1] - b[1]).abs() < 1e-3
+}
+
+fn close32(a: [f32; 2], b: [f32; 2]) -> bool {
     (a[0] - b[0]).abs() < 1e-3 && (a[1] - b[1]).abs() < 1e-3
 }
 
@@ -12,7 +16,7 @@ fn world_screen_roundtrip() {
     let cam = Camera { center: [10.0, 20.0], zoom: 2.5 };
     let p = [33.0, -7.0];
     assert!(close(cam.screen_to_world(cam.world_to_screen(p, VIEW), VIEW), p));
-    assert!(close(cam.world_to_screen(cam.center, VIEW), [500.0, 350.0]));
+    assert!(close32(cam.world_to_screen(cam.center, VIEW), [500.0, 350.0]));
 }
 
 #[test]
@@ -56,4 +60,15 @@ fn animation_reaches_target() {
     }
     assert!(close(cam.center, target.center) && (cam.zoom - target.zoom).abs() < 1e-3);
     assert!(steps > 3, "animation should take several frames, took {steps}");
+}
+
+#[test]
+fn deep_zoom_stays_precise() {
+    let target = Rect::new(2734.5, 1912.25, 0.002, 0.00125);
+    let cam = Camera::fit(target, VIEW);
+    assert!(cam.zoom > 100_000.0, "a 0.002-unit box must be reachable, zoom {}", cam.zoom);
+    let tl = cam.world_to_screen([target.x as f64, target.y as f64], VIEW);
+    let br = cam.world_to_screen([target.x as f64 + target.w as f64, target.y as f64 + target.h as f64], VIEW);
+    let width = br[0] - tl[0];
+    assert!((width - VIEW.w * 0.9).abs() < 2.0, "box spans {width} px");
 }

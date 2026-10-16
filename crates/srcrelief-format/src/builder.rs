@@ -211,11 +211,13 @@ impl GraphBuilder {
         let n = self.nodes.len();
         let mut order: Vec<NodeId> = Vec::with_capacity(n);
         let mut new_id = vec![NONE; n];
+        let mut child_offsets = vec![0u32; n + 1];
         order.push(0);
         new_id[0] = 0;
         let mut head = 0;
         while head < order.len() {
             let old = order[head] as usize;
+            child_offsets[head] = order.len() as u32;
             head += 1;
             for &c in &self.children[old] {
                 new_id[c as usize] = order.len() as NodeId;
@@ -223,6 +225,7 @@ impl GraphBuilder {
             }
         }
 
+        child_offsets[n] = n as u32;
         let mut depth = vec![0u32; n];
         let mut parent_new = vec![NONE; n];
         for (new, &old) in order.iter().enumerate() {
@@ -244,23 +247,23 @@ impl GraphBuilder {
             slot.1 |= e.flags.0;
             slot.2 += 1;
         }
-        let mut edges: Vec<Edge> = merged
+        let mut sorted: Vec<(u32, Edge)> = merged
             .into_iter()
-            .map(|((from, to, kind, scope), (confidence, flags, count))| Edge { from, to, kind, scope, confidence, flags, count })
+            .map(|((from, to, kind, scope), (confidence, flags, count))| (from, Edge { to, kind, scope, confidence, flags, count }))
             .collect();
-        edges.sort_by_key(|e| (e.from, e.to, e.kind, e.scope));
+        sorted.sort_by_key(|(from, e)| (*from, e.to, e.kind, e.scope));
 
         let mut edge_index = vec![0u32; n + 1];
-        for e in &edges {
-            edge_index[e.from as usize + 1] += 1;
+        for (from, _) in &sorted {
+            edge_index[*from as usize + 1] += 1;
         }
         for i in 0..n {
             edge_index[i + 1] += edge_index[i];
         }
 
         let mut agg_map: HashMap<(u32, u32, u32), Agg> = HashMap::new();
-        for e in &edges {
-            let (mut a, mut b) = (e.from, e.to);
+        for (from, e) in &sorted {
+            let (mut a, mut b) = (*from, e.to);
             while depth[a as usize] > depth[b as usize] {
                 a = parent_new[a as usize];
             }
@@ -288,16 +291,16 @@ impl GraphBuilder {
         }
         let mut agg_list: Vec<((u32, u32, u32), Agg)> = agg_map.into_iter().collect();
         agg_list.sort_by_key(|(k, _)| *k);
-        let mut agg_range = vec![(0u32, 0u32); n];
+        let mut agg_offsets = vec![0u32; n + 1];
         let mut aggs = Vec::with_capacity(agg_list.len());
         for ((container, _, _), agg) in agg_list {
-            let r = &mut agg_range[container as usize];
-            if r.1 == 0 {
-                r.0 = aggs.len() as u32;
-            }
-            r.1 += 1;
+            agg_offsets[container as usize + 1] += 1;
             aggs.push(agg);
         }
+        for i in 0..n {
+            agg_offsets[i + 1] += agg_offsets[i];
+        }
+        let edges: Vec<Edge> = sorted.into_iter().map(|(_, e)| e).collect();
 
         let mut subtree = vec![0u64; n];
         for new in (0..n).rev() {
@@ -314,19 +317,16 @@ impl GraphBuilder {
         }
 
         let mut tags = Vec::new();
+        let mut tag_offsets = Vec::with_capacity(n + 1);
         let mut nodes = Vec::with_capacity(n);
         for (new, &old) in order.iter().enumerate() {
             let b = &mut self.nodes[old as usize];
-            let kids = &self.children[old as usize];
-            let first_child = kids.first().map_or(0, |&c| new_id[c as usize]);
             b.tags.sort_by(|x, y| self.strings.list[*x as usize].cmp(&self.strings.list[*y as usize]));
-            let tag_start = tags.len() as u32;
+            tag_offsets.push(tags.len() as u32);
             tags.extend_from_slice(&b.tags);
             nodes.push(Node {
                 name: b.name,
                 parent: parent_new[new],
-                first_child,
-                child_count: kids.len() as u32,
                 kind: b.kind as u8,
                 sub: b.sub as u8,
                 lang: b.lang as u8,
@@ -335,12 +335,9 @@ impl GraphBuilder {
                 file: b.file,
                 start_line: b.start_line,
                 end_line: b.end_line,
-                agg_start: agg_range[new].0,
-                agg_len: agg_range[new].1,
-                tag_start,
-                tag_len: b.tags.len() as u32,
             });
         }
+        tag_offsets.push(tags.len() as u32);
 
         let opt = |s: &Option<String>, strings: &mut Interner| s.as_deref().map_or(NONE, |s| strings.intern(s));
         let entries: Vec<EntryPoint> = self
@@ -389,6 +386,6 @@ impl GraphBuilder {
         }
         str_offsets.push(strings.len() as u32);
 
-        Graph { strings, str_offsets, nodes, edges, edge_index, aggs, tags, entries, stats, provenance }
+        Graph { strings, str_offsets, nodes, child_offsets, edges, edge_index, aggs, agg_offsets, tags, tag_offsets, entries, stats, provenance }
     }
 }

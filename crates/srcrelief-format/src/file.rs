@@ -6,7 +6,7 @@ use std::ops::Range;
 use std::path::Path;
 
 pub const MAGIC: &[u8; 8] = b"SRCRLF01";
-pub const FORMAT_VERSION: u32 = 2;
+pub const FORMAT_VERSION: u32 = 3;
 const HEADER: usize = 16;
 
 #[derive(Debug, thiserror::Error)]
@@ -121,9 +121,7 @@ impl ArchivedGraph {
     }
 
     pub fn children(&self, id: NodeId) -> Range<NodeId> {
-        let n = self.node(id);
-        let first = n.first_child.to_native();
-        first..first + n.child_count.to_native()
+        self.child_offsets[id as usize].to_native()..self.child_offsets[id as usize + 1].to_native()
     }
 
     pub fn parent(&self, id: NodeId) -> Option<NodeId> {
@@ -172,9 +170,9 @@ impl ArchivedGraph {
     }
 
     pub fn aggregates(&self, id: NodeId) -> &[ArchivedAgg] {
-        let n = self.node(id);
-        let s = n.agg_start.to_native() as usize;
-        &self.aggs[s..s + n.agg_len.to_native() as usize]
+        let s = self.agg_offsets[id as usize].to_native() as usize;
+        let e = self.agg_offsets[id as usize + 1].to_native() as usize;
+        &self.aggs[s..e]
     }
 
     pub fn out_edges(&self, id: NodeId) -> &[ArchivedEdge] {
@@ -184,9 +182,9 @@ impl ArchivedGraph {
     }
 
     pub fn tags(&self, id: NodeId) -> impl Iterator<Item = &str> {
-        let n = self.node(id);
-        let s = n.tag_start.to_native() as usize;
-        self.tags[s..s + n.tag_len.to_native() as usize].iter().map(|t| self.str(t.to_native()))
+        let s = self.tag_offsets[id as usize].to_native() as usize;
+        let e = self.tag_offsets[id as usize + 1].to_native() as usize;
+        self.tags[s..e].iter().map(|t| self.str(t.to_native()))
     }
 
     pub fn has_tag(&self, id: NodeId, tag: &str) -> bool {

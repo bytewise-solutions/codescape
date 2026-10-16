@@ -183,3 +183,27 @@ fn open_rejects_wrong_version_and_truncation() {
     std::fs::write(&p4, b"").unwrap();
     assert!(matches!(ReliefFile::open(&p4), Err(FormatError::Corrupt(_))));
 }
+
+#[test]
+fn records_are_compact() {
+    assert!(std::mem::size_of::<ArchivedNode>() <= 40, "node is {} bytes", std::mem::size_of::<ArchivedNode>());
+    assert!(std::mem::size_of::<ArchivedEdge>() <= 12, "edge is {} bytes", std::mem::size_of::<ArchivedEdge>());
+}
+
+#[test]
+fn leaf_and_childless_ranges_are_empty() {
+    let (b, [_, _, _, f, ..]) = two_module_graph();
+    let _ = f;
+    let (_d, file) = roundtrip(b);
+    let g = file.graph();
+    let m1 = find(g, g.root(), "m1");
+    let p1 = find(g, m1, "p1");
+    let t = find(g, p1, "T");
+    let f = find(g, t, "f");
+    assert!(g.children(f).is_empty());
+    assert!(g.aggregates(f).is_empty());
+    assert_eq!(g.tags(f).count(), 0);
+    assert!(g.out_edges(f).is_empty());
+    let last = (g.node_count() - 1) as NodeId;
+    assert!(g.children(last).is_empty());
+}

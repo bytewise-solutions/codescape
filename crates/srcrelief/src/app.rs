@@ -701,7 +701,7 @@ impl Project {
         }
         if let Some(p) = resp.hover_pos() {
             let (scroll, pinch) = ui.input(|i| (i.smooth_scroll_delta.y, i.zoom_delta()));
-            let factor = (scroll * 0.0025).exp() * pinch;
+            let factor = ((scroll * 0.0025).exp() * pinch) as f64;
             if (factor - 1.0).abs() > 1e-4 {
                 self.cam.zoom_at([p.x, p.y], factor, self.view);
                 self.target = None;
@@ -748,6 +748,9 @@ impl Project {
         let painter = painter.with_clip_rect(erect(self.view));
         let max_depth = self.scene.boxes.iter().map(|b| b.depth).max().unwrap_or(0);
         for depth in 1..=max_depth {
+            for e in self.scene.edges.iter().filter(|e| e.depth == depth) {
+                self.paint_edge(&painter, e);
+            }
             for b in self.scene.boxes.iter().filter(|b| b.depth == depth) {
                 self.paint_box(&painter, b);
             }
@@ -756,9 +759,6 @@ impl Project {
                 let pts = [r.left_top(), r.right_top(), r.right_bottom(), r.left_bottom(), r.left_top()];
                 painter.extend(Shape::dashed_line(&pts, Stroke::new(1.0, style::FRAME), 5.0, 3.0));
                 painter.text(r.left_top() + egui::vec2(6.0, 3.0), Align2::LEFT_TOP, &f.label, FontId::proportional(11.0), style::MUTED);
-            }
-            for e in self.scene.edges.iter().filter(|e| e.depth == depth) {
-                self.paint_edge(&painter, e);
             }
             for l in self.scene.labels.iter().filter(|l| l.depth == depth) {
                 self.paint_label(&painter, l);

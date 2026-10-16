@@ -1,4 +1,4 @@
-use crate::camera::Camera;
+use crate::camera::{Camera, WRect};
 use crate::reach::ReachSet;
 use srcrelief_format::{ArchivedGraph, NodeFlags, NodeId, NodeKind};
 use srcrelief_layout::{ContainerLayout, Direction, LayoutCache, Rect};
@@ -79,14 +79,14 @@ impl Scene {
 }
 
 struct Xform {
-    s: f32,
-    dx: f32,
-    dy: f32,
+    s: f64,
+    dx: f64,
+    dy: f64,
 }
 
 impl Xform {
-    fn fit(layout: &ContainerLayout, world: Rect) -> Xform {
-        let [w, h] = layout.size;
+    fn fit(layout: &ContainerLayout, world: WRect) -> Xform {
+        let (w, h) = (layout.size[0] as f64, layout.size[1] as f64);
         if w <= 0.0 || h <= 0.0 {
             return Xform { s: 0.0, dx: world.x, dy: world.y };
         }
@@ -94,21 +94,21 @@ impl Xform {
         Xform { s, dx: world.x + (world.w - w * s) / 2.0, dy: world.y + (world.h - h * s) / 2.0 }
     }
 
-    fn rect(&self, r: Rect) -> Rect {
-        Rect::new(self.dx + r.x * self.s, self.dy + r.y * self.s, r.w * self.s, r.h * self.s)
+    fn rect(&self, r: Rect) -> WRect {
+        WRect::new(self.dx + r.x as f64 * self.s, self.dy + r.y as f64 * self.s, r.w as f64 * self.s, r.h as f64 * self.s)
     }
 
-    fn point(&self, p: [f32; 2]) -> [f32; 2] {
-        [self.dx + p[0] * self.s, self.dy + p[1] * self.s]
+    fn point(&self, p: [f32; 2]) -> [f64; 2] {
+        [self.dx + p[0] as f64 * self.s, self.dy + p[1] as f64 * self.s]
     }
 }
 
-pub fn root_world(cache: &mut LayoutCache, g: &ArchivedGraph) -> Rect {
+pub fn root_world(cache: &mut LayoutCache, g: &ArchivedGraph) -> WRect {
     let size = cache.shared(g, g.root()).size;
-    Rect::new(0.0, 0.0, size[0], size[1])
+    WRect::new(0.0, 0.0, size[0] as f64, size[1] as f64)
 }
 
-pub fn world_rect(g: &ArchivedGraph, cache: &mut LayoutCache, node: NodeId) -> Option<Rect> {
+pub fn world_rect(g: &ArchivedGraph, cache: &mut LayoutCache, node: NodeId) -> Option<WRect> {
     let path = g.path(node);
     let mut world = root_world(cache, g);
     for pair in path.windows(2) {
@@ -173,7 +173,7 @@ impl Builder<'_> {
         mean * scale >= MIN_CHILD_PX
     }
 
-    fn open_container(&mut self, node: NodeId, world: Rect, depth: u32) {
+    fn open_container(&mut self, node: NodeId, world: WRect, depth: u32) {
         let screen = self.cam.world_to_screen_rect(world, self.view);
         let legible = self.children_legible(node, screen);
         let layout = self.cache.shared(self.g, node);
@@ -207,7 +207,7 @@ impl Builder<'_> {
         }
     }
 
-    fn visit(&mut self, node: NodeId, world: Rect, depth: u32) {
+    fn visit(&mut self, node: NodeId, world: WRect, depth: u32) {
         let rect = self.cam.world_to_screen_rect(world, self.view);
         if rect.w < MIN_DRAW_PX || !rect.intersects(&self.view) {
             return;

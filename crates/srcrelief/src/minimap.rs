@@ -31,16 +31,16 @@ pub fn draw(painter: &Painter, root: &ContainerLayout, cam: &Camera, view: Rect)
         painter.rect_filled(erect(r), 1.0, style::BOX_STROKE.gamma_multiply(0.5));
     }
     let world = cam.screen_to_world_rect(view, view);
-    let v = Rect::new(dx + world.x * s, dy + world.y * s, world.w * s, world.h * s);
+    let v = Rect::new(dx + world.x as f32 * s, dy + world.y as f32 * s, world.w as f32 * s, world.h as f32 * s);
     let clipped = painter.with_clip_rect(erect(a));
     clipped.rect_stroke(erect(v), 0.0, Stroke::new(1.5, style::ACCENT), StrokeKind::Inside);
 }
 
-pub fn world_at(root: &ContainerLayout, view: Rect, p: [f32; 2]) -> Option<[f32; 2]> {
+pub fn world_at(root: &ContainerLayout, view: Rect, p: [f32; 2]) -> Option<[f64; 2]> {
     let a = area(view);
     if !a.contains(p) {
         return None;
     }
     let (s, dx, dy) = scale(root, a);
-    Some([(p[0] - dx) / s, (p[1] - dy) / s])
+    Some([((p[0] - dx) / s) as f64, ((p[1] - dy) / s) as f64])
 }
