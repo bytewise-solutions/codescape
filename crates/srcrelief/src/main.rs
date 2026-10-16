@@ -1,0 +1,27 @@
+use clap::Parser;
+use std::path::PathBuf;
+
+#[derive(Parser)]
+#[command(name = "srcrelief", about = "See a Java or Go codebase as one zoomable map")]
+struct Args {
+    dir: Option<PathBuf>,
+    #[arg(long)]
+    config: Option<PathBuf>,
+    #[arg(long, help = "Render one frame to this PNG and exit")]
+    screenshot: Option<PathBuf>,
+    #[arg(long, help = "With --screenshot: zoom to the first node matching this name")]
+    focus: Option<String>,
+    #[arg(long, help = "With --screenshot: select the entry point with this label")]
+    entry: Option<String>,
+}
+
+fn main() -> eframe::Result {
+    let args = Args::parse();
+    let options = eframe::NativeOptions {
+        viewport: egui::ViewportBuilder::default().with_title("SrcRelief").with_inner_size([1440.0, 900.0]),
+        renderer: eframe::Renderer::Wgpu,
+        ..Default::default()
+    };
+    let shot = args.screenshot.map(|path| srcrelief::shot::ShotPlan { path, focus: args.focus, entry: args.entry });
+    eframe::run_native("SrcRelief", options, Box::new(move |cc| Ok(Box::new(srcrelief::app::ReliefApp::new(cc, args.dir, args.config, shot)))))
+}

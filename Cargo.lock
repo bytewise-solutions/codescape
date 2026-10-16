@@ -2698,6 +2698,7 @@ dependencies = [
  "eframe",
  "egui",
  "nucleo-matcher",
+ "png",
  "rfd",
  "serde",
  "srcrelief-format",
@@ -2812,6 +2813,14 @@ dependencies = [
  "tree-sitter",
  "tree-sitter-go",
  "tree-sitter-java",
+]
+
+[[package]]
+name = "srcrelief-synth"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "clap",
 ]
 
 [[package]]

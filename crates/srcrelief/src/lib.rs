@@ -1,3 +1,9 @@
+pub mod app;
 pub mod camera;
 pub mod canvas;
+pub mod minimap;
+pub mod panels;
 pub mod reach;
+pub mod search;
+pub mod shot;
+pub mod style;
