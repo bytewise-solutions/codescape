@@ -625,6 +625,15 @@ impl Project {
         })
     }
 
+    fn open_member(&mut self, m: NodeId) {
+        let Some(t) = self.file.graph().parent(m) else { return };
+        self.goto_line = Some((t, self.file.graph().span(m).0));
+        self.set_focus(m, None, false, true);
+        if let Some(r) = world_rect(self.file.graph(), &mut self.cache, t) {
+            self.target = Some(Camera::reading(r, self.view));
+        }
+    }
+
     fn fly_to(&mut self, node: NodeId) {
         let g = self.file.graph();
         if let Some(r) = world_rect(g, &mut self.cache, node) {
@@ -652,6 +661,9 @@ impl Project {
                     t.center = [w.x + half[0], w.y + half[1]];
                 }
             }
+        }
+        if let Some(m) = plan.open.as_ref().and_then(|name| self.search.query(self.file.graph(), name, 1).first().copied()) {
+            self.open_member(m);
         }
         self.settings_open |= plan.settings;
         self.shortcuts_open |= plan.shortcuts;
@@ -1787,7 +1799,8 @@ impl Project {
         let started = Instant::now();
         self.hovered = resp.hover_pos().and_then(|p| self.scene.box_at([p.x, p.y]));
         let anchor = self.pointer.filter(|_| !self.scripted).map_or(self.view.center(), |p| [p.x, p.y]);
-        let open_files: Vec<NodeId> = self.scene.boxes.iter().filter(|b| b.source).map(|b| b.node).collect();
+        let mut open_files: Vec<NodeId> = self.scene.boxes.iter().filter(|b| b.source).map(|b| b.node).collect();
+        open_files.extend(self.goto_line.map(|(t, _)| t));
         self.scene = build_scene_at(g, &mut self.cache, &self.cam, self.view, &self.visual, self.focus.as_ref().map(|f| &f.marks), anchor, &open_files);
         if let Some(rv) = &self.review {
             review_dim(rv, &mut self.scene);
@@ -1834,10 +1847,8 @@ impl Project {
         if let Some(n) = fly {
             self.set_focus(n, None, true, true);
         }
-        if let Some((m, t)) = open_row {
-            self.goto_line = Some((t, self.file.graph().span(m).0));
-            self.set_focus(m, None, false, true);
-            self.fly_to(t);
+        if let Some((m, _)) = open_row {
+            self.open_member(m);
         }
     }
 

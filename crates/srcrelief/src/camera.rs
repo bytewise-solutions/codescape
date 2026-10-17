@@ -4,6 +4,7 @@ pub const MIN_ZOOM: f64 = 1e-6;
 pub const MAX_ZOOM: f64 = 1e8;
 const FIT_MARGIN: f64 = 0.9;
 const SPEED: f64 = 12.0;
+const READING_SHARE: f64 = 0.6;
 
 #[derive(Clone, Copy, Debug, Default, PartialEq)]
 pub struct WRect {
@@ -84,6 +85,19 @@ impl Camera {
         let zx = view.w as f64 / t.w.max(1e-12);
         let zy = view.h as f64 / t.h.max(1e-12);
         Camera { center: t.center(), zoom: (zx.min(zy) * FIT_MARGIN).clamp(MIN_ZOOM, MAX_ZOOM) }
+    }
+
+    pub fn reading(target: impl Into<WRect>, view: Rect) -> Camera {
+        let t: WRect = target.into();
+        let fit = Camera::fit(t, view);
+        let wide = view.w as f64 * READING_SHARE / t.w.max(1e-12);
+        if fit.zoom >= wide {
+            return fit;
+        }
+        let zoom = wide.clamp(MIN_ZOOM, MAX_ZOOM);
+        let half_h = view.h as f64 / 2.0 / zoom;
+        let top = t.y + half_h - view.h as f64 * 0.04 / zoom;
+        Camera { center: [t.center()[0], top.min(t.center()[1])], zoom }
     }
 
     pub fn animate_to(&mut self, target: &Camera, dt: f32) -> bool {

@@ -72,3 +72,16 @@ fn deep_zoom_stays_precise() {
     let width = br[0] - tl[0];
     assert!((width - VIEW.w * 0.9).abs() < 2.0, "box spans {width} px");
 }
+
+#[test]
+fn reading_a_tall_card_zooms_until_its_file_opens_with_its_top_in_view() {
+    let card = Rect::new(0.0, 0.0, 100.0, 1000.0);
+    assert!(100.0 * Camera::fit(card, VIEW).zoom < (VIEW.w * srcrelief::canvas::FILE_VIEW_SHARE) as f64, "fitting alone leaves it too narrow");
+    let cam = Camera::reading(card, VIEW);
+    let r = cam.world_to_screen_rect(card.into(), VIEW);
+    assert!(r.w >= VIEW.w * srcrelief::canvas::FILE_VIEW_SHARE, "{} px wide", r.w);
+    assert!(r.y >= VIEW.y && r.y < VIEW.y + VIEW.h * 0.1, "top at {}", r.y);
+    assert!((r.center()[0] - VIEW.center()[0]).abs() < 1.0);
+    let wide = Rect::new(0.0, 0.0, 1000.0, 300.0);
+    assert_eq!(Camera::reading(wide, VIEW).zoom, Camera::fit(wide, VIEW).zoom, "a wide box just fits");
+}
