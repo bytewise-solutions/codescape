@@ -4,6 +4,7 @@ mod gradle;
 mod npm;
 mod walk;
 
+pub use cargo::{CargoCrate, cargo_crate};
 pub use gomod::{GoMod, parse_go_mod, parse_go_work};
 pub use gradle::{GradleSettings, SourceSets, parse_build_deps, parse_settings, parse_source_sets};
 pub use walk::{default_excludes, rel_path, walk_files, walk_files_under};
@@ -77,9 +78,9 @@ pub fn discover(root: &Path, excludes: &GlobSet) -> Result<Discovery> {
     }
     discover_go(&root, &markers, &mut d);
     npm::discover_npm(&root, &markers, &mut d);
-    cargo::discover_cargo(&root, &markers, &mut d);
+    let cargo_roots = cargo::discover_cargo(&markers, &mut d);
 
-    let claimed: Vec<PathBuf> = d.modules.iter().map(|m| m.dir.clone()).chain(gradle_roots.iter().cloned()).collect();
+    let claimed: Vec<PathBuf> = d.modules.iter().map(|m| m.dir.clone()).chain(gradle_roots.iter().cloned()).chain(cargo_roots).collect();
     let mut skipped_dirs: Vec<PathBuf> = Vec::new();
     for marker in markers.iter().filter(|p| is_named(p, UNSUPPORTED_ROOTS)) {
         let dir = marker.parent().unwrap().to_path_buf();

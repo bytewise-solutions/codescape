@@ -2719,6 +2719,7 @@ dependencies = [
  "regex",
  "srcrelief-format",
  "tempfile",
+ "toml",
 ]
 
 [[package]]
