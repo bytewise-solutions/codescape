@@ -2,27 +2,31 @@ mod sequence_ui;
 
 use crate::camera::Camera;
 use crate::canvas::{Scene, build_scene_at, fit_label, root_world, world_rect};
-use crate::panels::{EntryGroupView, group_entries};
 use crate::focus::{Focus, FocusMode, History, Mark, UsageIndex, focus};
-use crate::search::{self, SearchIndex};
-use crate::shot::{Shot, ShotPlan, ShotStep};
 use crate::input::{CHEATSHEET, Nav, Step, interpret, nearest_in};
 use crate::inspector;
+use crate::panels::{EntryGroupView, group_entries};
 use crate::review_view::{CommitStep, ItemKind, MarkState, ReviewItem, ReviewMarks, Risk, by_risk, items as review_items, step as review_step};
-use srcrelief_index::analysis::{Analysis, Usage, analyse};
-use std::sync::Arc;
-use srcrelief_index::review::{Change, Counts, Review, Status, base_for, branches, clean_versions, commits, compare, current_branch, has_uncommitted, index_revision, is_git};
-use crate::source::{LINE_SPACING, SourceCache, Token, advance, file_font, highlight, hscroll_by, initial_scroll, merge_spans, scroll_at, scroll_by, thumb};
+use crate::search::{self, SearchIndex};
 use crate::settings_window::{self, SettingsForm};
+use crate::shot::{Shot, ShotPlan, ShotStep};
+use crate::source::{LINE_SPACING, SourceCache, Token, advance, file_font, highlight, hscroll_by, initial_scroll, merge_spans, scroll_at, scroll_by, thumb};
 use crate::view::{layout_options, toggle, view_items};
 use crate::{minimap, style};
 use egui::{Align2, Color32, FontId, Key, KeyboardShortcut, Modifiers, Pos2, Sense, Shape, Stroke, StrokeKind};
 use srcrelief_format::*;
-use srcrelief_index::{Key as SettingKey, ProjectConfig, Progress, SettingsPaths, SettingsStore, View, index_path, index_project, needs_reindex, project_packs};
+use srcrelief_index::analysis::{Analysis, Usage, analyse};
+use srcrelief_index::review::{
+    Change, Counts, Review, Status, base_for, branches, clean_versions, commits, compare, current_branch, has_uncommitted, index_revision, is_git,
+};
+use srcrelief_index::{
+    Key as SettingKey, Progress, ProjectConfig, SettingsPaths, SettingsStore, View, index_path, index_project, needs_reindex, project_packs,
+};
 use srcrelief_layout::{Direction, LayoutCache, Rect};
 use srcrelief_rules::{PackSelection, VisualRules, load_packs, user_rules_dir};
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
 use std::sync::mpsc::{Receiver, channel};
 use std::time::Instant;
 
@@ -97,7 +101,8 @@ impl ReliefApp {
             let cfg = settings.config();
             let packs = project_packs(&dir, &cfg)?;
             let path = index_path(&dir, &cfg);
-            let available = load_packs(Some(&dir), user_rules_dir().as_deref(), &PackSelection { extra_dirs: cfg.packs.extra_dirs.clone(), ..Default::default() })?;
+            let available =
+                load_packs(Some(&dir), user_rules_dir().as_deref(), &PackSelection { extra_dirs: cfg.packs.extra_dirs.clone(), ..Default::default() })?;
             Ok((settings, cfg, packs, path, available.names().into_iter().map(String::from).collect()))
         })();
         let (settings, cfg, packs, path, available) = match prepared {
@@ -270,18 +275,24 @@ impl eframe::App for ReliefApp {
                 }
             }
             State::Open(mut project) => {
-                let menu = egui::Panel::top("top").show(ui, |ui| egui::MenuBar::new().ui(ui, |ui| {
-                    let file = self.file_menu(ui, true);
-                    project.view_menu(ui);
-                    project.review_menu(ui);
-                    ui.menu_button("Help", |ui| {
-                        if ui.add(egui::Button::new("Shortcuts").shortcut_text("? / F1")).clicked() {
-                            project.shortcuts_open = true;
-                        }
-                    });
-                    project.mode_switch(ui);
-                    file
-                }).inner).inner;
+                let menu = egui::Panel::top("top")
+                    .show(ui, |ui| {
+                        egui::MenuBar::new()
+                            .ui(ui, |ui| {
+                                let file = self.file_menu(ui, true);
+                                project.view_menu(ui);
+                                project.review_menu(ui);
+                                ui.menu_button("Help", |ui| {
+                                    if ui.add(egui::Button::new("Shortcuts").shortcut_text("? / F1")).clicked() {
+                                        project.shortcuts_open = true;
+                                    }
+                                });
+                                project.mode_switch(ui);
+                                file
+                            })
+                            .inner
+                    })
+                    .inner;
                 let action = project.ui(ui).or(menu);
                 if let Some(shot) = &mut self.shot {
                     match shot.step(project.target.is_some() || project.review_job.is_some()) {
@@ -490,7 +501,8 @@ const LEGEND_ROW: f32 = 14.0;
 fn review_badge(c: &Change, open: bool) -> Option<(String, Color32)> {
     let i = c.inside;
     if (open || c.status != Status::New) && i != Counts::default() {
-        let parts: Vec<String> = [(i.new, "new"), (i.changed, "changed"), (i.removed, "removed")].iter().filter(|(n, _)| *n > 0).map(|(n, w)| format!("{n} {w}")).collect();
+        let parts: Vec<String> =
+            [(i.new, "new"), (i.changed, "changed"), (i.removed, "removed")].iter().filter(|(n, _)| *n > 0).map(|(n, w)| format!("{n} {w}")).collect();
         let color = if i.new > 0 { style::ADDED } else { style::EDGE_SIDEWAYS };
         return Some((parts.join(" · "), color));
     }
@@ -796,7 +808,11 @@ impl Project {
             }
             ui.separator();
             let clear = ui.add_enabled(self.git && self.review_bar.is_none(), egui::Button::new("Clear cached versions"));
-            if clear.on_hover_text("Delete the other versions of this project kept to compare with; they are rebuilt when needed").on_disabled_hover_text("Leave review first").clicked() {
+            if clear
+                .on_hover_text("Delete the other versions of this project kept to compare with; they are rebuilt when needed")
+                .on_disabled_hover_text("Leave review first")
+                .clicked()
+            {
                 let (dir, _) = self.origin();
                 let cache = srcrelief_index::cache_path(&dir).parent().map(Path::to_path_buf).unwrap_or_else(std::env::temp_dir);
                 std::thread::spawn(move || {
@@ -820,7 +836,10 @@ impl Project {
                 self.exit_review();
             }
         }
-        let review = ui.add_enabled(self.git, egui::Button::selectable(reviewing, "Review")).on_hover_text("What changed between two versions").on_disabled_hover_text(self.review_unavailable());
+        let review = ui
+            .add_enabled(self.git, egui::Button::selectable(reviewing, "Review"))
+            .on_hover_text("What changed between two versions")
+            .on_disabled_hover_text(self.review_unavailable());
         if review.clicked() && !reviewing {
             self.enter_review(None, None);
         }
@@ -832,7 +851,16 @@ impl Project {
 
     fn enter_review(&mut self, base: Option<String>, target: Option<String>) {
         let (dir, _) = self.origin();
-        self.review_bar = Some(ReviewBar { base, target, by_commit: false, steps: Vec::new(), step: 0, branches: branches(&dir), current: current_branch(&dir), other: None });
+        self.review_bar = Some(ReviewBar {
+            base,
+            target,
+            by_commit: false,
+            steps: Vec::new(),
+            step: 0,
+            branches: branches(&dir),
+            current: current_branch(&dir),
+            other: None,
+        });
         self.compare_now();
     }
 
@@ -900,7 +928,15 @@ impl Project {
                 let (bf, tf) = (ReliefFile::open(&b.index)?, ReliefFile::open(&target_index)?);
                 let review = compare(bf.graph(), &b.dir, tf.graph(), &target_dir);
                 let analysis = analyse(tf.graph(), &target_dir);
-                Ok(ReviewDone { label: format!("{label} @ {}", &b.sha[..7]), review, analysis, dir: target_dir, index: target_index, rebuilt, version: target.as_deref().map(short_rev) })
+                Ok(ReviewDone {
+                    label: format!("{label} @ {}", &b.sha[..7]),
+                    review,
+                    analysis,
+                    dir: target_dir,
+                    index: target_index,
+                    rebuilt,
+                    version: target.as_deref().map(short_rev),
+                })
             })();
             let _ = tx.send(result.map_err(|e| format!("{e:#}")));
         });
@@ -942,14 +978,28 @@ impl Project {
                     .new_arrows
                     .iter()
                     .copied()
-                    .filter(|&(a, b)| g.parent(a).is_some_and(|p| self.cache.get_or_compute(g, p).edges.iter().any(|e| e.a == a && e.b == b && e.dir == Direction::Up)))
+                    .filter(|&(a, b)| {
+                        g.parent(a).is_some_and(|p| self.cache.get_or_compute(g, p).edges.iter().any(|e| e.a == a && e.b == b && e.dir == Direction::Up))
+                    })
                     .collect();
                 let mut review = done.review;
                 review.new_arrows.sort_by_key(|arrow| !upward.contains(arrow));
                 let marks_path = srcrelief_index::cache_path(&self.origin().0).with_extension("marks");
                 let marks = ReviewMarks::load(&marks_path);
                 let (hide_reviewed, by_package) = self.review.as_ref().map_or((false, false), |r| (r.hide_reviewed, r.by_package));
-                let mut rv = ReviewState { label: done.label, review, items, cursor: None, new_arrows, upward, marks, marks_path, states: HashMap::new(), hide_reviewed, by_package };
+                let mut rv = ReviewState {
+                    label: done.label,
+                    review,
+                    items,
+                    cursor: None,
+                    new_arrows,
+                    upward,
+                    marks,
+                    marks_path,
+                    states: HashMap::new(),
+                    hide_reviewed,
+                    by_package,
+                };
                 rv.reorder();
                 rv.refresh();
                 self.analysis = Some(Arc::new(done.analysis));
@@ -1000,7 +1050,11 @@ impl Project {
                 edit.request_focus();
                 if ui.input(|i| i.key_pressed(Key::Enter)) && !text.trim().is_empty() {
                     let rev = Some(text.trim().to_string());
-                    if *for_target { bar.target = rev } else { bar.base = rev }
+                    if *for_target {
+                        bar.target = rev
+                    } else {
+                        bar.base = rev
+                    }
                     bar.other = None;
                     changed = true;
                 } else if ui.input(|i| i.key_pressed(Key::Escape)) {
@@ -1282,29 +1336,34 @@ impl Project {
             self.keyboard(ui);
         }
         if self.shortcuts_open {
-            egui::Window::new("Shortcuts").open(&mut self.shortcuts_open).collapsible(false).resizable(false).anchor(Align2::CENTER_TOP, [0.0, 60.0]).show(ui.ctx(), |ui| {
-                ui.horizontal_top(|ui| {
-                    for column in CHEATSHEET.chunks(2) {
-                        ui.vertical(|ui| {
-                            for (section, rows) in column {
-                                ui.label(egui::RichText::new(*section).strong().color(style::TEXT));
-                                egui::Grid::new(*section).num_columns(2).spacing([14.0, 4.0]).show(ui, |ui| {
-                                    for (keys, what) in rows.iter() {
-                                        ui.label(egui::RichText::new(*keys).monospace().color(style::ACCENT));
-                                        ui.label(egui::RichText::new(*what).color(style::MUTED));
-                                        ui.end_row();
-                                    }
-                                });
-                                ui.add_space(10.0);
-                            }
-                        });
-                        ui.add_space(18.0);
-                    }
-                });
-            });
+            egui::Window::new("Shortcuts").open(&mut self.shortcuts_open).collapsible(false).resizable(false).anchor(Align2::CENTER_TOP, [0.0, 60.0]).show(
+                ui.ctx(),
+                |ui| {
+                    ui.horizontal_top(|ui| {
+                        for column in CHEATSHEET.chunks(2) {
+                            ui.vertical(|ui| {
+                                for (section, rows) in column {
+                                    ui.label(egui::RichText::new(*section).strong().color(style::TEXT));
+                                    egui::Grid::new(*section).num_columns(2).spacing([14.0, 4.0]).show(ui, |ui| {
+                                        for (keys, what) in rows.iter() {
+                                            ui.label(egui::RichText::new(*keys).monospace().color(style::ACCENT));
+                                            ui.label(egui::RichText::new(*what).color(style::MUTED));
+                                            ui.end_row();
+                                        }
+                                    });
+                                    ui.add_space(10.0);
+                                }
+                            });
+                            ui.add_space(18.0);
+                        }
+                    });
+                },
+            );
         }
         if self.review_bar.is_some() {
-            egui::Panel::top("review_bar").frame(egui::Frame::side_top_panel(ui.style()).fill(style::tint(style::BAR, style::ACCENT, 0.22))).show(ui, |ui| self.review_bar(ui));
+            egui::Panel::top("review_bar")
+                .frame(egui::Frame::side_top_panel(ui.style()).fill(style::tint(style::BAR, style::ACCENT, 0.22)))
+                .show(ui, |ui| self.review_bar(ui));
         }
         egui::Panel::top("breadcrumb").show(ui, |ui| ui.horizontal(|ui| self.breadcrumb(ui)));
         egui::Panel::bottom("status").show(ui, |ui| self.status_bar(ui));
@@ -1421,17 +1480,33 @@ impl Project {
             if let Some(rv) = &self.review {
                 let t = rv.review.totals();
                 let removed = if t.removed > 0 { format!(" · {} removed", t.removed) } else { String::new() };
-                ui.label(egui::RichText::new(format!("{} · {} new · {} changed{removed} · {} / {} reviewed", rv.label, t.new, t.changed, rv.reviewed(), rv.items.len())).strong().color(style::ACCENT));
+                ui.label(
+                    egui::RichText::new(format!(
+                        "{} · {} new · {} changed{removed} · {} / {} reviewed",
+                        rv.label,
+                        t.new,
+                        t.changed,
+                        rv.reviewed(),
+                        rv.items.len()
+                    ))
+                    .strong()
+                    .color(style::ACCENT),
+                );
                 ui.separator();
             }
             ui.label(egui::RichText::new(format!("zoom {:.0}% · inside {level}", self.cam.zoom * 100.0)).color(style::MUTED));
             ui.separator();
             let t = &self.totals;
-            ui.label(egui::RichText::new(format!("{} modules · {} packages · {} types · {:.0}k loc", t.modules, t.packages, t.types, t.lines as f32 / 1000.0)).color(style::MUTED));
+            ui.label(
+                egui::RichText::new(format!("{} modules · {} packages · {} types · {:.0}k loc", t.modules, t.packages, t.types, t.lines as f32 / 1000.0))
+                    .color(style::MUTED),
+            );
             ui.separator();
             ui.label(egui::RichText::new(format!("{} apps · {} dev tools", t.apps, t.tools)).color(style::MUTED));
             ui.separator();
-            ui.label(egui::RichText::new(format!("calls {:.0}% resolved · {:.0}% guessed", r as f32 * 100.0 / total, gu as f32 * 100.0 / total)).color(style::MUTED));
+            ui.label(
+                egui::RichText::new(format!("calls {:.0}% resolved · {:.0}% guessed", r as f32 * 100.0 / total, gu as f32 * 100.0 / total)).color(style::MUTED),
+            );
             if up > 0 {
                 ui.separator();
                 ui.colored_label(style::EDGE_UP, format!("{up} upward module dependencies"));
@@ -1527,7 +1602,11 @@ impl Project {
                     ui.horizontal(|ui| {
                         ui.add_space(22.0);
                         ui.spacing_mut().item_spacing.x = 6.0;
-                        let shown = if item.risks.iter().any(|r| matches!(r, Risk::Complexity(..))) { item.detail.split(" · ").next().unwrap_or("") } else { item.detail.as_str() };
+                        let shown = if item.risks.iter().any(|r| matches!(r, Risk::Complexity(..))) {
+                            item.detail.split(" · ").next().unwrap_or("")
+                        } else {
+                            item.detail.as_str()
+                        };
                         ui.label(egui::RichText::new(shown).small().color(style::MUTED));
                         if state == MarkState::ChangedSince {
                             ui.label(egui::RichText::new("changed since review").small().color(style::ACCENT));
@@ -1560,7 +1639,11 @@ impl Project {
                     ui.label(egui::RichText::new(format!("NEW DEPENDENCIES ({})", rv.review.new_arrows.len())).small().color(style::ACCENT));
                     for &(a, b) in &rv.review.new_arrows {
                         ui.horizontal_wrapped(|ui| {
-                            if ui.selectable_label(false, egui::RichText::new(format!("{} uses {}", g.name(a), g.name(b))).color(style::ADDED)).on_hover_text(format!("{} uses {}", full_path(g, a), full_path(g, b))).clicked() {
+                            if ui
+                                .selectable_label(false, egui::RichText::new(format!("{} uses {}", g.name(a), g.name(b))).color(style::ADDED))
+                                .on_hover_text(format!("{} uses {}", full_path(g, a), full_path(g, b)))
+                                .clicked()
+                            {
                                 fly = Some(a);
                             }
                             if rv.upward.contains(&(a, b)) {
@@ -1572,45 +1655,52 @@ impl Project {
                 if !rv.review.removed_arrows.is_empty() {
                     ui.label(egui::RichText::new(format!("REMOVED DEPENDENCIES ({})", rv.review.removed_arrows.len())).small().color(style::MUTED));
                     for (a, b) in &rv.review.removed_arrows {
-                        ui.label(egui::RichText::new(format!("{} uses {}", a.rsplit('/').next().unwrap_or(a), b.rsplit('/').next().unwrap_or(b))).color(style::MUTED)).on_hover_text(format!("{a} uses {b}"));
+                        ui.label(
+                            egui::RichText::new(format!("{} uses {}", a.rsplit('/').next().unwrap_or(a), b.rsplit('/').next().unwrap_or(b)))
+                                .color(style::MUTED),
+                        )
+                        .on_hover_text(format!("{a} uses {b}"));
                     }
                 }
                 ui.add_space(12.0);
             }
             ui.label(egui::RichText::new("ENTRY POINTS").small().color(style::MUTED));
             for (gi, group) in self.groups.iter().enumerate() {
-                egui::CollapsingHeader::new(format!("{} ({})", group.label, group.items.len())).id_salt(("group", gi)).default_open(!group.collapsed).show(ui, |ui| {
-                    for item in &group.items {
-                        let i = item.entry as usize;
-                        let mut text = g.entry_label(i).to_string();
-                        if let Some(h) = g.entry_handoff(i) {
-                            text.push_str(&format!("  · {h}"));
-                        }
-                        let selected = self.selected_entry == Some(i);
-                        if item.children.is_empty() {
-                            if ui.selectable_label(selected, text).clicked() {
-                                select = Some(i);
+                egui::CollapsingHeader::new(format!("{} ({})", group.label, group.items.len())).id_salt(("group", gi)).default_open(!group.collapsed).show(
+                    ui,
+                    |ui| {
+                        for item in &group.items {
+                            let i = item.entry as usize;
+                            let mut text = g.entry_label(i).to_string();
+                            if let Some(h) = g.entry_handoff(i) {
+                                text.push_str(&format!("  · {h}"));
                             }
-                            continue;
-                        }
-                        let id = ui.make_persistent_id(("entry", i));
-                        egui::collapsing_header::CollapsingState::load_with_default_open(ui.ctx(), id, false)
-                            .show_header(ui, |ui| {
-                                if ui.selectable_label(selected, format!("{text}  ({})", item.children.len())).clicked() {
+                            let selected = self.selected_entry == Some(i);
+                            if item.children.is_empty() {
+                                if ui.selectable_label(selected, text).clicked() {
                                     select = Some(i);
                                 }
-                            })
-                            .body(|ui| {
-                                for &c in &item.children {
-                                    let c = c as usize;
-                                    let label = format!("{}  [{}]", g.entry_label(c), lifecycle_badge(g.entry_lifecycle(c)));
-                                    if ui.selectable_label(self.selected_entry == Some(c), label).clicked() {
-                                        select = Some(c);
+                                continue;
+                            }
+                            let id = ui.make_persistent_id(("entry", i));
+                            egui::collapsing_header::CollapsingState::load_with_default_open(ui.ctx(), id, false)
+                                .show_header(ui, |ui| {
+                                    if ui.selectable_label(selected, format!("{text}  ({})", item.children.len())).clicked() {
+                                        select = Some(i);
                                     }
-                                }
-                            });
-                    }
-                });
+                                })
+                                .body(|ui| {
+                                    for &c in &item.children {
+                                        let c = c as usize;
+                                        let label = format!("{}  [{}]", g.entry_label(c), lifecycle_badge(g.entry_lifecycle(c)));
+                                        if ui.selectable_label(self.selected_entry == Some(c), label).clicked() {
+                                            select = Some(c);
+                                        }
+                                    }
+                                });
+                        }
+                    },
+                );
             }
             ui.add_space(12.0);
             ui.label(egui::RichText::new("MODULES").small().color(style::MUTED));
@@ -1699,8 +1789,9 @@ impl Project {
                 ui.label(egui::RichText::new(loc).small().color(style::MUTED)).on_hover_text(g.file(n).unwrap_or(""));
             }
             if let Some(label) = unused_label {
-                ui.label(egui::RichText::new(label).small().color(style::EDGE_UP))
-                    .on_hover_text("Nothing in main code calls, creates or names it outside its own lines. Code reached by reflection or a framework can show up here.");
+                ui.label(egui::RichText::new(label).small().color(style::EDGE_UP)).on_hover_text(
+                    "Nothing in main code calls, creates or names it outside its own lines. Code reached by reflection or a framework can show up here.",
+                );
             }
             if g.kind(n) == NodeKind::Member && ui.small_button("Sequence diagram (S)").clicked() {
                 self.pending_sequence = Some(n);
@@ -1736,7 +1827,11 @@ impl Project {
                         ui.label(egui::RichText::new(format!("{title} ({})", list.len())).small().strong().color(color));
                         if title == "USES" {
                             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                                let modes = [(FocusMode::Neighbours, "neighbours"), (FocusMode::Reaches, "everything it reaches"), (FocusMode::UsedBy, "everywhere it's used")];
+                                let modes = [
+                                    (FocusMode::Neighbours, "neighbours"),
+                                    (FocusMode::Reaches, "everything it reaches"),
+                                    (FocusMode::UsedBy, "everywhere it's used"),
+                                ];
                                 let current = modes.iter().find(|(m, _)| *m == self.focus_mode).map_or("", |(_, l)| *l);
                                 egui::ComboBox::from_id_salt("focus-mode").selected_text(egui::RichText::new(current).small()).show_ui(ui, |ui| {
                                     for (mode, label) in modes {
@@ -1773,13 +1868,16 @@ impl Project {
             if !fields.is_empty() {
                 ui.add_space(10.0);
                 ui.label(egui::RichText::new(format!("FIELDS ({})", fields.len())).small().strong().color(style::MUTED));
-                egui::CollapsingHeader::new(egui::RichText::new("list").small().color(style::MUTED)).id_salt(("fields", n)).default_open(fields.len() <= 12).show(ui, |ui| {
-                    for f in fields.iter().take(LIST_LIMIT) {
-                        let vis = f.visibility.uml();
-                        let ty = if f.ty.is_empty() { String::new() } else { format!(": {}", f.ty) };
-                        ui.label(egui::RichText::new(format!("{vis} {}{ty}", f.name).trim().to_string()).small());
-                    }
-                });
+                egui::CollapsingHeader::new(egui::RichText::new("list").small().color(style::MUTED))
+                    .id_salt(("fields", n))
+                    .default_open(fields.len() <= 12)
+                    .show(ui, |ui| {
+                        for f in fields.iter().take(LIST_LIMIT) {
+                            let vis = f.visibility.uml();
+                            let ty = if f.ty.is_empty() { String::new() } else { format!(": {}", f.ty) };
+                            ui.label(egui::RichText::new(format!("{vis} {}{ty}", f.name).trim().to_string()).small());
+                        }
+                    });
             }
             let opts = self.cache.options().clone();
             let (summary, kids) = inspector::inside(g, n, &|c| opts.hides(g, c));
@@ -1787,16 +1885,19 @@ impl Project {
                 ui.add_space(10.0);
                 ui.label(egui::RichText::new("INSIDE").small().strong().color(style::MUTED));
                 ui.label(egui::RichText::new(summary).small().color(style::MUTED));
-                egui::CollapsingHeader::new(egui::RichText::new("list").small().color(style::MUTED)).id_salt(("inside", n)).default_open(kids.len() <= 12).show(ui, |ui| {
-                    for (c, name) in kids.iter().take(LIST_LIMIT) {
-                        if ui.selectable_label(false, name).clicked() {
-                            self.pending_go = Some(*c);
+                egui::CollapsingHeader::new(egui::RichText::new("list").small().color(style::MUTED))
+                    .id_salt(("inside", n))
+                    .default_open(kids.len() <= 12)
+                    .show(ui, |ui| {
+                        for (c, name) in kids.iter().take(LIST_LIMIT) {
+                            if ui.selectable_label(false, name).clicked() {
+                                self.pending_go = Some(*c);
+                            }
                         }
-                    }
-                    if kids.len() > LIST_LIMIT {
-                        ui.label(egui::RichText::new(format!("… {} more", kids.len() - LIST_LIMIT)).color(style::MUTED));
-                    }
-                });
+                        if kids.len() > LIST_LIMIT {
+                            ui.label(egui::RichText::new(format!("… {} more", kids.len() - LIST_LIMIT)).color(style::MUTED));
+                        }
+                    });
             }
         });
         if std::mem::take(&mut self.pending_refocus) {
@@ -1908,17 +2009,19 @@ impl Project {
                 if let Some(v) = self.hscrolled(node, sideways).filter(|_| sideways != 0.0) {
                     self.file_hscroll.insert(node, v);
                 }
-            } else { match interpret(mods.command || mods.ctrl, mods.shift, [scroll.x, scroll.y], pinch) {
-                Nav::Zoom(f) => {
-                    self.cam.zoom_at([p.x, p.y], f, self.view);
-                    self.target = None;
+            } else {
+                match interpret(mods.command || mods.ctrl, mods.shift, [scroll.x, scroll.y], pinch) {
+                    Nav::Zoom(f) => {
+                        self.cam.zoom_at([p.x, p.y], f, self.view);
+                        self.target = None;
+                    }
+                    Nav::Pan(d) => {
+                        self.cam.pan_by(d);
+                        self.target = None;
+                    }
+                    Nav::None => {}
                 }
-                Nav::Pan(d) => {
-                    self.cam.pan_by(d);
-                    self.target = None;
-                }
-                Nav::None => {}
-            } }
+            }
         }
         let mut clicked_box = None;
         let mut display = None;
@@ -1929,15 +2032,17 @@ impl Project {
                 let (legend, legend_toggle) = self.legend_rects();
                 if let Some(node) = self.scrollbar_at(p) {
                     if let Some(v) = self.pointer_scroll(node, p) {
-                self.file_scroll.insert(node, v);
-            }
+                        self.file_scroll.insert(node, v);
+                    }
                 } else if legend_toggle.contains(Pos2::new(p.x, p.y)) {
                     let shown = self.settings.settings().view(View::Legend).value;
                     display = Some((View::Legend, !shown));
                 } else if legend.contains(Pos2::new(p.x, p.y)) {
                 } else if let Some(w) = minimap::world_at(&root, self.view, [p.x, p.y]) {
                     self.target = Some(Camera { center: w, zoom: self.cam.zoom });
-                } else if let Some(b) = self.scene.boxes.iter().rev().find(|b| b.open && b.hidden_details + b.shown_details > 0 && chip_rect(b.rect).contains([p.x, p.y])) {
+                } else if let Some(b) =
+                    self.scene.boxes.iter().rev().find(|b| b.open && b.hidden_details + b.shown_details > 0 && chip_rect(b.rect).contains([p.x, p.y]))
+                {
                     details_toggle = Some((b.node, b.hidden_details > 0));
                 } else {
                     clicked_box = self.file_page_at(p).or_else(|| self.scene.row_at([p.x, p.y])).or_else(|| self.scene.box_at([p.x, p.y]));
@@ -1971,7 +2076,8 @@ impl Project {
         if let Some(rv) = &self.review {
             review_dim(rv, &mut self.scene);
         }
-        let shown: Vec<(NodeId, f32, f32)> = self.scene.boxes.iter().filter(|b| b.source).filter_map(|b| Some((b.node, b.rect.y, file_font(b.rect.w)? * LINE_SPACING))).collect();
+        let shown: Vec<(NodeId, f32, f32)> =
+            self.scene.boxes.iter().filter(|b| b.source).filter_map(|b| Some((b.node, b.rect.y, file_font(b.rect.w)? * LINE_SPACING))).collect();
         self.file_scroll.retain(|n, _| shown.iter().any(|(s, _, _)| s == n));
         self.file_hscroll.retain(|n, _| shown.iter().any(|(s, _, _)| s == n));
         for (n, y, line_h) in shown {
@@ -2066,7 +2172,8 @@ impl Project {
         } else {
             style::kind_stroke(b.sub)
         };
-        let fill = if external { Color32::from_rgb(43, 43, 43) } else { style::tint(style::depth_fill(b.depth, b.open), accent, if b.open { 0.05 } else { 0.12 }) };
+        let fill =
+            if external { Color32::from_rgb(43, 43, 43) } else { style::tint(style::depth_fill(b.depth, b.open), accent, if b.open { 0.05 } else { 0.12 }) };
         let fill = if b.dimmed { style::tint(fill, style::BG, 0.6) } else { fill };
         painter.rect_filled(r, 3.0, fill);
         let mut stroke = Stroke::new(if b.open { 1.5 } else { 1.0 }, accent);
@@ -2103,7 +2210,13 @@ impl Project {
             let chip = erect(chip_rect(b.rect));
             painter.rect_filled(chip, 8.0, style::BAR);
             painter.rect_stroke(chip, 8.0, Stroke::new(1.0, style::FRAME), StrokeKind::Inside);
-            painter.text(chip.center(), Align2::CENTER_CENTER, if b.hidden_details > 0 { format!("+ {} details", b.hidden_details) } else { format!("hide {} details", b.shown_details) }, FontId::proportional(10.5), style::MUTED);
+            painter.text(
+                chip.center(),
+                Align2::CENTER_CENTER,
+                if b.hidden_details > 0 { format!("+ {} details", b.hidden_details) } else { format!("hide {} details", b.shown_details) },
+                FontId::proportional(10.5),
+                style::MUTED,
+            );
         }
         if b.kind == NodeKind::Member && !b.source && b.rect.w > 48.0 {
             let size = (b.rect.h * 0.18).clamp(8.0, 12.0);
@@ -2118,7 +2231,11 @@ impl Project {
             let galley = painter.layout_no_wrap(text, FontId::proportional(10.5), style::BG);
             let size = galley.size() + egui::vec2(10.0, 4.0);
             let card = !(b.rows.is_empty() && b.field_rows.is_empty());
-            let chip = if card { egui::Rect::from_min_size(r.left_top() + egui::vec2(5.0, 5.0), size) } else { egui::Rect::from_min_size(r.right_bottom() - size - egui::vec2(5.0, 5.0), size) };
+            let chip = if card {
+                egui::Rect::from_min_size(r.left_top() + egui::vec2(5.0, 5.0), size)
+            } else {
+                egui::Rect::from_min_size(r.right_bottom() - size - egui::vec2(5.0, 5.0), size)
+            };
             if chip.left() > r.left() {
                 painter.rect_filled(chip, 7.0, color);
                 painter.galley(chip.center() - galley.size() / 2.0, galley, style::BG);
@@ -2195,7 +2312,13 @@ impl Project {
     fn legend_shown(&self) -> style::LegendShown {
         let opts = self.cache.options();
         let view = |v: View| self.settings.settings().view(v).value;
-        style::LegendShown { wiring: opts.show_wiring, noise: opts.show_noise, complexity: view(View::Complexity), unused: view(View::Unused), review: self.review.is_some() }
+        style::LegendShown {
+            wiring: opts.show_wiring,
+            noise: opts.show_noise,
+            complexity: view(View::Complexity),
+            unused: view(View::Unused),
+            review: self.review.is_some(),
+        }
     }
 
     fn legend_rects(&self) -> (egui::Rect, egui::Rect) {
@@ -2307,7 +2430,10 @@ impl Project {
     fn file_text_area(&self, b: &crate::canvas::SceneBox, size: f32, total: usize) -> egui::Rect {
         let page = self.file_page(b);
         let gutter = total.to_string().len() as f32 * advance(size) + 2.0 * advance(size);
-        egui::Rect::from_min_max(Pos2::new(b.rect.x + gutter + advance(size) * 0.5, page.top()), Pos2::new(self.scrollbar_track(page).left() - 4.0, page.bottom()))
+        egui::Rect::from_min_max(
+            Pos2::new(b.rect.x + gutter + advance(size) * 0.5, page.top()),
+            Pos2::new(self.scrollbar_track(page).left() - 4.0, page.bottom()),
+        )
     }
 
     fn scrolled(&self, node: NodeId, wheel_px: f32) -> Option<f32> {
@@ -2337,7 +2463,8 @@ impl Project {
         }
         let own = merge_spans(own);
         for (s, e) in own.iter() {
-            let band = egui::Rect::from_min_size(Pos2::new(b.rect.x + 2.0, top + (*s - 1) as f32 * line_h), egui::vec2(b.rect.w - 4.0, (*e - *s + 1) as f32 * line_h));
+            let band =
+                egui::Rect::from_min_size(Pos2::new(b.rect.x + 2.0, top + (*s - 1) as f32 * line_h), egui::vec2(b.rect.w - 4.0, (*e - *s + 1) as f32 * line_h));
             clip.rect_filled(band, 0.0, style::BOX_STROKE.gamma_multiply(0.10));
         }
         self.paint_scrollbar(&clip, sheet, b.node, scroll, lines.len(), (sheet.height() / line_h) as usize);
@@ -2380,7 +2507,10 @@ impl Project {
         for (before, gone) in d.removed.iter().filter(|(l, _)| (first..=last + 1).contains(&(*l as usize))) {
             let y = top + (*before - 1) as f32 * line_h;
             clip.line_segment([Pos2::new(b.rect.x + 2.0, y), Pos2::new(b.rect.right() - 2.0, y)], Stroke::new(2.0, style::EDGE_UP));
-            let chip = egui::Rect::from_min_size(Pos2::new(sheet.left().max(b.rect.x) + 4.0, y - size * 0.6), egui::vec2(advance(size) * (gone.len().to_string().len() as f32 + 2.0), size * 1.2));
+            let chip = egui::Rect::from_min_size(
+                Pos2::new(sheet.left().max(b.rect.x) + 4.0, y - size * 0.6),
+                egui::vec2(advance(size) * (gone.len().to_string().len() as f32 + 2.0), size * 1.2),
+            );
             clip.rect_filled(chip, 3.0, style::EDGE_UP);
             clip.text(chip.center(), Align2::CENTER_CENTER, format!("−{}", gone.len()), FontId::monospace(size * 0.85), style::BG);
             if self.pointer.is_some_and(|p| (p.y - y).abs() < line_h * 0.6 && sheet.contains(p)) {
@@ -2393,7 +2523,13 @@ impl Project {
             clip.rect_filled(pop, 3.0, style::tint(style::PANEL, style::EDGE_UP, 0.18));
             clip.rect_stroke(pop, 3.0, Stroke::new(1.0, style::EDGE_UP), StrokeKind::Inside);
             for (k, l) in gone.iter().take(shown).enumerate() {
-                text_clip.text(Pos2::new(b.rect.x + gutter + advance(size) - hscroll, y + 6.0 + k as f32 * line_h), Align2::LEFT_TOP, l, mono.clone(), style::TEXT.gamma_multiply(0.8));
+                text_clip.text(
+                    Pos2::new(b.rect.x + gutter + advance(size) - hscroll, y + 6.0 + k as f32 * line_h),
+                    Align2::LEFT_TOP,
+                    l,
+                    mono.clone(),
+                    style::TEXT.gamma_multiply(0.8),
+                );
             }
         }
     }
@@ -2407,7 +2543,13 @@ impl Project {
     }
 
     fn scrollbar_at(&self, p: Pos2) -> Option<NodeId> {
-        self.scene.boxes.iter().rev().filter(|b| b.source).find(|b| self.scrollbar_track(self.file_page(b)).expand2(egui::vec2(4.0, 0.0)).contains(p)).map(|b| b.node)
+        self.scene
+            .boxes
+            .iter()
+            .rev()
+            .filter(|b| b.source)
+            .find(|b| self.scrollbar_track(self.file_page(b)).expand2(egui::vec2(4.0, 0.0)).contains(p))
+            .map(|b| b.node)
     }
 
     fn pointer_scroll(&self, node: NodeId, p: Pos2) -> Option<f32> {
@@ -2464,7 +2606,13 @@ impl Project {
         }
         if b.more_fields > 0 {
             let last = erect(b.field_rows[b.field_rows.len() - 1].rect);
-            clip.text(Pos2::new(last.left() + size * 1.1, last.bottom() + last.height() / 2.0), Align2::LEFT_CENTER, format!("… {} more", b.more_fields), font.clone(), style::MUTED);
+            clip.text(
+                Pos2::new(last.left() + size * 1.1, last.bottom() + last.height() / 2.0),
+                Align2::LEFT_CENTER,
+                format!("… {} more", b.more_fields),
+                font.clone(),
+                style::MUTED,
+            );
         }
         if let (Some(_), Some(m)) = (b.field_rows.first(), b.rows.first()) {
             let y = m.rect.y - row_h * 0.25;
@@ -2481,7 +2629,11 @@ impl Project {
             let change = self.review.as_ref().map(|rv| rv.review.change(row.node));
             let card_new = self.review.as_ref().is_some_and(|rv| rv.review.change(b.node).status == Status::New);
             let row_reviewed = self.review.as_ref().is_some_and(|rv| rv.states.get(&row.node) == Some(&MarkState::Reviewed));
-            let delta = if row_reviewed { Some(("reviewed".to_string(), style::MUTED)) } else { change.and_then(row_delta).map(|(d, c)| (if card_new { String::new() } else { d }, c)) };
+            let delta = if row_reviewed {
+                Some(("reviewed".to_string(), style::MUTED))
+            } else {
+                change.and_then(row_delta).map(|(d, c)| (if card_new { String::new() } else { d }, c))
+            };
             let delta = delta.or_else(|| self.unused(row.node).map(|u| (unused_short(u).to_string(), style::EDGE_UP)));
             if let Some((_, c)) = &delta {
                 clip.rect_filled(r, 0.0, c.gamma_multiply(0.14));
@@ -2515,12 +2667,19 @@ impl Project {
         }
         if b.more_rows > 0 {
             let last = erect(b.rows[b.rows.len() - 1].rect);
-            clip.text(Pos2::new(last.left() + size * 1.1, last.bottom() + last.height() / 2.0), Align2::LEFT_CENTER, format!("… {} more", b.more_rows), font, style::MUTED);
+            clip.text(
+                Pos2::new(last.left() + size * 1.1, last.bottom() + last.height() / 2.0),
+                Align2::LEFT_CENTER,
+                format!("… {} more", b.more_rows),
+                font,
+                style::MUTED,
+            );
         }
     }
 
     fn complexity_pill(&self, painter: &egui::Painter, right_center: Pos2, value: Option<u16>, size: f32) -> f32 {
-        let Some((v, color)) = value.filter(|_| self.settings.settings().view(View::Complexity).value).and_then(|v| style::complexity_hint(v).map(|c| (v, c))) else {
+        let Some((v, color)) = value.filter(|_| self.settings.settings().view(View::Complexity).value).and_then(|v| style::complexity_hint(v).map(|c| (v, c)))
+        else {
             return 0.0;
         };
         let galley = painter.layout_no_wrap(v.to_string(), FontId::proportional(size * 0.85), style::BG);

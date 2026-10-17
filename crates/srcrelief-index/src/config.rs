@@ -6,7 +6,8 @@ use std::path::{Path, PathBuf};
 
 pub const CONFIG_FILE: &str = "srcrelief.toml";
 
-pub const BUILTIN_EXCLUDES: &[&str] = &["**/build/**", "**/.gradle/**", "**/node_modules/**", "**/vendor/**", "**/.git/**", "**/target/**", "**/dist/**", "**/.*/**"];
+pub const BUILTIN_EXCLUDES: &[&str] =
+    &["**/build/**", "**/.gradle/**", "**/node_modules/**", "**/vendor/**", "**/.git/**", "**/target/**", "**/dist/**", "**/.*/**"];
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct CategoryOverride {

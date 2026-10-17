@@ -336,11 +336,7 @@ impl<'s> Ctx<'s> {
             return None;
         }
         let left = stmt.child_by_field_name("left").or_else(|| stmt.child_by_field_name("name"))?;
-        if left.kind() == "expression_list" {
-            nth_named(left, 0).map(|x| self.text(x).to_string())
-        } else {
-            Some(self.text(left).to_string())
-        }
+        if left.kind() == "expression_list" { nth_named(left, 0).map(|x| self.text(x).to_string()) } else { Some(self.text(left).to_string()) }
     }
 
     fn call(&self, n: Node) -> GoCall {

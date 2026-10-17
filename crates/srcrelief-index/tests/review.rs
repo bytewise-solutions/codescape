@@ -67,7 +67,12 @@ fn blocks_are_new_changed_unchanged_or_removed() {
 }
 
 fn git(dir: &Path, args: &[&str]) {
-    let ok = std::process::Command::new("git").args(["-c", "user.name=t", "-c", "user.email=t@t", "-c", "commit.gpgsign=false"]).args(args).current_dir(dir).output().unwrap();
+    let ok = std::process::Command::new("git")
+        .args(["-c", "user.name=t", "-c", "user.email=t@t", "-c", "commit.gpgsign=false"])
+        .args(args)
+        .current_dir(dir)
+        .output()
+        .unwrap();
     assert!(ok.status.success(), "git {args:?}: {}", String::from_utf8_lossy(&ok.stderr));
 }
 

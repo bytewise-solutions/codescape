@@ -5,7 +5,10 @@ mod size;
 
 pub use fold::{display_children, display_path, folded_into};
 pub use layered::{count_crossings, layout_container};
-pub use size::{CARD_FIELD_GAP, CARD_MAX_FIELDS, CARD_MAX_ROWS, CARD_ROW, CARD_TOP, card_field_rows, card_methods_top, box_size, card_members, card_rows_bottom, is_constructor};
+pub use size::{
+    CARD_FIELD_GAP, CARD_MAX_FIELDS, CARD_MAX_ROWS, CARD_ROW, CARD_TOP, box_size, card_field_rows, card_members, card_methods_top, card_rows_bottom,
+    is_constructor,
+};
 
 use srcrelief_format::{ArchivedGraph, NodeFlags, NodeId};
 use srcrelief_rules::FrameRule;

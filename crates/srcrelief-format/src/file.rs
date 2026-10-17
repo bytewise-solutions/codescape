@@ -262,17 +262,11 @@ impl ArchivedGraph {
     }
 
     pub fn skipped_roots(&self) -> impl Iterator<Item = (&str, &str)> {
-        self.stats
-            .skipped_kinds
-            .iter()
-            .zip(self.stats.skipped_paths.iter())
-            .map(|(k, p)| (self.str(k.to_native()), self.str(p.to_native())))
+        self.stats.skipped_kinds.iter().zip(self.stats.skipped_paths.iter()).map(|(k, p)| (self.str(k.to_native()), self.str(p.to_native())))
     }
 
     pub fn provenance(&self) -> impl Iterator<Item = (&str, &str, &str)> {
-        self.provenance
-            .iter()
-            .map(|p| (self.str(p.name.to_native()), self.str(p.version.to_native()), self.str(p.hash.to_native())))
+        self.provenance.iter().map(|p| (self.str(p.name.to_native()), self.str(p.version.to_native()), self.str(p.hash.to_native())))
     }
 }
 

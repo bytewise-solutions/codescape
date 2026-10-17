@@ -16,10 +16,61 @@ const MAX_DEPTH: u32 = 12;
 const STD_CRATES: &[&str] = &["std", "core", "alloc"];
 
 const PRELUDE: &[&str] = &[
-    "String", "Vec", "Box", "Option", "Result", "Some", "None", "Ok", "Err", "ToString", "ToOwned", "Default", "Iterator", "IntoIterator",
-    "From", "Into", "TryFrom", "TryInto", "Clone", "Copy", "Send", "Sync", "Sized", "Unpin", "Drop", "Fn", "FnMut", "FnOnce", "PartialEq",
-    "Eq", "PartialOrd", "Ord", "AsRef", "AsMut", "Extend", "DoubleEndedIterator", "ExactSizeIterator", "FromIterator", "u8", "u16", "u32",
-    "u64", "u128", "usize", "i8", "i16", "i32", "i64", "i128", "isize", "f32", "f64", "bool", "char", "str",
+    "String",
+    "Vec",
+    "Box",
+    "Option",
+    "Result",
+    "Some",
+    "None",
+    "Ok",
+    "Err",
+    "ToString",
+    "ToOwned",
+    "Default",
+    "Iterator",
+    "IntoIterator",
+    "From",
+    "Into",
+    "TryFrom",
+    "TryInto",
+    "Clone",
+    "Copy",
+    "Send",
+    "Sync",
+    "Sized",
+    "Unpin",
+    "Drop",
+    "Fn",
+    "FnMut",
+    "FnOnce",
+    "PartialEq",
+    "Eq",
+    "PartialOrd",
+    "Ord",
+    "AsRef",
+    "AsMut",
+    "Extend",
+    "DoubleEndedIterator",
+    "ExactSizeIterator",
+    "FromIterator",
+    "u8",
+    "u16",
+    "u32",
+    "u64",
+    "u128",
+    "usize",
+    "i8",
+    "i16",
+    "i32",
+    "i64",
+    "i128",
+    "isize",
+    "f32",
+    "f64",
+    "bool",
+    "char",
+    "str",
 ];
 
 const SELF_RETURNING: &[&str] = &["default", "from", "try_from", "from_str"];
@@ -27,33 +78,231 @@ const SELF_RETURNING: &[&str] = &["default", "from", "try_from", "from_str"];
 const BUILTIN_CALLS: &[&str] = &["Some", "Ok", "Err", "drop"];
 
 const PASS_THROUGH: &[&str] = &[
-    "unwrap", "expect", "unwrap_or_default", "unwrap_or", "unwrap_or_else", "clone", "to_owned", "as_ref", "as_mut", "borrow", "borrow_mut",
-    "map_err", "context", "with_context", "ok_or", "ok_or_else", "cloned", "copied", "as_deref", "as_deref_mut", "lock", "to_vec",
+    "unwrap",
+    "expect",
+    "unwrap_or_default",
+    "unwrap_or",
+    "unwrap_or_else",
+    "clone",
+    "to_owned",
+    "as_ref",
+    "as_mut",
+    "borrow",
+    "borrow_mut",
+    "map_err",
+    "context",
+    "with_context",
+    "ok_or",
+    "ok_or_else",
+    "cloned",
+    "copied",
+    "as_deref",
+    "as_deref_mut",
+    "lock",
+    "to_vec",
 ];
 
 const ITER_KEEP: &[&str] = &[
-    "iter", "iter_mut", "into_iter", "filter", "rev", "skip", "take", "chain", "peekable", "skip_while", "take_while", "inspect", "step_by",
-    "values", "values_mut", "into_values", "drain", "cycle", "fuse",
+    "iter",
+    "iter_mut",
+    "into_iter",
+    "filter",
+    "rev",
+    "skip",
+    "take",
+    "chain",
+    "peekable",
+    "skip_while",
+    "take_while",
+    "inspect",
+    "step_by",
+    "values",
+    "values_mut",
+    "into_values",
+    "drain",
+    "cycle",
+    "fuse",
 ];
 
 const ELEMENT_PICK: &[&str] = &[
-    "first", "last", "get", "get_mut", "first_mut", "last_mut", "next", "next_back", "pop", "pop_front", "pop_back", "front", "back", "find", "nth",
-    "max_by_key", "min_by_key", "max_by", "min_by", "max", "min", "remove", "swap_remove",
+    "first",
+    "last",
+    "get",
+    "get_mut",
+    "first_mut",
+    "last_mut",
+    "next",
+    "next_back",
+    "pop",
+    "pop_front",
+    "pop_back",
+    "front",
+    "back",
+    "find",
+    "nth",
+    "max_by_key",
+    "min_by_key",
+    "max_by",
+    "min_by",
+    "max",
+    "min",
+    "remove",
+    "swap_remove",
 ];
 
 const STD_METHODS: &[&str] = &[
-    "clone", "clone_from", "to_string", "to_owned", "fmt", "eq", "ne", "cmp", "partial_cmp", "lt", "le", "gt", "ge", "hash", "into", "from",
-    "try_into", "try_from", "default", "as_ref", "as_mut", "borrow", "borrow_mut", "deref", "deref_mut", "drop", "iter", "iter_mut",
-    "into_iter", "next", "map", "filter", "filter_map", "flat_map", "collect", "unwrap", "expect", "unwrap_or", "unwrap_or_else",
-    "unwrap_or_default", "ok", "err", "ok_or", "ok_or_else", "and_then", "or_else", "is_some", "is_none", "is_ok", "is_err", "len",
-    "is_empty", "push", "pop", "insert", "remove", "get", "get_mut", "contains", "contains_key", "extend", "clear", "entry", "or_insert",
-    "or_insert_with", "or_default", "keys", "values", "values_mut", "first", "last", "sort", "sort_by", "sort_by_key", "dedup", "retain",
-    "join", "split", "trim", "starts_with", "ends_with", "chars", "bytes", "lines", "parse", "as_str", "as_slice", "to_vec", "copied",
-    "cloned", "enumerate", "zip", "rev", "skip", "take", "chain", "any", "all", "find", "position", "count", "sum", "min", "max",
-    "min_by_key", "max_by_key", "fold", "for_each", "lock", "read", "write", "send", "recv", "write_all", "flush", "with_capacity",
-    "replace", "set", "as_deref", "map_err", "context", "with_context", "new", "display", "parent", "file_name", "file_stem",
-    "extension", "exists", "is_file", "is_dir", "to_path_buf", "to_str", "to_string_lossy", "canonicalize", "strip_prefix", "with_extension",
-    "open", "add", "sub", "mul", "div", "neg", "union", "intersects", "abs", "round", "floor", "ceil", "sqrt", "powi", "clamp",
+    "clone",
+    "clone_from",
+    "to_string",
+    "to_owned",
+    "fmt",
+    "eq",
+    "ne",
+    "cmp",
+    "partial_cmp",
+    "lt",
+    "le",
+    "gt",
+    "ge",
+    "hash",
+    "into",
+    "from",
+    "try_into",
+    "try_from",
+    "default",
+    "as_ref",
+    "as_mut",
+    "borrow",
+    "borrow_mut",
+    "deref",
+    "deref_mut",
+    "drop",
+    "iter",
+    "iter_mut",
+    "into_iter",
+    "next",
+    "map",
+    "filter",
+    "filter_map",
+    "flat_map",
+    "collect",
+    "unwrap",
+    "expect",
+    "unwrap_or",
+    "unwrap_or_else",
+    "unwrap_or_default",
+    "ok",
+    "err",
+    "ok_or",
+    "ok_or_else",
+    "and_then",
+    "or_else",
+    "is_some",
+    "is_none",
+    "is_ok",
+    "is_err",
+    "len",
+    "is_empty",
+    "push",
+    "pop",
+    "insert",
+    "remove",
+    "get",
+    "get_mut",
+    "contains",
+    "contains_key",
+    "extend",
+    "clear",
+    "entry",
+    "or_insert",
+    "or_insert_with",
+    "or_default",
+    "keys",
+    "values",
+    "values_mut",
+    "first",
+    "last",
+    "sort",
+    "sort_by",
+    "sort_by_key",
+    "dedup",
+    "retain",
+    "join",
+    "split",
+    "trim",
+    "starts_with",
+    "ends_with",
+    "chars",
+    "bytes",
+    "lines",
+    "parse",
+    "as_str",
+    "as_slice",
+    "to_vec",
+    "copied",
+    "cloned",
+    "enumerate",
+    "zip",
+    "rev",
+    "skip",
+    "take",
+    "chain",
+    "any",
+    "all",
+    "find",
+    "position",
+    "count",
+    "sum",
+    "min",
+    "max",
+    "min_by_key",
+    "max_by_key",
+    "fold",
+    "for_each",
+    "lock",
+    "read",
+    "write",
+    "send",
+    "recv",
+    "write_all",
+    "flush",
+    "with_capacity",
+    "replace",
+    "set",
+    "as_deref",
+    "map_err",
+    "context",
+    "with_context",
+    "new",
+    "display",
+    "parent",
+    "file_name",
+    "file_stem",
+    "extension",
+    "exists",
+    "is_file",
+    "is_dir",
+    "to_path_buf",
+    "to_str",
+    "to_string_lossy",
+    "canonicalize",
+    "strip_prefix",
+    "with_extension",
+    "open",
+    "add",
+    "sub",
+    "mul",
+    "div",
+    "neg",
+    "union",
+    "intersects",
+    "abs",
+    "round",
+    "floor",
+    "ceil",
+    "sqrt",
+    "powi",
+    "clamp",
 ];
 
 struct ParsedFile {
@@ -150,7 +399,15 @@ pub fn extract_rust(d: &Discovery, module_nodes: &[NodeId], excludes: &GlobSet, 
         .par_iter()
         .filter_map(|(module, path, is_test, is_dev)| {
             let bytes = std::fs::read(path).ok()?;
-            Some(ParsedFile { module: *module, path: path.clone(), rel: rel_path(&d.root, path), is_test: *is_test, is_dev: *is_dev, bytes: bytes.len() as u64, rf: parse_rust(&bytes) })
+            Some(ParsedFile {
+                module: *module,
+                path: path.clone(),
+                rel: rel_path(&d.root, path),
+                is_test: *is_test,
+                is_dev: *is_dev,
+                bytes: bytes.len() as u64,
+                rf: parse_rust(&bytes),
+            })
         })
         .collect();
     let mut r = Resolver::new(d, module_nodes, b, &parsed);
@@ -172,7 +429,12 @@ fn list_sources(d: &Discovery, excludes: &GlobSet) -> Vec<(usize, PathBuf, bool,
     let mut out = Vec::new();
     for &(mi, _) in &rust {
         let m = &d.modules[mi];
-        let roots = m.test_roots.iter().map(|r| (r, true, false)).chain(m.dev_roots.iter().map(|r| (r, false, true))).chain(m.source_roots.iter().map(|r| (r, false, false)));
+        let roots = m
+            .test_roots
+            .iter()
+            .map(|r| (r, true, false))
+            .chain(m.dev_roots.iter().map(|r| (r, false, true)))
+            .chain(m.source_roots.iter().map(|r| (r, false, false)));
         for (root, is_test, is_dev) in roots {
             let _ = walk_files_under(&d.root, root, excludes, |p| {
                 if p.extension().is_some_and(|e| e == "rs") && owner(p) == Some(mi) && seen.insert(p.to_path_buf()) {
@@ -270,7 +532,17 @@ impl<'a> Resolver<'a> {
         }
     }
 
-    fn new_pkg(&mut self, module: usize, display: &str, root: Option<usize>, parent: Option<usize>, segs: Vec<String>, file: usize, body: usize, test: bool) -> usize {
+    fn new_pkg(
+        &mut self,
+        module: usize,
+        display: &str,
+        root: Option<usize>,
+        parent: Option<usize>,
+        segs: Vec<String>,
+        file: usize,
+        body: usize,
+        test: bool,
+    ) -> usize {
         let mn = self.module_nodes[module];
         let node = self.b.child(mn, display).unwrap_or_else(|| self.b.add_node(mn, NodeKind::Package, SubKind::None, display, Lang::Rust));
         if test {
@@ -326,7 +598,12 @@ impl<'a> Resolver<'a> {
             if let Some(p) = &cc.build_script {
                 targets.push((BUILD_ROOT.to_string(), p.clone(), false, true));
             }
-            let mut info = CrateInfo { lib_name: cc.lib_name.clone(), lib_root: None, externs: cc.deps.iter().cloned().collect(), ext_names: cc.externs.iter().cloned().collect() };
+            let mut info = CrateInfo {
+                lib_name: cc.lib_name.clone(),
+                lib_root: None,
+                externs: cc.deps.iter().cloned().collect(),
+                ext_names: cc.externs.iter().cloned().collect(),
+            };
             for (display, path, test, main_root) in targets {
                 let Some(&fi) = self.file_ix.get(&path) else { continue };
                 if self.file_pkg[fi].is_some() {
@@ -486,7 +763,12 @@ impl<'a> Resolver<'a> {
                         Some(&info) => info,
                         None => {
                             let node = self.add_fn(self.types[ti].node, SubKind::Method, m, &f.rel, ttest);
-                            self.push_fn(FnInfo { node, pkg: pi, owner: Some(ti), ret: m.ret.clone(), generics: m.generics.clone() }, m.has_self && !ttest, f.module, &m.name)
+                            self.push_fn(
+                                FnInfo { node, pkg: pi, owner: Some(ti), ret: m.ret.clone(), generics: m.generics.clone() },
+                                m.has_self && !ttest,
+                                f.module,
+                                &m.name,
+                            )
                         }
                     };
                     self.types[ti].methods.insert(m.name.clone(), info);
@@ -498,7 +780,12 @@ impl<'a> Resolver<'a> {
                     Some(&info) => info,
                     None => {
                         let node = self.add_fn(pnode, SubKind::Function, func, &f.rel, test || is_test_attr(&func.attrs));
-                        let info = self.push_fn(FnInfo { node, pkg: pi, owner: None, ret: func.ret.clone(), generics: func.generics.clone() }, false, f.module, &func.name);
+                        let info = self.push_fn(
+                            FnInfo { node, pkg: pi, owner: None, ret: func.ret.clone(), generics: func.generics.clone() },
+                            false,
+                            f.module,
+                            &func.name,
+                        );
                         self.pkgs[pi].fns.insert(func.name.clone(), info);
                         info
                     }
@@ -515,7 +802,17 @@ impl<'a> Resolver<'a> {
         self.flag_test(node, test);
         let ti = self.types.len();
         let fqn = self.fqn(pi, name);
-        self.types.push(TypeInfo { node, pkg: pi, kind, fqn, fields, methods: HashMap::new(), traits: Vec::new(), implementors: Vec::new(), supers: Vec::new() });
+        self.types.push(TypeInfo {
+            node,
+            pkg: pi,
+            kind,
+            fqn,
+            fields,
+            methods: HashMap::new(),
+            traits: Vec::new(),
+            implementors: Vec::new(),
+            supers: Vec::new(),
+        });
         self.pkgs[pi].types.insert(name.to_string(), ti);
         ti
     }
@@ -527,11 +824,24 @@ impl<'a> Resolver<'a> {
             for imp in &files[file].rf.bodies[body].impls {
                 let simple = !imp.self_ty.is_empty() && !imp.self_ty.contains("::") && imp.self_ty != "Self";
                 let generic = imp.generics.iter().any(|(g, _)| *g == imp.self_ty);
-                if imp.trait_.is_some() || !simple || generic || PRELUDE.contains(&imp.self_ty.as_str()) || self.resolve_path(pi, &segments(&imp.self_ty), 0).is_some() {
+                if imp.trait_.is_some()
+                    || !simple
+                    || generic
+                    || PRELUDE.contains(&imp.self_ty.as_str())
+                    || self.resolve_path(pi, &segments(&imp.self_ty), 0).is_some()
+                {
                     continue;
                 }
                 self.memo.borrow_mut().remove(&(pi, imp.self_ty.clone()));
-                let ti = self.new_type(pi, &imp.self_ty, SubKind::Struct, &files[file].rel, (imp.start_line, imp.end_line), test || has_cfg_test(&imp.attrs), HashMap::new());
+                let ti = self.new_type(
+                    pi,
+                    &imp.self_ty,
+                    SubKind::Struct,
+                    &files[file].rel,
+                    (imp.start_line, imp.end_line),
+                    test || has_cfg_test(&imp.attrs),
+                    HashMap::new(),
+                );
                 self.impl_only.insert((self.pkgs[pi].module, imp.self_ty.clone()), ti);
             }
         }
@@ -603,7 +913,12 @@ impl<'a> Resolver<'a> {
                                 let ctor = !func.has_self && func.ret.as_deref().is_some_and(|r| r == "Self" || r.rsplit("::").next() == Some(tname.as_str()));
                                 let sub = if ctor { SubKind::Constructor } else { SubKind::Method };
                                 let node = self.add_fn(self.types[t].node, sub, func, &f.rel, ftest);
-                                let m = self.push_fn(FnInfo { node, pkg: pi, owner: Some(t), ret: func.ret.clone(), generics: func.generics.clone() }, func.has_self && !ftest, f.module, &func.name);
+                                let m = self.push_fn(
+                                    FnInfo { node, pkg: pi, owner: Some(t), ret: func.ret.clone(), generics: func.generics.clone() },
+                                    func.has_self && !ftest,
+                                    f.module,
+                                    &func.name,
+                                );
                                 self.types[t].methods.insert(func.name.clone(), m);
                                 m
                             }
@@ -614,7 +929,12 @@ impl<'a> Resolver<'a> {
                             let mut renamed = func.clone();
                             renamed.name = name;
                             let node = self.add_fn(self.pkgs[pi].node, SubKind::Method, &renamed, &f.rel, ftest);
-                            self.push_fn(FnInfo { node, pkg: pi, owner: None, ret: func.ret.clone(), generics: func.generics.clone() }, false, f.module, &func.name)
+                            self.push_fn(
+                                FnInfo { node, pkg: pi, owner: None, ret: func.ret.clone(), generics: func.generics.clone() },
+                                false,
+                                f.module,
+                                &func.name,
+                            )
                         }
                     };
                     self.occs[file].push(FnOcc { pkg: pi, at: FnRef::ImplMethod(body, i, j), info, overrides_external: overrides.clone() });
@@ -756,7 +1076,10 @@ impl<'a> Resolver<'a> {
         let head = segs.first()?;
         let mut item = match head.as_str() {
             "crate" | "self" | "super" => self.extern_head(pkg, head)?,
-            _ => self.lookup(pkg, head, depth).or_else(|| self.extern_head(pkg, head)).or_else(|| PRELUDE.contains(&head.as_str()).then(|| Item::Ext(head.clone())))?,
+            _ => self
+                .lookup(pkg, head, depth)
+                .or_else(|| self.extern_head(pkg, head))
+                .or_else(|| PRELUDE.contains(&head.as_str()).then(|| Item::Ext(head.clone())))?,
         };
         for seg in &segs[1..] {
             item = self.step(item, seg, depth)?;
@@ -820,7 +1143,11 @@ impl<'a> Resolver<'a> {
         if name == "self" {
             return cx.self_ty.map(TypeRef::Project);
         }
-        let local = cx.f.locals[..upto].iter().enumerate().filter(|(_, (n, _, (from, to)))| n == name && (*from..=*to).contains(&at)).max_by_key(|(i, (_, _, (from, _)))| (*from, *i));
+        let local = cx.f.locals[..upto]
+            .iter()
+            .enumerate()
+            .filter(|(_, (n, _, (from, to)))| n == name && (*from..=*to).contains(&at))
+            .max_by_key(|(i, (_, _, (from, _)))| (*from, *i));
         if let Some((i, (_, expr, (from, _)))) = local {
             return self.expr_type(cx, expr, i, *from, depth + 1);
         }
@@ -928,7 +1255,8 @@ impl<'a> Resolver<'a> {
     }
 
     fn unknown_receiver(&mut self, cx: &FnCtx, name: &str, guess: bool, cf: &mut CallFacts) {
-        let all: Vec<(NodeId, usize)> = self.method_names.get(name).map(|v| v.iter().filter(|(_, m)| self.visible[cx.module].contains(m)).copied().collect()).unwrap_or_default();
+        let all: Vec<(NodeId, usize)> =
+            self.method_names.get(name).map(|v| v.iter().filter(|(_, m)| self.visible[cx.module].contains(m)).copied().collect()).unwrap_or_default();
         let imported: Vec<NodeId> = all.iter().filter(|(_, m)| cx.imported.contains(m)).map(|(n, _)| *n).collect();
         match (&all[..], &imported[..]) {
             (_, [target]) if guess && !STD_METHODS.contains(&name) => {
@@ -942,7 +1270,14 @@ impl<'a> Resolver<'a> {
     }
 
     fn resolve_call(&mut self, cx: &FnCtx, call: &RsCall) -> CallFacts {
-        let mut cf = CallFacts { caller: cx.caller, string_args: call.string_args.clone(), ident_args: call.ident_args.clone(), assigned_to: call.assigned_to.clone(), line: call.line, ..Default::default() };
+        let mut cf = CallFacts {
+            caller: cx.caller,
+            string_args: call.string_args.clone(),
+            ident_args: call.ident_args.clone(),
+            assigned_to: call.assigned_to.clone(),
+            line: call.line,
+            ..Default::default()
+        };
         match &call.callee {
             Callee::Struct(segs) => {
                 cf.method = segs.last().cloned().unwrap_or_default();
@@ -954,7 +1289,10 @@ impl<'a> Resolver<'a> {
                 cf.method = name.clone();
                 if segs.len() > 1 {
                     cf.receiver_var = Some(segs[..segs.len() - 1].join("::"));
-                } else if BUILTIN_CALLS.contains(&name.as_str()) || cx.f.params.iter().any(|(n, _)| *n == name) || cx.f.locals.iter().any(|(n, _, _)| *n == name) {
+                } else if BUILTIN_CALLS.contains(&name.as_str())
+                    || cx.f.params.iter().any(|(n, _)| *n == name)
+                    || cx.f.locals.iter().any(|(n, _, _)| *n == name)
+                {
                     return cf;
                 }
                 match self.resolve_callee(cx, segs) {
@@ -1061,7 +1399,12 @@ impl<'a> Resolver<'a> {
             for &(pi, body, i) in &self.type_occs[fi] {
                 let t = &f.rf.bodies[body].types[i];
                 let ti = self.pkgs[pi].types[&t.name];
-                ff.types.push(TypeFacts { node: self.types[ti].node, fqn: self.types[ti].fqn.clone(), supertypes: self.types[ti].supers.clone(), annotations: t.attrs.clone() });
+                ff.types.push(TypeFacts {
+                    node: self.types[ti].node,
+                    fqn: self.types[ti].fqn.clone(),
+                    supertypes: self.types[ti].supers.clone(),
+                    annotations: t.attrs.clone(),
+                });
             }
             let occs = std::mem::take(&mut self.occs[fi]);
             for occ in &occs {
@@ -1080,7 +1423,16 @@ impl<'a> Resolver<'a> {
                     overrides_external: occ.overrides_external.clone(),
                 });
                 let test = is_test || self.b.flags(node).contains(NodeFlags::TEST);
-                let mut cx = FnCtx { pkg: occ.pkg, self_ty: owner, f: func, caller: node, scope: if test { Scope::Test } else { Scope::Main }, module: f.module, imported: &imported, at: 0 };
+                let mut cx = FnCtx {
+                    pkg: occ.pkg,
+                    self_ty: owner,
+                    f: func,
+                    caller: node,
+                    scope: if test { Scope::Test } else { Scope::Main },
+                    module: f.module,
+                    imported: &imported,
+                    at: 0,
+                };
                 for call in &func.calls {
                     cx.at = call.line;
                     let cf = self.resolve_call(&cx, call);

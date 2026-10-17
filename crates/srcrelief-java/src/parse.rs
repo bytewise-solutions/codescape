@@ -1,7 +1,16 @@
 use srcrelief_facts::{Annotation, Decisions, FieldDecl, Import, cyclomatic};
 
 const DECISIONS: Decisions = Decisions {
-    branches: &["if_statement", "for_statement", "enhanced_for_statement", "while_statement", "do_statement", "catch_clause", "ternary_expression", "switch_label"],
+    branches: &[
+        "if_statement",
+        "for_statement",
+        "enhanced_for_statement",
+        "while_statement",
+        "do_statement",
+        "catch_clause",
+        "ternary_expression",
+        "switch_label",
+    ],
     operators: &["&&", "||"],
     not_branch: &[("switch_label", "default")],
     arm: None,
@@ -136,9 +145,7 @@ impl<'s> Ctx<'s> {
 
     fn type_name(&self, n: Node) -> String {
         match n.kind() {
-            "generic_type" => first_named_of(n, &["type_identifier", "scoped_type_identifier"])
-                .map(|t| self.type_name(t))
-                .unwrap_or_default(),
+            "generic_type" => first_named_of(n, &["type_identifier", "scoped_type_identifier"]).map(|t| self.type_name(t)).unwrap_or_default(),
             "array_type" => n.child_by_field_name("element").map(|t| self.type_name(t)).unwrap_or_default(),
             "annotated_type" => {
                 let mut c = n.walk();
@@ -326,12 +333,10 @@ impl<'s> Ctx<'s> {
                 if !matches!(p.kind(), "formal_parameter" | "spread_parameter") {
                     continue;
                 }
-                let ty = p.child_by_field_name("type").or_else(|| {
-                    first_named_of(p, &["type_identifier", "generic_type", "scoped_type_identifier", "array_type", "integral_type"])
-                });
-                let name = p
-                    .child_by_field_name("name")
-                    .or_else(|| first_named_of(p, &["variable_declarator"]).and_then(|v| v.child_by_field_name("name")));
+                let ty = p
+                    .child_by_field_name("type")
+                    .or_else(|| first_named_of(p, &["type_identifier", "generic_type", "scoped_type_identifier", "array_type", "integral_type"]));
+                let name = p.child_by_field_name("name").or_else(|| first_named_of(p, &["variable_declarator"]).and_then(|v| v.child_by_field_name("name")));
                 if let (Some(ty), Some(name)) = (ty, name) {
                     jm.params.push((self.text(name).to_string(), self.type_name(ty)));
                 }
@@ -468,9 +473,7 @@ impl<'s> Ctx<'s> {
                     let field = o.child_by_field_name("field").map(|f| self.text(f).to_string()).unwrap_or_default();
                     match o.child_by_field_name("object").map(|x| x.kind()) {
                         Some("this") => Receiver::Field(field),
-                        _ if self.text(o).chars().all(|c| c.is_alphanumeric() || matches!(c, '.' | '_' | '$')) => {
-                            Receiver::Qualified(self.text(o).to_string())
-                        }
+                        _ if self.text(o).chars().all(|c| c.is_alphanumeric() || matches!(c, '.' | '_' | '$')) => Receiver::Qualified(self.text(o).to_string()),
                         _ => Receiver::Expr,
                     }
                 }

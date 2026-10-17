@@ -13,11 +13,7 @@ fn names(d: &Discovery) -> Vec<&str> {
 }
 
 fn links(d: &Discovery) -> Vec<(String, String, Scope)> {
-    let mut v: Vec<_> = d
-        .links
-        .iter()
-        .map(|l| (d.modules[l.from].name.clone(), d.modules[l.to].name.clone(), l.scope))
-        .collect();
+    let mut v: Vec<_> = d.links.iter().map(|l| (d.modules[l.from].name.clone(), d.modules[l.to].name.clone(), l.scope)).collect();
     v.sort_by(|a, b| (&a.0, &a.1).cmp(&(&b.0, &b.1)));
     v
 }
@@ -32,11 +28,7 @@ fn gradle_groovy_modules_and_scoped_links() {
     assert_eq!(names(&d), ["app", "core", "util"]);
     assert_eq!(
         links(&d),
-        [
-            ("app".into(), "core".into(), Scope::Main),
-            ("core".into(), "app".into(), Scope::Test),
-            ("core".into(), "util".into(), Scope::Main),
-        ]
+        [("app".into(), "core".into(), Scope::Main), ("core".into(), "app".into(), Scope::Test), ("core".into(), "util".into(), Scope::Main),]
     );
     assert!(d.modules.iter().all(|m| m.lang == Lang::Java && m.build == BuildKind::Gradle));
 }
@@ -49,10 +41,7 @@ fn gradle_kts_nested_include() {
     assert_eq!(module(&d, "libs:json").dir, root.join("libs/json"));
     assert_eq!(
         links(&d),
-        [("app".into(), "app".into(), Scope::Test), ("app".into(), "libs:json".into(), Scope::Main)]
-            .into_iter()
-            .filter(|l| l.0 != l.1)
-            .collect::<Vec<_>>()
+        [("app".into(), "app".into(), Scope::Test), ("app".into(), "libs:json".into(), Scope::Main)].into_iter().filter(|l| l.0 != l.1).collect::<Vec<_>>()
     );
 }
 
@@ -69,10 +58,7 @@ fn gradle_source_roots() {
 fn go_walk_links_with_and_without_replace() {
     let d = discover(&fixture("go-mono"), &default_excludes()).unwrap();
     assert_eq!(names(&d), ["shared", "svc-a", "svc-b"]);
-    assert_eq!(
-        links(&d),
-        [("svc-a".into(), "shared".into(), Scope::Main), ("svc-b".into(), "shared".into(), Scope::Main)]
-    );
+    assert_eq!(links(&d), [("svc-a".into(), "shared".into(), Scope::Main), ("svc-b".into(), "shared".into(), Scope::Main)]);
     assert_eq!(module(&d, "svc-a").go_module_path.as_deref(), Some("example.com/mono/svc-a"));
     assert_eq!(d.skipped, [SkippedRoot { kind: "package.json".into(), rel: "web".into() }]);
 }
@@ -139,10 +125,7 @@ fn parse_gradle_settings_forms() {
 #[test]
 fn parse_gradle_deps_forms() {
     let s = "dependencies {\n implementation project(':a')\n api(project(\":b\"))\n testImplementation project(path: ':c')\n compileOnly project(':d')\n}";
-    assert_eq!(
-        parse_build_deps(s),
-        [("a".to_string(), Scope::Main), ("b".into(), Scope::Main), ("c".into(), Scope::Test), ("d".into(), Scope::Main)]
-    );
+    assert_eq!(parse_build_deps(s), [("a".to_string(), Scope::Main), ("b".into(), Scope::Main), ("c".into(), Scope::Test), ("d".into(), Scope::Main)]);
 }
 
 #[test]

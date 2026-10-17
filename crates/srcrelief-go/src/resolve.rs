@@ -10,9 +10,8 @@ use std::path::{Path, PathBuf};
 const MAX_IMPLEMENTATIONS: usize = 8;
 
 const BUILTINS: &[&str] = &[
-    "append", "cap", "clear", "close", "complex", "copy", "delete", "imag", "len", "make", "max", "min", "new", "panic",
-    "print", "println", "real", "recover", "string", "int", "int64", "int32", "uint", "uint64", "byte", "rune", "float64",
-    "float32", "bool", "error", "any",
+    "append", "cap", "clear", "close", "complex", "copy", "delete", "imag", "len", "make", "max", "min", "new", "panic", "print", "println", "real", "recover",
+    "string", "int", "int64", "int32", "uint", "uint64", "byte", "rune", "float64", "float32", "bool", "error", "any",
 ];
 
 struct ParsedFile {
@@ -47,7 +46,11 @@ struct TypeInfo {
 }
 
 fn covers(ty: &TypeInfo, iface: &TypeInfo) -> bool {
-    iface.iface_methods.iter().enumerate().all(|(i, m)| ty.methods.contains_key(m) && iface.iface_arity.get(i).is_none_or(|a| ty.arity.get(m).is_none_or(|b| a == b)))
+    iface
+        .iface_methods
+        .iter()
+        .enumerate()
+        .all(|(i, m)| ty.methods.contains_key(m) && iface.iface_arity.get(i).is_none_or(|a| ty.arity.get(m).is_none_or(|b| a == b)))
 }
 
 struct PkgInfo {
@@ -70,10 +73,8 @@ pub fn extract_go(d: &Discovery, module_nodes: &[NodeId], excludes: &GlobSet, b:
             let m = &d.modules[*module];
             let dir = rel_path(&m.dir, path.parent().unwrap());
             let file_name = path.file_name().unwrap().to_string_lossy().into_owned();
-            let is_mock = gf.generated_mock
-                || dir.split('/').any(|s| s == "mock" || s == "mocks")
-                || file_name.starts_with("mock_")
-                || file_name.ends_with("_mock.go");
+            let is_mock =
+                gf.generated_mock || dir.split('/').any(|s| s == "mock" || s == "mocks") || file_name.starts_with("mock_") || file_name.ends_with("_mock.go");
             Some(ParsedFile {
                 module: *module,
                 rel: rel_path(&d.root, path),
@@ -131,11 +132,7 @@ fn list_sources(d: &Discovery, excludes: &GlobSet) -> Vec<(usize, PathBuf)> {
 fn default_import_name(path: &str) -> &str {
     let mut segs = path.rsplit('/');
     let last = segs.next().unwrap_or(path);
-    if last.len() > 1 && last.starts_with('v') && last[1..].chars().all(|c| c.is_ascii_digit()) {
-        segs.next().unwrap_or(last)
-    } else {
-        last
-    }
+    if last.len() > 1 && last.starts_with('v') && last[1..].chars().all(|c| c.is_ascii_digit()) { segs.next().unwrap_or(last) } else { last }
 }
 
 struct Resolver<'a> {
@@ -188,7 +185,15 @@ impl<'a> Resolver<'a> {
                     let base = m.go_module_path.clone().unwrap_or_else(|| m.name.clone());
                     let import_path = if f.dir.is_empty() { base } else { format!("{base}/{}", f.dir) };
                     let p = self.pkgs.len();
-                    self.pkgs.push(PkgInfo { node, module: f.module, import_path: import_path.clone(), name: String::new(), types: HashMap::new(), funcs: HashMap::new(), ctor_owner: HashMap::new() });
+                    self.pkgs.push(PkgInfo {
+                        node,
+                        module: f.module,
+                        import_path: import_path.clone(),
+                        name: String::new(),
+                        types: HashMap::new(),
+                        funcs: HashMap::new(),
+                        ctor_owner: HashMap::new(),
+                    });
                     self.pkg_by_key.insert(key, p);
                     self.pkg_by_path.insert(import_path, p);
                     if f.is_mock {
@@ -435,12 +440,7 @@ impl<'a> Resolver<'a> {
     }
 
     fn var_type_raw<'f>(&self, func: &'f GoFunc, name: &str) -> Option<&'f str> {
-        func.locals
-            .iter()
-            .rev()
-            .find(|(n, _)| n == name)
-            .or_else(|| func.params.iter().find(|(n, _)| n == name))
-            .map(|(_, t)| t.as_str())
+        func.locals.iter().rev().find(|(n, _)| n == name).or_else(|| func.params.iter().find(|(n, _)| n == name)).map(|(_, t)| t.as_str())
     }
 
     fn var_type(&self, fi: usize, func: &GoFunc, name: &str) -> Option<TypeRef> {
@@ -503,7 +503,10 @@ impl<'a> Resolver<'a> {
             (0..self.types.len())
                 .filter(|&t| {
                     let ty = &self.types[t];
-                    ty.kind == SubKind::Struct && !ty.excluded && self.visible[from_module].contains(&self.pkgs[ty.pkg].module) && covers(ty, &self.types[iface])
+                    ty.kind == SubKind::Struct
+                        && !ty.excluded
+                        && self.visible[from_module].contains(&self.pkgs[ty.pkg].module)
+                        && covers(ty, &self.types[iface])
                 })
                 .collect()
         };
@@ -673,11 +676,8 @@ impl<'a> Resolver<'a> {
 
     fn guess(&mut self, fi: usize, caller: NodeId, scope: Scope, name: &str, cf: &mut CallFacts) {
         let module = self.files[fi].module;
-        let candidates: Vec<NodeId> = self
-            .method_names
-            .get(name)
-            .map(|v| v.iter().filter(|(_, m)| self.visible[module].contains(m)).map(|(n, _)| *n).collect())
-            .unwrap_or_default();
+        let candidates: Vec<NodeId> =
+            self.method_names.get(name).map(|v| v.iter().filter(|(_, m)| self.visible[module].contains(m)).map(|(n, _)| *n).collect()).unwrap_or_default();
         match candidates.as_slice() {
             [target] => {
                 let target = *target;

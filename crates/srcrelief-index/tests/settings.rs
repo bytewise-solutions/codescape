@@ -85,7 +85,10 @@ fn keyed_entries_override_by_key_and_report_their_layer() {
     assert!(s.categories.is_empty(), "{:?}", s.categories);
     assert_eq!(s.filters.len(), 1);
     let f = &s.filters[0];
-    assert_eq!((f.layer, f.value.paths.clone(), f.value.names.clone(), f.value.shown), (Layer::Personal, vec!["db/**".to_string()], vec!["Migration$".to_string()], false));
+    assert_eq!(
+        (f.layer, f.value.paths.clone(), f.value.names.clone(), f.value.shown),
+        (Layer::Personal, vec!["db/**".to_string()], vec!["Migration$".to_string()], false)
+    );
     assert_eq!(s.pack("libgdx"), Some(Sourced { value: true, layer: Layer::Personal }));
     assert_eq!(s.test_paths.iter().map(|t| (t.value.as_str(), t.layer)).collect::<Vec<_>>(), [("**/it/**", Layer::Shared)]);
     assert_eq!(s.filter_shown("migrations"), Some(Sourced { value: false, layer: Layer::Personal }));

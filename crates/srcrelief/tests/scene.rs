@@ -147,7 +147,14 @@ fn highlight_marks_reached_boxes() {
     assert!(!right.dimmed);
     let left = s.boxes.iter().find(|b| b.node == node(g, &["left"])).unwrap();
     assert_eq!(left.mark, Mark::Focus);
-    let unrelated = build_scene(g, &mut cache, &cam, VIEW, &VisualRules::default(), Some(&focus(g, &idx, node(g, &["right", "right.impl"]), None, FocusMode::Neighbours).marks));
+    let unrelated = build_scene(
+        g,
+        &mut cache,
+        &cam,
+        VIEW,
+        &VisualRules::default(),
+        Some(&focus(g, &idx, node(g, &["right", "right.impl"]), None, FocusMode::Neighbours).marks),
+    );
     assert!(unrelated.boxes.iter().find(|b| b.node == node(g, &["left"])).unwrap().dimmed);
 }
 

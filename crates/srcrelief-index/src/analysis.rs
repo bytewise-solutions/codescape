@@ -27,7 +27,8 @@ pub struct Analysis {
     pub callers: Vec<u32>,
 }
 
-const SET_ASIDE: NodeFlags = NodeFlags(NodeFlags::EXTERNAL.0 | NodeFlags::TEST.0 | NodeFlags::MOCK.0 | NodeFlags::GENERATED.0 | NodeFlags::WIRING.0 | NodeFlags::NOISE.0);
+const SET_ASIDE: NodeFlags =
+    NodeFlags(NodeFlags::EXTERNAL.0 | NodeFlags::TEST.0 | NodeFlags::MOCK.0 | NodeFlags::GENERATED.0 | NodeFlags::WIRING.0 | NodeFlags::NOISE.0);
 
 fn test_code(g: &ArchivedGraph, n: NodeId) -> bool {
     g.path(n).into_iter().any(|p| g.flags(p).contains(NodeFlags::TEST))

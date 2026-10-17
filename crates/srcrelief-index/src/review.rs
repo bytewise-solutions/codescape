@@ -68,7 +68,8 @@ impl Review {
 }
 
 fn compared(g: &ArchivedGraph, n: NodeId) -> bool {
-    matches!(g.kind(n), NodeKind::Module | NodeKind::Package | NodeKind::Type | NodeKind::Member) && g.path(n).get(1).is_none_or(|&m| g.name(m) != EXTERNAL_MODULE)
+    matches!(g.kind(n), NodeKind::Module | NodeKind::Package | NodeKind::Type | NodeKind::Member)
+        && g.path(n).get(1).is_none_or(|&m| g.name(m) != EXTERNAL_MODULE)
 }
 
 fn key(g: &ArchivedGraph, n: NodeId) -> String {
@@ -158,7 +159,16 @@ pub fn compare(base: &ArchivedGraph, base_root: &Path, target: &ArchivedGraph, t
     let target_keys: HashMap<String, NodeId> = (0..target.node_count() as NodeId).filter(|&n| compared(target, n)).map(|n| (key(target, n), n)).collect();
     let mut before = Source { g: base, root: base_root, files: HashMap::new() };
     let mut after = Source { g: target, root: target_root, files: HashMap::new() };
-    let unchanged = Change { status: Status::Unchanged, added: 0, removed: 0, complexity: None, inside: Counts::default(), fingerprint: 0, signature: false, widened: None };
+    let unchanged = Change {
+        status: Status::Unchanged,
+        added: 0,
+        removed: 0,
+        complexity: None,
+        inside: Counts::default(),
+        fingerprint: 0,
+        signature: false,
+        widened: None,
+    };
     let mut changes = vec![unchanged.clone(); target.node_count()];
     for n in (0..target.node_count() as NodeId).filter(|&n| compared(target, n)) {
         let c = &mut changes[n as usize];
@@ -230,8 +240,7 @@ pub fn compare(base: &ArchivedGraph, base_root: &Path, target: &ArchivedGraph, t
         }
     }
     let (old_arrows, new_arrows) = (arrows(base), arrows(target));
-    let mut added: Vec<(NodeId, NodeId)> =
-        new_arrows.difference(&old_arrows).filter_map(|(a, b)| Some((*target_keys.get(a)?, *target_keys.get(b)?))).collect();
+    let mut added: Vec<(NodeId, NodeId)> = new_arrows.difference(&old_arrows).filter_map(|(a, b)| Some((*target_keys.get(a)?, *target_keys.get(b)?))).collect();
     added.sort();
     let mut gone: Vec<(String, String)> = old_arrows.difference(&new_arrows).cloned().collect();
     gone.sort();
@@ -284,7 +293,13 @@ pub fn clean_versions(project_dir: &Path, cache_root: &Path, unused_for: std::ti
     let root = PathBuf::from(git(project_dir, &["rev-parse", "--show-toplevel"])?);
     let prefix = format!("{}-", crate::project_key(&project_dir.canonicalize()?));
     let ours = |dir: &Path| -> Vec<PathBuf> {
-        std::fs::read_dir(dir).into_iter().flatten().flatten().map(|e| e.path()).filter(|p| p.file_name().is_some_and(|n| n.to_string_lossy().starts_with(&prefix))).collect()
+        std::fs::read_dir(dir)
+            .into_iter()
+            .flatten()
+            .flatten()
+            .map(|e| e.path())
+            .filter(|p| p.file_name().is_some_and(|n| n.to_string_lossy().starts_with(&prefix)))
+            .collect()
     };
     let mut removed = 0;
     for old in ours(&cache_root.join("worktrees")) {
@@ -361,7 +376,13 @@ pub fn base_for(project_dir: &Path, target: Option<&str>) -> anyhow::Result<Stri
     git(project_dir, &["rev-parse", target])
 }
 
-pub fn index_revision(project_dir: &Path, rev: &str, cfg: &crate::ProjectConfig, cache_root: &Path, progress: &dyn Fn(crate::Progress)) -> anyhow::Result<RevisionIndex> {
+pub fn index_revision(
+    project_dir: &Path,
+    rev: &str,
+    cfg: &crate::ProjectConfig,
+    cache_root: &Path,
+    progress: &dyn Fn(crate::Progress),
+) -> anyhow::Result<RevisionIndex> {
     let sha = git(project_dir, &["rev-parse", &format!("{rev}^{{commit}}")])?;
     let root = PathBuf::from(git(project_dir, &["rev-parse", "--show-toplevel"])?).canonicalize()?;
     let project = project_dir.canonicalize()?;

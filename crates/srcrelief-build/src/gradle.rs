@@ -21,13 +21,9 @@ static ROOT_NAME: LazyLock<Regex> = LazyLock::new(|| Regex::new(r#"rootProject\.
 static QUOTED: LazyLock<Regex> = LazyLock::new(|| Regex::new(r#"['"]([^'"]+)['"]"#).unwrap());
 static PROJECT_DIR: LazyLock<Regex> =
     LazyLock::new(|| Regex::new(r#"project\(\s*['"]([^'"]+)['"]\s*\)\.projectDir\s*=\s*(?:file|new File)\(\s*(?:[^,()]*,\s*)?['"]([^'"]+)['"]"#).unwrap());
-static DEP: LazyLock<Regex> = LazyLock::new(|| {
-    Regex::new(r#"(?m)^\s*(\w+)\s*\(?\s*project\s*\(\s*(?:path\s*:\s*)?['"]([^'"]+)['"]"#).unwrap()
-});
-static SRC_FLAT: LazyLock<Regex> =
-    LazyLock::new(|| Regex::new(r"sourceSets\.(\w+)\.java\.srcDirs?\s*=\s*\[([^\]]*)\]").unwrap());
-static SRC_BLOCK: LazyLock<Regex> =
-    LazyLock::new(|| Regex::new(r"(?s)\b(\w+)\s*\{[^{}]*?java\.srcDirs?\s*=\s*\[([^\]]*)\]").unwrap());
+static DEP: LazyLock<Regex> = LazyLock::new(|| Regex::new(r#"(?m)^\s*(\w+)\s*\(?\s*project\s*\(\s*(?:path\s*:\s*)?['"]([^'"]+)['"]"#).unwrap());
+static SRC_FLAT: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"sourceSets\.(\w+)\.java\.srcDirs?\s*=\s*\[([^\]]*)\]").unwrap());
+static SRC_BLOCK: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"(?s)\b(\w+)\s*\{[^{}]*?java\.srcDirs?\s*=\s*\[([^\]]*)\]").unwrap());
 
 pub fn strip_comments(s: &str) -> String {
     let s = BLOCK_COMMENT.replace_all(s, "");

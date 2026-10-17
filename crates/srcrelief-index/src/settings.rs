@@ -47,7 +47,8 @@ pub enum View {
 }
 
 impl View {
-    pub const ALL: [View; 9] = [View::Tests, View::TestDeps, View::Details, View::Errors, View::Wiring, View::Complexity, View::Unused, View::QuietArrows, View::Legend];
+    pub const ALL: [View; 9] =
+        [View::Tests, View::TestDeps, View::Details, View::Errors, View::Wiring, View::Complexity, View::Unused, View::QuietArrows, View::Legend];
 
     pub fn default_value(self) -> bool {
         matches!(self, View::Complexity | View::QuietArrows | View::Legend)
@@ -641,7 +642,8 @@ impl SettingsStore {
     }
 
     pub fn set_pack(&mut self, name: &str, on: bool) -> Result<()> {
-        let packs = if on { PacksFile { enable: vec![name.into()], ..Default::default() } } else { PacksFile { disable: vec![name.into()], ..Default::default() } };
+        let packs =
+            if on { PacksFile { enable: vec![name.into()], ..Default::default() } } else { PacksFile { disable: vec![name.into()], ..Default::default() } };
         self.replace(Key::Pack(name.into()), SettingsFile { packs, ..Default::default() })
     }
 

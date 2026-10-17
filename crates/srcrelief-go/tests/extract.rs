@@ -14,11 +14,7 @@ fn run() -> Run {
     let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../tests/fixtures/go-resolve");
     let d = discover(&root, &default_excludes()).unwrap();
     let mut b = GraphBuilder::new("go-resolve");
-    let module_nodes: Vec<NodeId> = d
-        .modules
-        .iter()
-        .map(|m| b.add_node(b.root(), NodeKind::Module, SubKind::None, &m.name, Lang::Go))
-        .collect();
+    let module_nodes: Vec<NodeId> = d.modules.iter().map(|m| b.add_node(b.root(), NodeKind::Module, SubKind::None, &m.name, Lang::Go)).collect();
     let mut facts = ProjectFacts::default();
     let stats = extract_go(&d, &module_nodes, &default_excludes(), &mut b, &mut facts);
     Run { b, facts, stats }
@@ -231,7 +227,14 @@ fn exported_names_are_public_and_the_rest_package() {
     extract_go(&d, &nodes, &default_excludes(), &mut b, &mut facts);
     let pkg = b.children(nodes[0])[0];
     let store = b.child(pkg, "Store").unwrap();
-    for (n, v) in [(store, Visibility::Public), (b.child(store, "Get").unwrap(), Visibility::Public), (b.child(store, "evict").unwrap(), Visibility::Package), (b.child(pkg, "cache").unwrap(), Visibility::Package), (b.child(pkg, "Open").unwrap(), Visibility::Public), (b.child(pkg, "helper").unwrap(), Visibility::Package)] {
+    for (n, v) in [
+        (store, Visibility::Public),
+        (b.child(store, "Get").unwrap(), Visibility::Public),
+        (b.child(store, "evict").unwrap(), Visibility::Package),
+        (b.child(pkg, "cache").unwrap(), Visibility::Package),
+        (b.child(pkg, "Open").unwrap(), Visibility::Public),
+        (b.child(pkg, "helper").unwrap(), Visibility::Package),
+    ] {
         assert_eq!(b.visibility(n), v, "{}", b.name(n));
     }
 }
@@ -249,7 +252,14 @@ fn struct_fields_become_members() {
     let store = b.child(b.children(nodes[0])[0], "Store").unwrap();
     let fields: Vec<(&str, Option<&str>, Visibility)> =
         b.children(store).iter().filter(|&&c| b.sub_kind(c) == SubKind::Field).map(|&c| (b.name(c), b.detail(c), b.visibility(c))).collect();
-    assert_eq!(fields, [("DB", Some("*sql.DB"), Visibility::Public), ("cache", Some("map[string]int"), Visibility::Package), ("Mutex", Some("sync.Mutex"), Visibility::Public)]);
+    assert_eq!(
+        fields,
+        [
+            ("DB", Some("*sql.DB"), Visibility::Public),
+            ("cache", Some("map[string]int"), Visibility::Package),
+            ("Mutex", Some("sync.Mutex"), Visibility::Public)
+        ]
+    );
 }
 
 #[test]

@@ -54,7 +54,15 @@ impl Fx {
         let node = self.b.add_node(pkg, NodeKind::Member, SubKind::Function, name, Lang::TypeScript);
         let lines = self.sources.get(&self.facts.files[file].rel_path).map_or(1, |s| s.iter().filter(|&&c| c == b'\n').count() as u32 + 1);
         self.b.set_span(node, &self.facts.files[file].rel_path.clone(), 1, lines);
-        self.facts.files[file].functions.push(FnFacts { node, owner: None, name: name.into(), params: Vec::new(), annotations: Vec::new(), is_main, overrides_external: None });
+        self.facts.files[file].functions.push(FnFacts {
+            node,
+            owner: None,
+            name: name.into(),
+            params: Vec::new(),
+            annotations: Vec::new(),
+            is_main,
+            overrides_external: None,
+        });
         node
     }
 
@@ -88,7 +96,10 @@ fn strings(a: &[Option<&str>]) -> Vec<Option<String>> {
 fn angular_app(fx: &mut Fx) -> NodeId {
     let main = fx.file("web", "web/src/main.ts", &["@angular/platform-browser", "./app/app.component"]);
     let top = fx.func(main, "main.ts", false);
-    fx.call(main, CallFacts { caller: top, method: "bootstrapApplication".into(), ident_args: strings(&[Some("AppComponent"), None]), line: 4, ..Default::default() });
+    fx.call(
+        main,
+        CallFacts { caller: top, method: "bootstrapApplication".into(), ident_args: strings(&[Some("AppComponent"), None]), line: 4, ..Default::default() },
+    );
     top
 }
 

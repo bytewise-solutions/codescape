@@ -13,16 +13,95 @@ const EXTERNAL_MODULE: &str = "(external)";
 const MAX_BYTES: u64 = 1 << 20;
 const EXTENSIONS: &[&str] = &["ts", "tsx", "mts", "cts", "js", "jsx", "mjs", "cjs"];
 const GLOBAL_OBJECTS: &[&str] = &[
-    "console", "Math", "JSON", "Object", "Array", "Promise", "Number", "String", "Boolean", "Symbol", "Reflect", "Date", "window", "document",
-    "globalThis", "localStorage", "sessionStorage", "navigator", "location", "history", "process", "crypto", "performance", "Intl", "URL",
-    "URLSearchParams", "Buffer", "module", "exports", "Error", "Map", "Set", "WeakMap", "RegExp", "BigInt", "Atomics", "self",
+    "console",
+    "Math",
+    "JSON",
+    "Object",
+    "Array",
+    "Promise",
+    "Number",
+    "String",
+    "Boolean",
+    "Symbol",
+    "Reflect",
+    "Date",
+    "window",
+    "document",
+    "globalThis",
+    "localStorage",
+    "sessionStorage",
+    "navigator",
+    "location",
+    "history",
+    "process",
+    "crypto",
+    "performance",
+    "Intl",
+    "URL",
+    "URLSearchParams",
+    "Buffer",
+    "module",
+    "exports",
+    "Error",
+    "Map",
+    "Set",
+    "WeakMap",
+    "RegExp",
+    "BigInt",
+    "Atomics",
+    "self",
 ];
 const GLOBAL_FUNCTIONS: &[&str] = &[
-    "setTimeout", "setInterval", "clearTimeout", "clearInterval", "setImmediate", "queueMicrotask", "requestAnimationFrame",
-    "cancelAnimationFrame", "parseInt", "parseFloat", "isNaN", "isFinite", "String", "Number", "Boolean", "Array", "Object", "Symbol", "BigInt",
-    "Date", "RegExp", "Error", "Promise", "fetch", "structuredClone", "encodeURIComponent", "decodeURIComponent", "encodeURI", "decodeURI",
-    "alert", "confirm", "prompt", "atob", "btoa", "super", "describe", "it", "test", "expect", "beforeEach", "afterEach", "beforeAll",
-    "afterAll", "fdescribe", "xdescribe", "fit", "xit", "spyOn", "fail", "pending",
+    "setTimeout",
+    "setInterval",
+    "clearTimeout",
+    "clearInterval",
+    "setImmediate",
+    "queueMicrotask",
+    "requestAnimationFrame",
+    "cancelAnimationFrame",
+    "parseInt",
+    "parseFloat",
+    "isNaN",
+    "isFinite",
+    "String",
+    "Number",
+    "Boolean",
+    "Array",
+    "Object",
+    "Symbol",
+    "BigInt",
+    "Date",
+    "RegExp",
+    "Error",
+    "Promise",
+    "fetch",
+    "structuredClone",
+    "encodeURIComponent",
+    "decodeURIComponent",
+    "encodeURI",
+    "decodeURI",
+    "alert",
+    "confirm",
+    "prompt",
+    "atob",
+    "btoa",
+    "super",
+    "describe",
+    "it",
+    "test",
+    "expect",
+    "beforeEach",
+    "afterEach",
+    "beforeAll",
+    "afterAll",
+    "fdescribe",
+    "xdescribe",
+    "fit",
+    "xit",
+    "spyOn",
+    "fail",
+    "pending",
 ];
 const NO_TYPE: &[&str] = &["any", "unknown", "void", "never", "object", "null", "undefined", "this", "Function"];
 const PRIMITIVES: &[&str] = &["string", "number", "boolean", "bigint", "symbol"];
@@ -185,7 +264,8 @@ pub fn extract_ts(d: &Discovery, module_nodes: &[NodeId], excludes: &GlobSet, b:
 }
 
 fn list_sources(d: &Discovery, excludes: &GlobSet) -> Vec<(usize, PathBuf)> {
-    let dirs: Vec<(usize, &Path)> = d.modules.iter().enumerate().filter(|(_, m)| matches!(m.lang, Lang::TypeScript | Lang::JavaScript)).map(|(i, m)| (i, m.dir.as_path())).collect();
+    let dirs: Vec<(usize, &Path)> =
+        d.modules.iter().enumerate().filter(|(_, m)| matches!(m.lang, Lang::TypeScript | Lang::JavaScript)).map(|(i, m)| (i, m.dir.as_path())).collect();
     let mut out = Vec::new();
     for &(mi, dir) in &dirs {
         let _ = walk_files_under(&d.root, dir, excludes, |p| {
@@ -225,7 +305,10 @@ fn load_tsconfig(path: &Path, depth: u32, out: &mut TsPaths) {
         out.base = Some(normalize(&dir.join(base)));
     }
     if let Some(Value::Object(paths)) = opts.get("paths") {
-        out.paths = paths.iter().map(|(k, v)| (k.clone(), v.as_array().map(|a| a.iter().filter_map(|x| x.as_str().map(String::from)).collect()).unwrap_or_default())).collect();
+        out.paths = paths
+            .iter()
+            .map(|(k, v)| (k.clone(), v.as_array().map(|a| a.iter().filter_map(|x| x.as_str().map(String::from)).collect()).unwrap_or_default()))
+            .collect();
         out.paths_base = Some(dir.to_path_buf());
     }
 }
@@ -376,7 +459,8 @@ impl<'a> Resolver<'a> {
         let (name, sub) = package_name(spec);
         if let Some(&mi) = self.npm_names.get(name) {
             let dir = &self.d.modules[mi].dir;
-            let found = if sub.is_empty() { self.module_entry(mi) } else { self.try_file(&dir.join(sub)).or_else(|| self.try_file(&dir.join("src").join(sub))) };
+            let found =
+                if sub.is_empty() { self.module_entry(mi) } else { self.try_file(&dir.join(sub)).or_else(|| self.try_file(&dir.join("src").join(sub))) };
             return found.map_or(Spec::Unresolved, Spec::File);
         }
         Spec::External(spec.to_string())
@@ -542,7 +626,12 @@ impl<'a> Resolver<'a> {
     }
 
     fn reexport_targets(&self, fi: usize) -> Vec<(Spec, Option<Vec<(String, String)>>)> {
-        self.files[fi].tf.reexports.iter().map(|r| (self.specs.get(&(fi, r.spec.clone())).cloned().unwrap_or_else(|| self.compute_spec(fi, &r.spec)), r.names.clone())).collect()
+        self.files[fi]
+            .tf
+            .reexports
+            .iter()
+            .map(|r| (self.specs.get(&(fi, r.spec.clone())).cloned().unwrap_or_else(|| self.compute_spec(fi, &r.spec)), r.names.clone()))
+            .collect()
     }
 
     fn symbol(&self, fi: usize, name: &str, depth: u32) -> Option<Sym> {
@@ -931,7 +1020,12 @@ impl<'a> Resolver<'a> {
             let mut import_targets: Vec<NodeId> = Vec::new();
             let mut imports = Vec::new();
             for imp in &f.tf.imports {
-                imports.push(Import { path: imp.spec.clone(), alias: imp.default.clone().or_else(|| imp.namespace.clone()), wildcard: imp.namespace.is_some(), is_static: false });
+                imports.push(Import {
+                    path: imp.spec.clone(),
+                    alias: imp.default.clone().or_else(|| imp.namespace.clone()),
+                    wildcard: imp.namespace.is_some(),
+                    is_static: false,
+                });
                 let Spec::File(t) = self.resolve_spec(fi, &imp.spec) else { continue };
                 let target = self.file_pkg[t];
                 if target == own || import_targets.contains(&target) {
@@ -960,10 +1054,23 @@ impl<'a> Resolver<'a> {
             for t in &f.tf.types {
                 let ti = self.file_types[fi][&t.name];
                 let info = &self.types[ti];
-                ff.types.push(TypeFacts { node: info.node, fqn: info.fqn.clone(), supertypes: info.supers.iter().map(|s| self.type_name(s)).collect(), annotations: t.decorators.clone() });
+                ff.types.push(TypeFacts {
+                    node: info.node,
+                    fqn: info.fqn.clone(),
+                    supertypes: info.supers.iter().map(|s| self.type_name(s)).collect(),
+                    annotations: t.decorators.clone(),
+                });
                 for m in &t.methods {
                     let node = self.types[ti].methods[&m.name];
-                    ff.functions.push(FnFacts { node, owner: Some(self.types[ti].node), name: m.name.clone(), params: m.params.clone(), annotations: m.decorators.clone(), is_main: false, overrides_external: None });
+                    ff.functions.push(FnFacts {
+                        node,
+                        owner: Some(self.types[ti].node),
+                        name: m.name.clone(),
+                        params: m.params.clone(),
+                        annotations: m.decorators.clone(),
+                        is_main: false,
+                        overrides_external: None,
+                    });
                     let ctx = Ctx { fi, ti: Some(ti), func: Some(m) };
                     for call in &m.calls {
                         let cf = self.resolve_call(ctx, node, scope, call);
@@ -976,7 +1083,15 @@ impl<'a> Resolver<'a> {
                 if ff.functions.iter().any(|x| x.node == node) {
                     continue;
                 }
-                ff.functions.push(FnFacts { node, owner: None, name: self.b.name(node).to_string(), params: func.params.clone(), annotations: Vec::new(), is_main: false, overrides_external: None });
+                ff.functions.push(FnFacts {
+                    node,
+                    owner: None,
+                    name: self.b.name(node).to_string(),
+                    params: func.params.clone(),
+                    annotations: Vec::new(),
+                    is_main: false,
+                    overrides_external: None,
+                });
                 let ctx = Ctx { fi, ti: None, func: Some(func) };
                 for call in &func.calls {
                     let cf = self.resolve_call(ctx, node, scope, call);
@@ -985,7 +1100,15 @@ impl<'a> Resolver<'a> {
             }
             if let Some(node) = self.top_nodes[fi] {
                 let top = &f.tf.top;
-                ff.functions.push(FnFacts { node, owner: None, name: f.name.clone(), params: Vec::new(), annotations: Vec::new(), is_main: self.entry_files.contains(&fi), overrides_external: None });
+                ff.functions.push(FnFacts {
+                    node,
+                    owner: None,
+                    name: f.name.clone(),
+                    params: Vec::new(),
+                    annotations: Vec::new(),
+                    is_main: self.entry_files.contains(&fi),
+                    overrides_external: None,
+                });
                 let ctx = Ctx { fi, ti: None, func: Some(top) };
                 for call in &top.calls {
                     let cf = self.resolve_call(ctx, node, scope, call);

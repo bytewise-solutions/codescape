@@ -44,7 +44,17 @@ fn entries_skip_tests() {
     let m = b.add_node(b.root(), NodeKind::Module, SubKind::None, "m", Lang::Java);
     let n = b.add_node(m, NodeKind::Member, SubKind::Method, "main", Lang::Java);
     for (label, category) in [("App", Category::Application), ("LoadTest", Category::Test), ("Tool", Category::DevTool)] {
-        b.add_entry(EntryPointSpec { node: n, kind: "main".into(), category, label: label.into(), parent: None, lifecycle: Lifecycle::Once, order: 0, rule: "r".into(), handoff: None });
+        b.add_entry(EntryPointSpec {
+            node: n,
+            kind: "main".into(),
+            category,
+            label: label.into(),
+            parent: None,
+            lifecycle: Lifecycle::Once,
+            order: 0,
+            rule: "r".into(),
+            handoff: None,
+        });
     }
     let dir = tempfile::tempdir().unwrap();
     write_graph(&b.finish(), &dir.path().join("g")).unwrap();

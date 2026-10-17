@@ -6,8 +6,8 @@ mod walk;
 
 pub use cargo::{CargoCrate, cargo_crate};
 pub use gomod::{GoMod, parse_go_mod, parse_go_work};
-pub use npm::{NPM_EXCLUDED_DIRS, NPM_SOURCE_EXTENSIONS, in_npm_excluded_dir, is_npm_source, is_npm_tooling_file, read_json_loose};
 pub use gradle::{GradleSettings, SourceSets, parse_build_deps, parse_settings, parse_source_sets};
+pub use npm::{NPM_EXCLUDED_DIRS, NPM_SOURCE_EXTENSIONS, in_npm_excluded_dir, is_npm_source, is_npm_tooling_file, read_json_loose};
 pub use walk::{default_excludes, rel_path, walk_files, walk_files_under};
 
 use anyhow::Result;
@@ -135,12 +135,7 @@ fn discover_gradle(root: &Path, build: &Path, d: &mut Discovery) {
     let first = d.modules.len();
     let mut by_path: HashMap<String, usize> = HashMap::new();
     for include in &settings.includes {
-        let rel_dir = settings
-            .project_dirs
-            .iter()
-            .find(|(p, _)| p == include)
-            .map(|(_, dir)| dir.clone())
-            .unwrap_or_else(|| include.replace(':', "/"));
+        let rel_dir = settings.project_dirs.iter().find(|(p, _)| p == include).map(|(_, dir)| dir.clone()).unwrap_or_else(|| include.replace(':', "/"));
         let dir = build.join(rel_dir);
         if !dir.is_dir() {
             continue;
@@ -193,12 +188,7 @@ fn java_roots(dir: &Path, sets: &SourceSets) -> (Vec<PathBuf>, Vec<PathBuf>, Vec
         }
     });
     let test = declared("test").unwrap_or_else(|| existing(dir, &["src/test/java".to_string()]));
-    let dev = sets
-        .sets
-        .iter()
-        .filter(|(s, _)| s != "main" && s != "test")
-        .flat_map(|(_, d)| existing(dir, d))
-        .collect();
+    let dev = sets.sets.iter().filter(|(s, _)| s != "main" && s != "test").flat_map(|(_, d)| existing(dir, d)).collect();
     (main, test, dev)
 }
 
@@ -216,11 +206,7 @@ fn discover_go(root: &Path, markers: &[PathBuf], d: &mut Discovery) {
     for dir in mod_dirs {
         let dir = dir.canonicalize().unwrap_or(dir);
         let gm = parse_go_mod(&read(&dir.join("go.mod")));
-        let name = if dir == root {
-            root.file_name().map(|f| f.to_string_lossy().into_owned()).unwrap_or_else(|| ".".into())
-        } else {
-            rel_path(root, &dir)
-        };
+        let name = if dir == root { root.file_name().map(|f| f.to_string_lossy().into_owned()).unwrap_or_else(|| ".".into()) } else { rel_path(root, &dir) };
         requires.push(gm.requires);
         d.modules.push(DiscoveredModule {
             name,

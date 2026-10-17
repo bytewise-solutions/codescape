@@ -31,7 +31,10 @@ fn a_method_is_told_from_an_entry_point_down_two_levels_in_call_order() {
     assert_eq!(chain, [named(g, "main"), checkout]);
     let d = diagram(g, &calls, &Query::new(checkout, chain));
     let shown: Vec<(&str, &str, u32)> = d.messages.iter().map(|m| (g.name(m.caller), g.name(m.callee), m.depth)).collect();
-    assert_eq!(shown, [("main", "Checkout", 0), ("Checkout", "validate", 1), ("Checkout", "Save", 1), ("Save", "logIt", 2), ("Checkout", "total", 1), ("total", "sum", 2)]);
+    assert_eq!(
+        shown,
+        [("main", "Checkout", 0), ("Checkout", "validate", 1), ("Checkout", "Save", 1), ("Save", "logIt", 2), ("Checkout", "total", 1), ("total", "sum", 2)]
+    );
     let lines: Vec<Option<u32>> = d.messages.iter().map(|m| m.line).collect();
     assert_eq!(&lines[..3], [Some(7), Some(22), Some(23)]);
     assert!(d.messages[0].focus && !d.messages[1].focus);

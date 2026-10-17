@@ -43,7 +43,32 @@ fn the_cheatsheet_covers_keys_and_mouse_by_task() {
     let sections: Vec<&str> = sheet.iter().map(|(s, _)| *s).collect();
     assert_eq!(sections, ["Move around", "Select and follow", "Code", "Review", "Windows"]);
     let keys: Vec<&str> = sheet.iter().flat_map(|(_, rows)| rows.iter().map(|(k, _)| *k)).collect();
-    for k in ["← → ↑ ↓", "Enter", "Backspace", "Esc", "1 2 3", "+ −", "F", "Alt+←", "Ctrl+K", "Ctrl+O", "Ctrl+,", "? or F1", "Ctrl + wheel", "Shift + wheel", "Drag", "Double-click", "Page Up Page Down Home End", "N / P", "R", "[ ]", "S", "Ctrl+B", "Ctrl+I", "F11"] {
+    for k in [
+        "← → ↑ ↓",
+        "Enter",
+        "Backspace",
+        "Esc",
+        "1 2 3",
+        "+ −",
+        "F",
+        "Alt+←",
+        "Ctrl+K",
+        "Ctrl+O",
+        "Ctrl+,",
+        "? or F1",
+        "Ctrl + wheel",
+        "Shift + wheel",
+        "Drag",
+        "Double-click",
+        "Page Up Page Down Home End",
+        "N / P",
+        "R",
+        "[ ]",
+        "S",
+        "Ctrl+B",
+        "Ctrl+I",
+        "F11",
+    ] {
         assert!(keys.contains(&k), "cheatsheet misses {k}");
     }
 }

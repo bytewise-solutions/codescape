@@ -47,7 +47,11 @@ fn project_dir_pack_loaded() {
     let dir = tempfile::tempdir().unwrap();
     let pack_dir = dir.path().join(".srcrelief/rules/mine");
     std::fs::create_dir_all(&pack_dir).unwrap();
-    std::fs::write(pack_dir.join("pack.toml"), "name = \"mine\"\nversion = \"0.1\"\n[[rule]]\nid = \"mine.t\"\nname_tag = { kinds = [\"type\"], pattern = \"X\", tag = \"x\" }\n").unwrap();
+    std::fs::write(
+        pack_dir.join("pack.toml"),
+        "name = \"mine\"\nversion = \"0.1\"\n[[rule]]\nid = \"mine.t\"\nname_tag = { kinds = [\"type\"], pattern = \"X\", tag = \"x\" }\n",
+    )
+    .unwrap();
     let p = load_packs(Some(dir.path()), None, &PackSelection::default()).unwrap();
     assert!(p.names().contains(&"mine"));
     assert!(p.names().contains(&"libgdx"), "built-ins load too: {:?}", p.names());
@@ -87,7 +91,26 @@ fn visual_rules_merge() {
 #[test]
 fn builtin_packs_parse() {
     let p = load_packs(None, None, &PackSelection::default()).unwrap();
-    assert_eq!(p.names(), ["java-core", "libgdx", "spring-boot", "dagger", "go-core", "fiber", "rabbitmq-amqp091", "google-wire", "ts-core", "angular", "express", "rust-core", "layers", "significance", "default-visuals"]);
+    assert_eq!(
+        p.names(),
+        [
+            "java-core",
+            "libgdx",
+            "spring-boot",
+            "dagger",
+            "go-core",
+            "fiber",
+            "rabbitmq-amqp091",
+            "google-wire",
+            "ts-core",
+            "angular",
+            "express",
+            "rust-core",
+            "layers",
+            "significance",
+            "default-visuals"
+        ]
+    );
 }
 
 #[test]

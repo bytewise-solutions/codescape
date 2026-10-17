@@ -218,7 +218,8 @@ fn types_and_their_kinds() {
 fn impl_methods_attach_to_their_type_across_files() {
     let r = run();
     let store = at(&r.b, &["core-lib", "store", "Store"]);
-    let methods: Vec<&str> = children(&r.b, store).into_iter().filter(|n| r.b.sub_kind(at(&r.b, &["core-lib", "store", "Store", n])) != SubKind::Field).collect();
+    let methods: Vec<&str> =
+        children(&r.b, store).into_iter().filter(|n| r.b.sub_kind(at(&r.b, &["core-lib", "store", "Store", n])) != SubKind::Field).collect();
     assert_eq!(methods, ["clear", "get", "new"]);
     assert_eq!(r.b.sub_kind(at(&r.b, &["core-lib", "store", "Store", "new"])), SubKind::Constructor);
     assert_eq!(r.b.sub_kind(at(&r.b, &["core-lib", "store", "Store", "get"])), SubKind::Method);
@@ -497,13 +498,21 @@ fn unknown_receivers_guess_only_into_imported_crates() {
         "b/src/lib.rs",
         "mod other;\npub fn elim(x: Unknown) { x.never_defined_anywhere(); }\npub fn h(items: Vec<u8>) { for t in items { t.unique_name(); } }\n",
     );
-    write(r, "b/src/other.rs", "use a::Thing;\npub fn k(xs: Vec<Thing>) { for t in xs { t.unique_name(); } }\npub fn o() { std::env::args().unique_name(); }\n");
+    write(
+        r,
+        "b/src/other.rs",
+        "use a::Thing;\npub fn k(xs: Vec<Thing>) { for t in xs { t.unique_name(); } }\npub fn o() { std::env::args().unique_name(); }\n",
+    );
     let d = discover(r, &default_excludes()).unwrap();
     let mut b = GraphBuilder::new("guess");
     let module_nodes: Vec<NodeId> = d.modules.iter().map(|m| b.add_node(b.root(), NodeKind::Module, SubKind::None, &m.name, m.lang)).collect();
     let mut facts = ProjectFacts::default();
     let stats = extract_rust(&d, &module_nodes, &default_excludes(), &mut b, &mut facts);
-    assert_eq!((stats.resolved, stats.guessed, stats.unresolved), (4, 0, 1), "only the call on an unknown type is unresolved: nothing is resolved by elimination");
+    assert_eq!(
+        (stats.resolved, stats.guessed, stats.unresolved),
+        (4, 0, 1),
+        "only the call on an unknown type is unresolved: nothing is resolved by elimination"
+    );
     let target = at(&b, &["a", "(lib)", "Thing", "unique_name"]);
     let callers: Vec<&str> = b.edges().iter().filter(|e| e.to == target).map(|e| b.name(e.from)).collect();
     assert_eq!(callers, ["k"], "u8 elements have no unique_name, so h is not guessed into a");
@@ -542,23 +551,38 @@ fn struct_fields_become_members_after_methods() {
     let tmp = tempfile::tempdir().unwrap();
     let r = tmp.path();
     write(r, "Cargo.toml", "[package]\nname = \"fld\"\n");
-    write(r, "src/lib.rs", "pub struct Buf {\n    pub len: usize,\n    pub(crate) data: Vec<u8>,\n    cap: usize,\n}\nimpl Buf { pub fn len(&self) -> usize { self.len } }\npub struct Pair(pub u8, String);\n");
+    write(
+        r,
+        "src/lib.rs",
+        "pub struct Buf {\n    pub len: usize,\n    pub(crate) data: Vec<u8>,\n    cap: usize,\n}\nimpl Buf { pub fn len(&self) -> usize { self.len } }\npub struct Pair(pub u8, String);\n",
+    );
     let d = discover(r, &default_excludes()).unwrap();
     let mut b = GraphBuilder::new("fld");
     let module_nodes: Vec<NodeId> = d.modules.iter().map(|m| b.add_node(b.root(), NodeKind::Module, SubKind::None, &m.name, m.lang)).collect();
     let mut facts = ProjectFacts::default();
     extract_rust(&d, &module_nodes, &default_excludes(), &mut b, &mut facts);
     let fields = |t: NodeId| -> Vec<(String, Option<String>, Visibility)> {
-        b.children(t).iter().filter(|&&c| b.sub_kind(c) == SubKind::Field).map(|&c| (b.name(c).to_string(), b.detail(c).map(String::from), b.visibility(c))).collect()
+        b.children(t)
+            .iter()
+            .filter(|&&c| b.sub_kind(c) == SubKind::Field)
+            .map(|&c| (b.name(c).to_string(), b.detail(c).map(String::from), b.visibility(c)))
+            .collect()
     };
     let buf = at(&b, &["fld", "(lib)", "Buf"]);
     assert_eq!(
         fields(buf),
-        [("len".to_string(), Some("usize".to_string()), Visibility::Public), ("data".to_string(), Some("Vec<u8>".to_string()), Visibility::Package), ("cap".to_string(), Some("usize".to_string()), Visibility::Private)]
+        [
+            ("len".to_string(), Some("usize".to_string()), Visibility::Public),
+            ("data".to_string(), Some("Vec<u8>".to_string()), Visibility::Package),
+            ("cap".to_string(), Some("usize".to_string()), Visibility::Private)
+        ]
     );
     assert_eq!(b.sub_kind(b.child(buf, "len").unwrap()), SubKind::Method, "the method keeps the name lookup");
     let pair = at(&b, &["fld", "(lib)", "Pair"]);
-    assert_eq!(fields(pair), [("0".to_string(), Some("u8".to_string()), Visibility::Public), ("1".to_string(), Some("String".to_string()), Visibility::Private)]);
+    assert_eq!(
+        fields(pair),
+        [("0".to_string(), Some("u8".to_string()), Visibility::Public), ("1".to_string(), Some("String".to_string()), Visibility::Private)]
+    );
 }
 
 #[test]
@@ -670,7 +694,10 @@ fn loop_and_closure_variables_take_the_element_type_and_adapters_keep_it() {
     assert!(edge(&b, shadowed, weight, EdgeKind::Calls).is_some(), "the closure's b is an Item");
     assert!(edge(&b, shadowed, n(&["bag", "(lib)", "Bag", "looped"]), EdgeKind::Calls).is_some(), "after the closure, b is the Bag again");
     let load = n(&["bag", "(lib)", "Bag", "load"]);
-    assert!(edge(&b, load, n(&["bag", "(lib)", "Bag", "looped"]), EdgeKind::Calls).is_some_and(|e| e.confidence == Confidence::Resolved), "map_err(...)? keeps Bag");
+    assert!(
+        edge(&b, load, n(&["bag", "(lib)", "Bag", "looped"]), EdgeKind::Calls).is_some_and(|e| e.confidence == Confidence::Resolved),
+        "map_err(...)? keeps Bag"
+    );
 }
 
 #[test]
@@ -680,11 +707,19 @@ fn integration_tests_resolve_calls_into_their_crate_dependencies() {
     write(r, "Cargo.toml", "[workspace]\nmembers = [\"fmt\", \"app\"]\n\n[workspace.dependencies]\nmy-fmt = { path = \"fmt\" }\n");
     write(r, "fmt/Cargo.toml", "[package]\nname = \"my-fmt\"\n");
     write(r, "fmt/src/lib.rs", "mod builder;\npub use builder::{GraphBuilder, Kind};\n");
-    write(r, "fmt/src/builder.rs", "pub enum Kind { A }\npub struct GraphBuilder;\nimpl GraphBuilder {\n    pub fn new(name: &str) -> GraphBuilder { GraphBuilder }\n    pub fn root(&self) -> u32 { 0 }\n    pub fn add_node(&mut self, parent: u32, kind: Kind) -> u32 { parent }\n}\n");
+    write(
+        r,
+        "fmt/src/builder.rs",
+        "pub enum Kind { A }\npub struct GraphBuilder;\nimpl GraphBuilder {\n    pub fn new(name: &str) -> GraphBuilder { GraphBuilder }\n    pub fn root(&self) -> u32 { 0 }\n    pub fn add_node(&mut self, parent: u32, kind: Kind) -> u32 { parent }\n}\n",
+    );
     write(r, "app/Cargo.toml", "[package]\nname = \"app\"\n\n[dependencies]\nmy-fmt.workspace = true\n");
     write(r, "app/src/lib.rs", "pub fn x() {}\n");
     write(r, "app/tests/all.rs", "mod scene;\n");
-    write(r, "app/tests/scene.rs", "use my_fmt::*;\n\n#[test]\nfn builds() {\n    let mut b = GraphBuilder::new(\"p\");\n    let m = b.add_node(b.root(), Kind::A);\n}\n");
+    write(
+        r,
+        "app/tests/scene.rs",
+        "use my_fmt::*;\n\n#[test]\nfn builds() {\n    let mut b = GraphBuilder::new(\"p\");\n    let m = b.add_node(b.root(), Kind::A);\n}\n",
+    );
     let d = discover(r, &default_excludes()).unwrap();
     let mut b = GraphBuilder::new("it");
     let module_nodes: Vec<NodeId> = d.modules.iter().map(|m| b.add_node(b.root(), NodeKind::Module, SubKind::None, &m.name, m.lang)).collect();

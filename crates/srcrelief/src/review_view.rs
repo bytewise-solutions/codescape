@@ -188,7 +188,17 @@ pub fn items(g: &ArchivedGraph, r: &Review, a: &Analysis) -> Vec<ReviewItem> {
             Some(p) => (group_of(g, p), name.to_string()),
             None => (String::new(), rm.path.clone()),
         };
-        out.push(ReviewItem { node: None, parent: rm.parent, group, label, kind: ItemKind::Removed, detail: "removed".into(), key: format!("removed:{}", rm.path), fingerprint: 1, risks: Vec::new() });
+        out.push(ReviewItem {
+            node: None,
+            parent: rm.parent,
+            group,
+            label,
+            kind: ItemKind::Removed,
+            detail: "removed".into(),
+            key: format!("removed:{}", rm.path),
+            fingerprint: 1,
+            risks: Vec::new(),
+        });
     }
     out.sort_by(|a, b| (&a.group, &a.label).cmp(&(&b.group, &b.label)));
     out

@@ -176,7 +176,15 @@ fn fallback_callbacks_without_pack() {
 fn instantiates_sets_handoff() {
     let mut fx = Fx::new();
     let (main, _, _) = gdx_app(&mut fx);
-    fx.call(0, CallFacts { caller: main, method: "Lwjgl3Application".into(), instantiates: Some("com.badlogic.gdx.backends.lwjgl3.Lwjgl3Application".into()), ..Default::default() });
+    fx.call(
+        0,
+        CallFacts {
+            caller: main,
+            method: "Lwjgl3Application".into(),
+            instantiates: Some("com.badlogic.gdx.backends.lwjgl3.Lwjgl3Application".into()),
+            ..Default::default()
+        },
+    );
     fx.run(&builtins());
     assert_eq!(fx.entry("Desktop").handoff.as_deref(), Some("libGDX"));
 }
@@ -220,12 +228,72 @@ fn call_route_joins_group_prefixes_across_functions() {
     let h = fx.ty(g, "x/internal/h.H", &[], &[]);
     let register = fx.func(g, Some(h), "RegisterRoutes", false, None, &[("r", "fiber.Router")]);
     let rates = fx.func(g, Some(h), "Rates", false, None, &[("c", "fiber.Ctx")]);
-    fx.call(f, CallFacts { caller: main, method: "New".into(), receiver_var: Some("fiber".into()), assigned_to: Some("app".into()), line: 1, ..Default::default() });
-    fx.call(f, CallFacts { caller: main, method: "Group".into(), receiver_var: Some("app".into()), string_args: str_args(&[Some("/api/v1")]), assigned_to: Some("api".into()), line: 2, ..Default::default() });
-    fx.call(f, CallFacts { caller: main, method: "Group".into(), receiver_var: Some("api".into()), string_args: str_args(&[Some("/tenants/:id"), None]), assigned_to: Some("t".into()), line: 3, ..Default::default() });
-    fx.call(f, CallFacts { caller: main, method: "RegisterRoutes".into(), receiver_var: Some("h".into()), ident_args: str_args(&[Some("t")]), target: Some(register), line: 4, ..Default::default() });
-    fx.call(g, CallFacts { caller: register, method: "Group".into(), receiver_var: Some("r".into()), receiver_type: Some("fiber.Router".into()), string_args: str_args(&[Some("/stats")]), assigned_to: Some("g".into()), line: 10, ..Default::default() });
-    fx.call(g, CallFacts { caller: register, method: "Get".into(), receiver_var: Some("g".into()), string_args: str_args(&[Some("/rates"), None]), ident_args: str_args(&[None, Some("h.Rates")]), arg_targets: vec![None, Some(rates)], line: 11, ..Default::default() });
+    fx.call(
+        f,
+        CallFacts { caller: main, method: "New".into(), receiver_var: Some("fiber".into()), assigned_to: Some("app".into()), line: 1, ..Default::default() },
+    );
+    fx.call(
+        f,
+        CallFacts {
+            caller: main,
+            method: "Group".into(),
+            receiver_var: Some("app".into()),
+            string_args: str_args(&[Some("/api/v1")]),
+            assigned_to: Some("api".into()),
+            line: 2,
+            ..Default::default()
+        },
+    );
+    fx.call(
+        f,
+        CallFacts {
+            caller: main,
+            method: "Group".into(),
+            receiver_var: Some("api".into()),
+            string_args: str_args(&[Some("/tenants/:id"), None]),
+            assigned_to: Some("t".into()),
+            line: 3,
+            ..Default::default()
+        },
+    );
+    fx.call(
+        f,
+        CallFacts {
+            caller: main,
+            method: "RegisterRoutes".into(),
+            receiver_var: Some("h".into()),
+            ident_args: str_args(&[Some("t")]),
+            target: Some(register),
+            line: 4,
+            ..Default::default()
+        },
+    );
+    fx.call(
+        g,
+        CallFacts {
+            caller: register,
+            method: "Group".into(),
+            receiver_var: Some("r".into()),
+            receiver_type: Some("fiber.Router".into()),
+            string_args: str_args(&[Some("/stats")]),
+            assigned_to: Some("g".into()),
+            line: 10,
+            ..Default::default()
+        },
+    );
+    fx.call(
+        g,
+        CallFacts {
+            caller: register,
+            method: "Get".into(),
+            receiver_var: Some("g".into()),
+            string_args: str_args(&[Some("/rates"), None]),
+            ident_args: str_args(&[None, Some("h.Rates")]),
+            arg_targets: vec![None, Some(rates)],
+            line: 11,
+            ..Default::default()
+        },
+    );
     fx.run(&builtins());
     let e = fx.entry("GET /api/v1/tenants/:id/stats/rates");
     assert_eq!(e.node, rates);
@@ -241,7 +309,17 @@ fn call_route_unknown_param_prefix_is_ellipsis() {
     let fiber = &["github.com/gofiber/fiber/v2"];
     let g = fx.file("api", "api/h.go", Lang::Go, false, fiber);
     let reg = fx.func(g, None, "Register", false, None, &[("r", "fiber.Router")]);
-    fx.call(g, CallFacts { caller: reg, method: "Post".into(), receiver_var: Some("r".into()), receiver_type: Some("fiber.Router".into()), string_args: str_args(&[Some("/x"), None]), ..Default::default() });
+    fx.call(
+        g,
+        CallFacts {
+            caller: reg,
+            method: "Post".into(),
+            receiver_var: Some("r".into()),
+            receiver_type: Some("fiber.Router".into()),
+            string_args: str_args(&[Some("/x"), None]),
+            ..Default::default()
+        },
+    );
     fx.run(&builtins());
     fx.entry("POST …/x");
 }
@@ -264,7 +342,17 @@ fn call_handler_message_consumer() {
     let mut fx = Fx::new();
     let f = fx.file("job-engine", "job-engine/internal/c/consumer.go", Lang::Go, false, &["github.com/rabbitmq/amqp091-go"]);
     let consume = fx.func(f, None, "Start", false, None, &[]);
-    fx.call(f, CallFacts { caller: consume, method: "Consume".into(), receiver_var: Some("channel".into()), string_args: str_args(&[None, Some("")]), ident_args: str_args(&[Some("queueName"), None]), ..Default::default() });
+    fx.call(
+        f,
+        CallFacts {
+            caller: consume,
+            method: "Consume".into(),
+            receiver_var: Some("channel".into()),
+            string_args: str_args(&[None, Some("")]),
+            ident_args: str_args(&[Some("queueName"), None]),
+            ..Default::default()
+        },
+    );
     fx.run(&builtins());
     let e = fx.b.entries().iter().find(|e| e.kind == "message-handler").expect("consumer entry");
     assert_eq!(e.node, consume);
@@ -344,11 +432,17 @@ fn routes_in_test_and_mock_code_are_ignored() {
     let f = fx.file("api", "api/server_test.go", Lang::Go, true, &["github.com/gofiber/fiber/v2"]);
     let helper = fx.func(f, None, "TestServer", false, None, &[]);
     fx.b.add_flags(helper, NodeFlags::TEST);
-    fx.call(f, CallFacts { caller: helper, method: "Get".into(), receiver_var: Some("app".into()), string_args: str_args(&[Some("/x"), None]), ..Default::default() });
+    fx.call(
+        f,
+        CallFacts { caller: helper, method: "Get".into(), receiver_var: Some("app".into()), string_args: str_args(&[Some("/x"), None]), ..Default::default() },
+    );
     let g = fx.file("api", "api/mocks/m.go", Lang::Go, false, &["github.com/gofiber/fiber/v2"]);
     let mock = fx.func(g, None, "Mock", false, None, &[]);
     fx.b.add_flags(mock, NodeFlags::MOCK);
-    fx.call(g, CallFacts { caller: mock, method: "Post".into(), receiver_var: Some("app".into()), string_args: str_args(&[Some("/y"), None]), ..Default::default() });
+    fx.call(
+        g,
+        CallFacts { caller: mock, method: "Post".into(), receiver_var: Some("app".into()), string_args: str_args(&[Some("/y"), None]), ..Default::default() },
+    );
     fx.run(&builtins());
     assert!(fx.b.entries().is_empty(), "{:?}", fx.labels());
 }
@@ -517,7 +611,17 @@ fn architectural_roles_are_tagged() {
     let routes = fx.ty(f, "x.webhooks", &[], &[]);
     let hook = fx.func(f, Some(routes), "Receive", false, None, &[]);
     let reg = fx.func(f, None, "Register", false, None, &[]);
-    fx.call(f, CallFacts { caller: reg, method: "Post".into(), receiver_var: Some("app".into()), string_args: str_args(&[Some("/hook"), None]), arg_targets: vec![None, Some(hook)], ..Default::default() });
+    fx.call(
+        f,
+        CallFacts {
+            caller: reg,
+            method: "Post".into(),
+            receiver_var: Some("app".into()),
+            string_args: str_args(&[Some("/hook"), None]),
+            arg_targets: vec![None, Some(hook)],
+            ..Default::default()
+        },
+    );
     let j = fx.file("auth", "auth/src/main/java/a/Users.java", Lang::Java, false, &[]);
     let rest = fx.ty(j, "a.Users", &[], &["RestController"]);
     let svc = fx.ty(j, "a.Accounts", &[], &["Service"]);
@@ -536,7 +640,15 @@ fn architectural_roles_are_tagged() {
 
 fn member(fx: &mut Fx, file: usize, owner: NodeId, name: &str, sub: SubKind) -> NodeId {
     let n = fx.b.add_node(owner, NodeKind::Member, sub, name, fx.facts.files[file].lang);
-    fx.facts.files[file].functions.push(FnFacts { node: n, owner: Some(owner), name: name.into(), params: Vec::new(), annotations: Vec::new(), is_main: false, overrides_external: None });
+    fx.facts.files[file].functions.push(FnFacts {
+        node: n,
+        owner: Some(owner),
+        name: name.into(),
+        params: Vec::new(),
+        annotations: Vec::new(),
+        is_main: false,
+        overrides_external: None,
+    });
     n
 }
 
@@ -596,10 +708,25 @@ fn significance_keeps_components_and_sets_details_aside() {
     fx.facts.files[j].types.push(TypeFacts { node: nested, fqn: "c.Billing.Cache".into(), supertypes: Vec::new(), annotations: Vec::new() });
     fx.run(&builtins());
     let detail = |n: NodeId| fx.b.flags(n).contains(NodeFlags::DETAIL);
-    for (n, why) in [(handler, "role"), (iface, "interface"), (hub, "used from two packages"), (built, "assembled by DI"), (comp, "@Component"), (injected, "@Inject constructor")] {
+    for (n, why) in [
+        (handler, "role"),
+        (iface, "interface"),
+        (hub, "used from two packages"),
+        (built, "assembled by DI"),
+        (comp, "@Component"),
+        (injected, "@Inject constructor"),
+    ] {
         assert!(!detail(n), "{} is a component ({why})", fx.b.name(n));
     }
-    for (n, why) in [(dto, "no methods"), (response, "a model"), (local, "only used locally"), (record, "record"), (kind, "enum"), (bean, "accessors only"), (nested, "nested")] {
+    for (n, why) in [
+        (dto, "no methods"),
+        (response, "a model"),
+        (local, "only used locally"),
+        (record, "record"),
+        (kind, "enum"),
+        (bean, "accessors only"),
+        (nested, "nested"),
+    ] {
         assert!(detail(n), "{} is a detail ({why})", fx.b.name(n));
     }
 }

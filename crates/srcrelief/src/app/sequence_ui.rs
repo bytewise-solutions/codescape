@@ -125,7 +125,13 @@ impl Project {
                 if let Some(st) = style::stereotype(g.sub_kind(l.node), g.lang(l.node)) {
                     painter.text(head.center_top() + egui::vec2(0.0, 9.0), Align2::CENTER_CENTER, st, FontId::proportional(9.5), style::MUTED);
                 }
-                painter.text(head.center() + egui::vec2(0.0, 5.0), Align2::CENTER_CENTER, crate::canvas::fit_label(&l.label, head.width() - 10.0, 13.0), FontId::proportional(13.0), style::BOX_TITLE);
+                painter.text(
+                    head.center() + egui::vec2(0.0, 5.0),
+                    Align2::CENTER_CENTER,
+                    crate::canvas::fit_label(&l.label, head.width() - 10.0, 13.0),
+                    FontId::proportional(13.0),
+                    style::BOX_TITLE,
+                );
                 let hit = ui.interact(head, ui.scope_id().with(("lane", i)), Sense::click());
                 if hit.on_hover_text("Double-click: show it on the map").double_clicked() {
                     act = Some(Act::Map(l.node));
@@ -150,7 +156,10 @@ impl Project {
             }
             for (lane, start, end, stack, focus) in bars {
                 let top = if start == 0 && end > 0 && lane == root_lane && stack == 0 { row_y(0) - ROW_H / 2.0 } else { row_y(start) };
-                let bar = egui::Rect::from_min_max(Pos2::new(lane_x(lane) - BAR_W / 2.0 + stack as f32 * 4.0, top), Pos2::new(lane_x(lane) + BAR_W / 2.0 + stack as f32 * 4.0, row_y(end.max(start + 1) - 1) + ROW_H * 0.4));
+                let bar = egui::Rect::from_min_max(
+                    Pos2::new(lane_x(lane) - BAR_W / 2.0 + stack as f32 * 4.0, top),
+                    Pos2::new(lane_x(lane) + BAR_W / 2.0 + stack as f32 * 4.0, row_y(end.max(start + 1) - 1) + ROW_H * 0.4),
+                );
                 painter.rect_filled(bar, 1.0, if focus { style::tint(style::BAR, style::ACCENT, 0.5) } else { style::BAR });
                 painter.rect_stroke(bar, 1.0, Stroke::new(1.0, if focus { style::ACCENT } else { style::FRAME }), StrokeKind::Inside);
             }
@@ -178,7 +187,8 @@ impl Project {
                         painter.line_segment([Pos2::new(a, y), Pos2::new(b, y)], Stroke::new(width, color));
                     }
                     arrow_head(&painter, Pos2::new(b, y), dir, color);
-                    let (at, align) = if dir > 0.0 { (Pos2::new(a + 8.0, y - 8.0), Align2::LEFT_CENTER) } else { (Pos2::new(a - 8.0, y - 8.0), Align2::RIGHT_CENTER) };
+                    let (at, align) =
+                        if dir > 0.0 { (Pos2::new(a + 8.0, y - 8.0), Align2::LEFT_CENTER) } else { (Pos2::new(a - 8.0, y - 8.0), Align2::RIGHT_CENTER) };
                     label_rect = painter.text(at, align, &label, FontId::proportional(12.0), color);
                     hit_rect = egui::Rect::from_min_max(Pos2::new(a.min(b), y - 16.0), Pos2::new(a.max(b), y + 6.0));
                 }

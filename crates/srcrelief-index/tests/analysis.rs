@@ -72,7 +72,8 @@ fn calls_record_the_line_they_are_made_on() {
     let file = ReliefFile::open(&index_project(&dir, &cfg, &|_| {}).unwrap().path).unwrap();
     let g = file.graph();
     let main = (0..g.node_count() as NodeId).find(|&n| g.name(n) == "main" && g.kind(n) == NodeKind::Member).unwrap();
-    let lines: Vec<(&str, Option<u32>)> = g.out_edges(main).iter().filter(|e| EdgeKind::from_u8(e.kind) == EdgeKind::Calls).map(|e| (g.name(e.to.to_native()), g.call_line(main, e))).collect();
+    let lines: Vec<(&str, Option<u32>)> =
+        g.out_edges(main).iter().filter(|e| EdgeKind::from_u8(e.kind) == EdgeKind::Calls).map(|e| (g.name(e.to.to_native()), g.call_line(main, e))).collect();
     assert!(lines.contains(&("New", Some(6))), "{lines:?}");
     assert!(lines.contains(&("Add", Some(7))), "{lines:?}");
 }

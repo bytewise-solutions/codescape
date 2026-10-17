@@ -201,7 +201,13 @@ fn class_members_and_exports_carry_their_visibility() {
     let vis = |path: &[&str]| b.visibility(at(&b, path));
     assert_eq!(vis(&["vis", "src", "Store"]), Visibility::Public);
     assert_eq!(vis(&["vis", "src", "Cache"]), Visibility::Package, "not exported");
-    for (m, v) in [("constructor", Visibility::Public), ("get", Visibility::Public), ("load", Visibility::Protected), ("evict", Visibility::Private), ("#secret", Visibility::Private)] {
+    for (m, v) in [
+        ("constructor", Visibility::Public),
+        ("get", Visibility::Public),
+        ("load", Visibility::Protected),
+        ("evict", Visibility::Private),
+        ("#secret", Visibility::Private),
+    ] {
         assert_eq!(vis(&["vis", "src", "Store", m]), v, "{m}");
     }
     assert_eq!(vis(&["vis", "src", "open"]), Visibility::Public);
@@ -226,7 +232,11 @@ fn class_and_interface_fields_become_members() {
     let mut facts = ProjectFacts::default();
     extract_ts(&d, &module_nodes, &default_excludes(), &mut b, &mut facts);
     let fields = |t: NodeId| -> Vec<(String, Option<String>, Visibility)> {
-        b.children(t).iter().filter(|&&c| b.sub_kind(c) == SubKind::Field).map(|&c| (b.name(c).to_string(), b.detail(c).map(String::from), b.visibility(c))).collect()
+        b.children(t)
+            .iter()
+            .filter(|&&c| b.sub_kind(c) == SubKind::Field)
+            .map(|&c| (b.name(c).to_string(), b.detail(c).map(String::from), b.visibility(c)))
+            .collect()
     };
     let store = at(&b, &["fld", "src", "Store"]);
     assert_eq!(
@@ -239,7 +249,10 @@ fn class_and_interface_fields_become_members() {
         ]
     );
     let cfg = at(&b, &["fld", "src", "Config"]);
-    assert_eq!(fields(cfg), [("url".to_string(), Some("string".to_string()), Visibility::Public), ("retries".to_string(), Some("number".to_string()), Visibility::Public)]);
+    assert_eq!(
+        fields(cfg),
+        [("url".to_string(), Some("string".to_string()), Visibility::Public), ("retries".to_string(), Some("number".to_string()), Visibility::Public)]
+    );
 }
 
 #[test]

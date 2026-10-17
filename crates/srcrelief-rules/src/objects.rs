@@ -75,7 +75,8 @@ impl<'s, 'r> Walk<'s, 'r> {
 
     fn routes(&mut self, arr: Node<'s>, prefix: &str) {
         for obj in kids(arr).into_iter().filter(|o| o.kind() == "object") {
-            let pairs: Vec<(String, Node<'s>)> = kids(obj).into_iter().filter(|p| p.kind() == "pair").filter_map(|p| Some((self.key(p), p.child_by_field_name("value")?))).collect();
+            let pairs: Vec<(String, Node<'s>)> =
+                kids(obj).into_iter().filter(|p| p.kind() == "pair").filter_map(|p| Some((self.key(p), p.child_by_field_name("value")?))).collect();
             let get = |k: &str| pairs.iter().find(|(key, _)| key == k).map(|(_, v)| *v);
             let seg = get(self.shape.path_key).and_then(|v| self.string(v)).unwrap_or_default();
             let full = join_route(prefix, &seg);
@@ -136,7 +137,11 @@ pub fn object_routes(rel_path: &str, src: &[u8], shape: &RouteShape) -> Vec<Foun
             "import_specifier" => {
                 let Some(name) = n.child_by_field_name("name") else { continue };
                 let local = n.child_by_field_name("alias").unwrap_or(name);
-                let Some(spec) = n.parent().and_then(|p| p.parent()).and_then(|c| c.parent()).and_then(|s| s.child_by_field_name("source")).and_then(|s| w.string(s)) else { continue };
+                let Some(spec) =
+                    n.parent().and_then(|p| p.parent()).and_then(|c| c.parent()).and_then(|s| s.child_by_field_name("source")).and_then(|s| w.string(s))
+                else {
+                    continue;
+                };
                 w.imports.insert(w.text(local).to_string(), (spec, w.text(name).to_string()));
             }
             "variable_declarator" => {

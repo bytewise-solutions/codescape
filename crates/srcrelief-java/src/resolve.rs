@@ -45,13 +45,7 @@ struct TypeInfo {
     is_test: bool,
 }
 
-pub fn extract_java(
-    d: &Discovery,
-    module_nodes: &[NodeId],
-    excludes: &GlobSet,
-    b: &mut GraphBuilder,
-    facts: &mut ProjectFacts,
-) -> ExtractStats {
+pub fn extract_java(d: &Discovery, module_nodes: &[NodeId], excludes: &GlobSet, b: &mut GraphBuilder, facts: &mut ProjectFacts) -> ExtractStats {
     let sources = list_sources(d, excludes);
     let parsed: Vec<ParsedFile> = sources
         .par_iter()
@@ -209,8 +203,7 @@ impl<'a> Resolver<'a> {
             }
         }
         let idx = self.types.len();
-        let raw_supers =
-            t.extends.iter().map(|s| (s.clone(), false)).chain(t.implements.iter().map(|s| (s.clone(), true))).collect();
+        let raw_supers = t.extends.iter().map(|s| (s.clone(), false)).chain(t.implements.iter().map(|s| (s.clone(), true))).collect();
         self.types.push(TypeInfo {
             node,
             fqn: fqn.clone(),
@@ -431,7 +424,9 @@ impl<'a> Resolver<'a> {
                     if let Some(&m) = self.package_module.get(&imp.path) {
                         targets.push((m, imp.path.clone()));
                     }
-                } else if let Some(&ti) = self.by_fqn.get(&imp.path).and_then(|v| v.iter().find(|&&t| self.files[self.types[t].file].module == f.module).or(v.first())) {
+                } else if let Some(&ti) =
+                    self.by_fqn.get(&imp.path).and_then(|v| v.iter().find(|&&t| self.files[self.types[t].file].module == f.module).or(v.first()))
+                {
                     let tf = &self.files[self.types[ti].file];
                     targets.push((tf.module, tf.jf.package.clone()));
                 }
@@ -681,11 +676,8 @@ impl<'a> Resolver<'a> {
 
     fn guess(&mut self, fi: usize, caller: NodeId, scope: Scope, name: &str, cf: &mut CallFacts) {
         let visible = self.visible_from(fi);
-        let candidates: Vec<NodeId> = self
-            .method_names
-            .get(name)
-            .map(|v| v.iter().filter(|(_, m)| visible.contains(m)).map(|(n, _)| *n).collect())
-            .unwrap_or_default();
+        let candidates: Vec<NodeId> =
+            self.method_names.get(name).map(|v| v.iter().filter(|(_, m)| visible.contains(m)).map(|(n, _)| *n).collect()).unwrap_or_default();
         match candidates.as_slice() {
             [target] => {
                 let target = *target;

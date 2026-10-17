@@ -1,5 +1,5 @@
-use crate::pack::{Packs, Rule};
 use crate::objects::{RouteShape, RouteTarget, object_routes};
+use crate::pack::{Packs, Rule};
 use crate::query;
 use crate::routes::{PrefixFlow, join};
 use globset::Glob;
@@ -127,12 +127,20 @@ impl<'a> Ctx<'a> {
         let mut wiring_files: HashSet<&'a str> = HashSet::new();
         let mut wiring_calls: HashSet<(NodeId, NodeId)> = HashSet::new();
         let mut wiring_nodes: Vec<NodeId> = Vec::new();
-        let test_globs: HashMap<&str, globset::GlobSet> = self.packs.rules().filter_map(|(id, r)| match r {
-            Rule::TestCode { paths, .. } if !paths.is_empty() => Some((id, glob_set(paths))),
-            _ => None,
-        }).collect();
+        let test_globs: HashMap<&str, globset::GlobSet> = self
+            .packs
+            .rules()
+            .filter_map(|(id, r)| match r {
+                Rule::TestCode { paths, .. } if !paths.is_empty() => Some((id, glob_set(paths))),
+                _ => None,
+            })
+            .collect();
         for file in &facts.files {
-            let imports = |prefixes: &[String]| file.imports.iter().any(|i| prefixes.iter().any(|p| i.path == *p || i.path.starts_with(&format!("{p}/")) || i.path.starts_with(&format!("{p}."))));
+            let imports = |prefixes: &[String]| {
+                file.imports
+                    .iter()
+                    .any(|i| prefixes.iter().any(|p| i.path == *p || i.path.starts_with(&format!("{p}/")) || i.path.starts_with(&format!("{p}."))))
+            };
             let dirs: Vec<&str> = file.rel_path.split('/').collect();
             let dirs = &dirs[..dirs.len().saturating_sub(1)];
             for (id, rule) in self.packs.rules_for(file.lang) {
@@ -332,13 +340,14 @@ impl<'a> Ctx<'a> {
                 let all_fns: Vec<&FnFacts> = self.facts.files.iter().flat_map(|f| f.functions.iter()).filter(|f| f.owner == Some(n)).collect();
                 let methods: Vec<&str> = b.children(n).iter().filter(|&&c| b.sub_kind(c) == SubKind::Method).map(|&c| b.name(c)).collect();
                 let model = b.has_tag(n, "layer:model");
-                let strong = !model && (COMPONENT_ROLES.iter().any(|r| b.has_tag(n, r))
-                    || sub == SubKind::Interface
-                    || extended.contains(&n)
-                    || entry_nodes.iter().any(|&e| e == n || b.parent(e) == Some(n))
-                    || t.annotations.iter().any(|a| annotations.contains(&a.name))
-                    || all_fns.iter().chain(fns.iter()).any(|f| f.annotations.iter().any(|a| ctor_annotations.contains(&a.name)))
-                    || di_built.contains(&n));
+                let strong = !model
+                    && (COMPONENT_ROLES.iter().any(|r| b.has_tag(n, r))
+                        || sub == SubKind::Interface
+                        || extended.contains(&n)
+                        || entry_nodes.iter().any(|&e| e == n || b.parent(e) == Some(n))
+                        || t.annotations.iter().any(|a| annotations.contains(&a.name))
+                        || all_fns.iter().chain(fns.iter()).any(|f| f.annotations.iter().any(|a| ctor_annotations.contains(&a.name)))
+                        || di_built.contains(&n));
                 if strong {
                     continue;
                 }
@@ -494,10 +503,14 @@ impl<'a> Ctx<'a> {
     fn mains(&mut self, b: &mut GraphBuilder) {
         for file in files_sorted(self.facts) {
             self.call_mains(file, b);
-            let main_rule = self.packs.rules_for(file.lang).filter_map(|(id, r)| match r {
-                Rule::Main { category, label } => Some((id.to_string(), *category, label.clone())),
-                _ => None,
-            }).last();
+            let main_rule = self
+                .packs
+                .rules_for(file.lang)
+                .filter_map(|(id, r)| match r {
+                    Rule::Main { category, label } => Some((id.to_string(), *category, label.clone())),
+                    _ => None,
+                })
+                .last();
             let Some((rule_id, default, template)) = main_rule else { continue };
             for func in file.functions.iter().filter(|f| f.is_main) {
                 if self.mains.iter().any(|m| m.node == func.node) {
@@ -528,7 +541,8 @@ impl<'a> Ctx<'a> {
     }
 
     fn call_mains(&mut self, file: &'a FileFacts, b: &mut GraphBuilder) {
-        let rules: Vec<(String, Rule)> = self.packs.rules_for(file.lang).filter(|(_, r)| matches!(r, Rule::MainCall { .. })).map(|(id, r)| (id.to_string(), r.clone())).collect();
+        let rules: Vec<(String, Rule)> =
+            self.packs.rules_for(file.lang).filter(|(_, r)| matches!(r, Rule::MainCall { .. })).map(|(id, r)| (id.to_string(), r.clone())).collect();
         for (id, rule) in rules {
             let Rule::MainCall { methods, file_imports, label, handoff, category } = rule else { continue };
             if !file_imports.is_empty() && !file.imports.iter().any(|i| i.path.starts_with(&file_imports)) {
@@ -545,7 +559,17 @@ impl<'a> Ctx<'a> {
                 let arg0 = c.ident_args.first().cloned().flatten().or_else(|| c.string_args.first().cloned().flatten()).unwrap_or_default();
                 let text = fill(&label, &[("module", b.name(file.module)), ("caller", b.name(c.caller)), ("arg0", &arg0)]);
                 let category = self.category_for(file, category);
-                let entry = b.add_entry(EntryPointSpec { node: c.caller, kind: "main".into(), category, label: text, parent: None, lifecycle: Lifecycle::Once, order: 0, rule: id.clone(), handoff });
+                let entry = b.add_entry(EntryPointSpec {
+                    node: c.caller,
+                    kind: "main".into(),
+                    category,
+                    label: text,
+                    parent: None,
+                    lifecycle: Lifecycle::Once,
+                    order: 0,
+                    rule: id.clone(),
+                    handoff,
+                });
                 self.handled.insert(c.caller);
                 self.mains.push(MainEntry { entry, node: c.caller, module: file.module, category });
             }
@@ -745,7 +769,8 @@ impl<'a> Ctx<'a> {
             match rule {
                 Rule::CallRoute { methods, group_methods, receiver_types, file_imports, path_arg, handler_last, label } => {
                     let facts = self.facts;
-                    let is_group = |fi: usize, c: &CallFacts| group_methods.contains(&c.method) && Self::receiver_ok(&facts.files[fi], c, &receiver_types, &file_imports);
+                    let is_group =
+                        |fi: usize, c: &CallFacts| group_methods.contains(&c.method) && Self::receiver_ok(&facts.files[fi], c, &receiver_types, &file_imports);
                     let flow = PrefixFlow::compute(facts, &is_group);
                     for file in files_sorted(facts) {
                         for c in &file.calls {
@@ -814,10 +839,14 @@ impl<'a> Ctx<'a> {
             }
             let base = parts.join("/");
             let base_stem = stem(&base);
-            self.facts.files.iter().filter(|f| {
-                let s = stem(&f.rel_path);
-                s == base || s == base_stem || s == format!("{base}/index")
-            }).collect()
+            self.facts
+                .files
+                .iter()
+                .filter(|f| {
+                    let s = stem(&f.rel_path);
+                    s == base || s == base_stem || s == format!("{base}/index")
+                })
+                .collect()
         } else {
             self.facts.files.iter().filter(|f| f.module == file.module).collect()
         };
@@ -832,7 +861,8 @@ impl<'a> Ctx<'a> {
     fn object_routes(&mut self, sources: &dyn Fn(&str) -> Option<Vec<u8>>, b: &mut GraphBuilder) {
         let facts = self.facts;
         for file in files_sorted(facts) {
-            let rules: Vec<(String, Rule)> = self.packs.rules_for(file.lang).filter(|(_, r)| matches!(r, Rule::ObjectRoute { .. })).map(|(id, r)| (id.to_string(), r.clone())).collect();
+            let rules: Vec<(String, Rule)> =
+                self.packs.rules_for(file.lang).filter(|(_, r)| matches!(r, Rule::ObjectRoute { .. })).map(|(id, r)| (id.to_string(), r.clone())).collect();
             if rules.is_empty() {
                 continue;
             }

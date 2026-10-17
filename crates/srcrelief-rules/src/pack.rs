@@ -32,26 +32,118 @@ pub struct Callback {
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum Rule {
-    Path { glob: String, category: Category },
-    Main { category: Category, label: String },
-    MainCall { methods: Vec<String>, file_imports: String, label: String, handoff: String, category: Category },
-    Supertype { types: Vec<String>, callbacks: Vec<Callback> },
-    Annotation { names: Vec<String>, handoff: String },
-    AnnotationRoute { names: Vec<String>, method: String, prefix_from_type: Vec<String> },
-    CallRoute { methods: Vec<String>, group_methods: Vec<String>, receiver_types: Vec<String>, file_imports: String, path_arg: usize, handler_last: bool, label: String },
-    CallHandler { methods: Vec<String>, receiver_types: Vec<String>, file_imports: String, kind: String, label: String },
-    Instantiates { types: Vec<String>, handoff: String },
-    Dispatch { from_override: String, to_override: String },
-    NameTag { kinds: Vec<String>, pattern: String, tag: String },
-    Query { language: Lang, query: String, capture: String, kind: String, label: String },
-    Wiring { file_markers: Vec<String>, file_imports: Vec<String>, calls: Vec<String>, annotations: Vec<String>, type_prefixes: Vec<String>, requires_imports: Vec<String>, caller_prefixes: Vec<String> },
-    ObjectRoute { var_types: Vec<String>, calls: Vec<String>, path_key: String, target_keys: Vec<String>, children_key: String, kind: String, label: String },
-    TestCode { file_imports: Vec<String>, dir_names: Vec<String>, paths: Vec<String> },
-    Filter { tag: String, paths: Vec<String>, names: Vec<String> },
-    Noise { name_suffixes: Vec<String>, supertype_suffixes: Vec<String>, methods: Vec<String> },
-    AnnotationTag { names: Vec<String>, tag: String },
-    EntryOwnerTag { kinds: Vec<String>, tag: String },
-    Significance { component_annotations: Vec<String>, constructor_annotations: Vec<String>, accessor_pattern: String, detail_packages: String, hub_min_packages: usize },
+    Path {
+        glob: String,
+        category: Category,
+    },
+    Main {
+        category: Category,
+        label: String,
+    },
+    MainCall {
+        methods: Vec<String>,
+        file_imports: String,
+        label: String,
+        handoff: String,
+        category: Category,
+    },
+    Supertype {
+        types: Vec<String>,
+        callbacks: Vec<Callback>,
+    },
+    Annotation {
+        names: Vec<String>,
+        handoff: String,
+    },
+    AnnotationRoute {
+        names: Vec<String>,
+        method: String,
+        prefix_from_type: Vec<String>,
+    },
+    CallRoute {
+        methods: Vec<String>,
+        group_methods: Vec<String>,
+        receiver_types: Vec<String>,
+        file_imports: String,
+        path_arg: usize,
+        handler_last: bool,
+        label: String,
+    },
+    CallHandler {
+        methods: Vec<String>,
+        receiver_types: Vec<String>,
+        file_imports: String,
+        kind: String,
+        label: String,
+    },
+    Instantiates {
+        types: Vec<String>,
+        handoff: String,
+    },
+    Dispatch {
+        from_override: String,
+        to_override: String,
+    },
+    NameTag {
+        kinds: Vec<String>,
+        pattern: String,
+        tag: String,
+    },
+    Query {
+        language: Lang,
+        query: String,
+        capture: String,
+        kind: String,
+        label: String,
+    },
+    Wiring {
+        file_markers: Vec<String>,
+        file_imports: Vec<String>,
+        calls: Vec<String>,
+        annotations: Vec<String>,
+        type_prefixes: Vec<String>,
+        requires_imports: Vec<String>,
+        caller_prefixes: Vec<String>,
+    },
+    ObjectRoute {
+        var_types: Vec<String>,
+        calls: Vec<String>,
+        path_key: String,
+        target_keys: Vec<String>,
+        children_key: String,
+        kind: String,
+        label: String,
+    },
+    TestCode {
+        file_imports: Vec<String>,
+        dir_names: Vec<String>,
+        paths: Vec<String>,
+    },
+    Filter {
+        tag: String,
+        paths: Vec<String>,
+        names: Vec<String>,
+    },
+    Noise {
+        name_suffixes: Vec<String>,
+        supertype_suffixes: Vec<String>,
+        methods: Vec<String>,
+    },
+    AnnotationTag {
+        names: Vec<String>,
+        tag: String,
+    },
+    EntryOwnerTag {
+        kinds: Vec<String>,
+        tag: String,
+    },
+    Significance {
+        component_annotations: Vec<String>,
+        constructor_annotations: Vec<String>,
+        accessor_pattern: String,
+        detail_packages: String,
+        hub_min_packages: usize,
+    },
 }
 
 #[derive(Clone, Debug)]
@@ -461,7 +553,13 @@ impl RuleFile {
             return Ok(Rule::Main { category: category(&m.category)?, label: m.label });
         }
         if let Some(m) = self.main_call {
-            return Ok(Rule::MainCall { methods: m.methods, file_imports: m.file_imports, label: m.label, handoff: m.handoff, category: category(&m.category)? });
+            return Ok(Rule::MainCall {
+                methods: m.methods,
+                file_imports: m.file_imports,
+                label: m.label,
+                handoff: m.handoff,
+                category: category(&m.category)?,
+            });
         }
         if let Some(o) = self.object_route {
             return Ok(Rule::ObjectRoute {
@@ -516,7 +614,15 @@ impl RuleFile {
             return Ok(Rule::NameTag { kinds: n.kinds, pattern: n.pattern, tag: n.tag });
         }
         if let Some(w) = self.wiring {
-            return Ok(Rule::Wiring { file_markers: w.file_markers, file_imports: w.file_imports, calls: w.calls, annotations: w.annotations, type_prefixes: w.type_prefixes, requires_imports: w.requires_imports, caller_prefixes: w.caller_prefixes });
+            return Ok(Rule::Wiring {
+                file_markers: w.file_markers,
+                file_imports: w.file_imports,
+                calls: w.calls,
+                annotations: w.annotations,
+                type_prefixes: w.type_prefixes,
+                requires_imports: w.requires_imports,
+                caller_prefixes: w.caller_prefixes,
+            });
         }
         if let Some(s) = self.significance {
             for p in [&s.accessor_pattern, &s.detail_packages] {
@@ -570,7 +676,9 @@ impl Pack {
             .into_iter()
             .map(|f| match (f.auto_prefix, f.pattern) {
                 (Some(sep), None) => Ok(FrameRule::AutoPrefix { sep }),
-                (None, Some(glob)) => Ok(FrameRule::Pattern { label: f.label.unwrap_or_else(|| glob.trim_end_matches('*').trim_end_matches('-').to_string()), glob }),
+                (None, Some(glob)) => {
+                    Ok(FrameRule::Pattern { label: f.label.unwrap_or_else(|| glob.trim_end_matches('*').trim_end_matches('-').to_string()), glob })
+                }
                 _ => Err(anyhow!("rule pack {origin}: a frame needs exactly one of auto_prefix or pattern")),
             })
             .collect::<Result<Vec<_>>>()?;
@@ -578,7 +686,12 @@ impl Pack {
             .entry_groups
             .into_iter()
             .map(|g| {
-                Ok(EntryGroup { label: g.label, kinds: g.kinds, categories: g.categories.iter().map(|c| category(c)).collect::<Result<_>>()?, collapsed: g.collapsed })
+                Ok(EntryGroup {
+                    label: g.label,
+                    kinds: g.kinds,
+                    categories: g.categories.iter().map(|c| category(c)).collect::<Result<_>>()?,
+                    collapsed: g.collapsed,
+                })
             })
             .collect::<Result<Vec<_>>>()
             .with_context(|| format!("rule pack {origin}"))?;
@@ -589,15 +702,7 @@ impl Pack {
             fold_tags: v.fold_tags,
             entry_groups,
         };
-        Ok(Pack {
-            name: file.name,
-            version: file.version,
-            languages,
-            rules,
-            visual,
-            hash: blake3::hash(src.as_bytes()).to_hex()[..16].to_string(),
-            dir,
-        })
+        Ok(Pack { name: file.name, version: file.version, languages, rules, visual, hash: blake3::hash(src.as_bytes()).to_hex()[..16].to_string(), dir })
     }
 }
 
@@ -633,10 +738,13 @@ impl Packs {
     }
 
     pub fn rules_for(&self, lang: Lang) -> impl Iterator<Item = (&str, &Rule)> {
-        self.effective.iter().filter(move |(_, pi, _)| {
-            let langs = &self.packs[*pi].languages;
-            langs.is_empty() || langs.contains(&lang)
-        }).map(|(id, _, r)| (id.as_str(), r))
+        self.effective
+            .iter()
+            .filter(move |(_, pi, _)| {
+                let langs = &self.packs[*pi].languages;
+                langs.is_empty() || langs.contains(&lang)
+            })
+            .map(|(id, _, r)| (id.as_str(), r))
     }
 
     pub fn visual(&self) -> VisualRules {

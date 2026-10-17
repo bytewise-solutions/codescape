@@ -3,9 +3,9 @@ use crate::order::{Ordering, minimize};
 use crate::{ChildBox, ContainerLayout, Direction, FrameBox, LaidEdge, LayoutOptions, Rect, box_size, card_rows_bottom};
 use globset::Glob;
 use srcrelief_format::{ArchivedGraph, Category, NodeFlags, NodeId, NodeKind, SCOPE_MAIN, SCOPE_TEST, SubKind};
-use std::collections::HashSet;
 use srcrelief_rules::FrameRule;
 use std::collections::HashMap;
+use std::collections::HashSet;
 
 pub const HEADER: f32 = 30.0;
 pub const PAD: f32 = 24.0;
@@ -46,10 +46,18 @@ fn entry_owners(g: &ArchivedGraph) -> HashSet<NodeId> {
 }
 
 pub fn layout_container(g: &ArchivedGraph, node: NodeId, frames: &[FrameRule], opts: &LayoutOptions) -> ContainerLayout {
-    let mut base = layout_structure(g, node, frames, &LayoutOptions { show_wiring: false, show_noise: false, show_details: false, details_in: Vec::new(), ..opts.clone() });
+    let mut base = layout_structure(
+        g,
+        node,
+        frames,
+        &LayoutOptions { show_wiring: false, show_noise: false, show_details: false, details_in: Vec::new(), ..opts.clone() },
+    );
     let tests = if opts.show_tests { NodeFlags::TEST.0 | NodeFlags::MOCK.0 } else { 0 };
     let other = NodeFlags(opts.hidden.0 & !NodeFlags::DETAIL.0 & !tests);
-    let details = display_children(g, node).into_iter().filter(|&c| g.flags(c).contains(NodeFlags::DETAIL) && !g.flags(c).intersects(other) && !opts.tag_hidden(g, c)).count();
+    let details = display_children(g, node)
+        .into_iter()
+        .filter(|&c| g.flags(c).contains(NodeFlags::DETAIL) && !g.flags(c).intersects(other) && !opts.tag_hidden(g, c))
+        .count();
     let shown = opts.details_shown_in(node);
     base.hidden_details = if shown { 0 } else { details };
     base.shown_details = if shown && !opts.show_details { details } else { 0 };
@@ -89,8 +97,21 @@ fn add_wiring(g: &ArchivedGraph, node: NodeId, mut l: ContainerLayout, opts: &La
             e.wiring = wiring;
             continue;
         }
-        let (from, to) = if ra.y <= rb.y { ([ra.center()[0], ra.bottom()], [rb.center()[0], rb.y]) } else { ([ra.center()[0], ra.y], [rb.center()[0], rb.bottom()]) };
-        l.edges.push(LaidEdge { a, b, calls: 0, deps: 0, wiring, implements: 0, links: 0, dir: Direction::Down, undeclared: false, test_only: false, points: vec![from, to] });
+        let (from, to) =
+            if ra.y <= rb.y { ([ra.center()[0], ra.bottom()], [rb.center()[0], rb.y]) } else { ([ra.center()[0], ra.y], [rb.center()[0], rb.bottom()]) };
+        l.edges.push(LaidEdge {
+            a,
+            b,
+            calls: 0,
+            deps: 0,
+            wiring,
+            implements: 0,
+            links: 0,
+            dir: Direction::Down,
+            undeclared: false,
+            test_only: false,
+            points: vec![from, to],
+        });
     }
     l
 }
@@ -121,13 +142,26 @@ fn layout_structure(g: &ArchivedGraph, node: NodeId, frames: &[FrameRule], opts:
         if test_only && !opts.include_test_edges {
             continue;
         }
-        let (calls, deps, wiring, implements) = (agg.calls.to_native() as u32, agg.deps.to_native() as u32, agg.wiring.to_native() as u32, agg.implements.to_native() as u32);
+        let (calls, deps, wiring, implements) =
+            (agg.calls.to_native() as u32, agg.deps.to_native() as u32, agg.wiring.to_native() as u32, agg.implements.to_native() as u32);
         let structural = calls + deps + implements > 0;
         if !structural && !opts.show_wiring {
             continue;
         }
         let wiring = if opts.show_wiring { wiring } else { 0 };
-        edges.push(SibEdge { a, b, calls, deps, wiring, implements, links: agg.links.to_native() as u32, undeclared: agg.undeclared, test_only, layering: structural && !pinned[b], back: false });
+        edges.push(SibEdge {
+            a,
+            b,
+            calls,
+            deps,
+            wiring,
+            implements,
+            links: agg.links.to_native() as u32,
+            undeclared: agg.undeclared,
+            test_only,
+            layering: structural && !pinned[b],
+            back: false,
+        });
     }
 
     let rank: Vec<Option<usize>> = kids.iter().map(|&k| role_rank(g, k)).collect();
@@ -215,10 +249,12 @@ fn layout_structure(g: &ArchivedGraph, node: NodeId, frames: &[FrameRule], opts:
     let mut group_ids: HashMap<&str, u32> = HashMap::new();
     let group_keys: Vec<Option<u32>> = groups
         .iter()
-        .map(|gname| gname.as_deref().map(|s| {
-            let next = group_ids.len() as u32;
-            *group_ids.entry(s).or_insert(next)
-        }))
+        .map(|gname| {
+            gname.as_deref().map(|s| {
+                let next = group_ids.len() as u32;
+                *group_ids.entry(s).or_insert(next)
+            })
+        })
         .collect();
     let mut pinned_names: Vec<(&str, usize)> = (0..n).filter(|&i| pinned[i]).map(|i| (g.name(kids[i]), i)).collect();
     pinned_names.sort();
@@ -312,7 +348,13 @@ fn layout_structure(g: &ArchivedGraph, node: NodeId, frames: &[FrameRule], opts:
                 Direction::Down
             };
             let same_row = row_of[&e.a] == row_of[&e.b];
-            let side_points = || if ra.x < rb.x { vec![[ra.right(), ra.center()[1]], [rb.x, rb.center()[1]]] } else { vec![[ra.x, ra.center()[1]], [rb.right(), rb.center()[1]]] };
+            let side_points = || {
+                if ra.x < rb.x {
+                    vec![[ra.right(), ra.center()[1]], [rb.x, rb.center()[1]]]
+                } else {
+                    vec![[ra.x, ra.center()[1]], [rb.right(), rb.center()[1]]]
+                }
+            };
             let points = match dir {
                 Direction::Down if same_row => side_points(),
                 Direction::Down => vec![[toward(&ra, rb.center()[0]), ra.bottom()], [toward(&rb, ra.center()[0]), rb.y]],
@@ -322,11 +364,27 @@ fn layout_structure(g: &ArchivedGraph, node: NodeId, frames: &[FrameRule], opts:
                     vec![from, mid, to]
                 }
                 Direction::Sideways => {
-                    let (from, to) = if ra.x < rb.x { ([ra.right(), ra.center()[1]], [rb.x, rb.center()[1]]) } else { ([ra.x, ra.center()[1]], [rb.right(), rb.center()[1]]) };
+                    let (from, to) = if ra.x < rb.x {
+                        ([ra.right(), ra.center()[1]], [rb.x, rb.center()[1]])
+                    } else {
+                        ([ra.x, ra.center()[1]], [rb.right(), rb.center()[1]])
+                    };
                     vec![from, to]
                 }
             };
-            LaidEdge { a: kids[e.a], b: kids[e.b], calls: e.calls, deps: e.deps, wiring: e.wiring, implements: e.implements, links: e.links, dir, undeclared: e.undeclared, test_only: e.test_only, points }
+            LaidEdge {
+                a: kids[e.a],
+                b: kids[e.b],
+                calls: e.calls,
+                deps: e.deps,
+                wiring: e.wiring,
+                implements: e.implements,
+                links: e.links,
+                dir,
+                undeclared: e.undeclared,
+                test_only: e.test_only,
+                points,
+            }
         })
         .collect();
 

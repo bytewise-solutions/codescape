@@ -14,7 +14,8 @@ fn store(personal: &str) -> (tempfile::TempDir, SettingsStore) {
     (tmp, store)
 }
 
-const FILTERS: &str = "[[filter]]\nname = \"migrations\"\npaths = [\"**/migrations/**\"]\nshown = false\n\n[[filter]]\nname = \"generated\"\npaths = [\"**/gen/**\"]\n";
+const FILTERS: &str =
+    "[[filter]]\nname = \"migrations\"\npaths = [\"**/migrations/**\"]\nshown = false\n\n[[filter]]\nname = \"generated\"\npaths = [\"**/gen/**\"]\n";
 
 #[test]
 fn default_settings_give_the_default_layout() {
@@ -24,7 +25,8 @@ fn default_settings_give_the_default_layout() {
 
 #[test]
 fn display_settings_map_onto_layout_options() {
-    let (_t, s) = store(&format!("[view]\ntests = true\ntest_deps = true\ndetails = true\nerrors = true\nwiring = true\nfilters = {{ generated = false }}\n\n{FILTERS}"));
+    let (_t, s) =
+        store(&format!("[view]\ntests = true\ntest_deps = true\ndetails = true\nerrors = true\nwiring = true\nfilters = {{ generated = false }}\n\n{FILTERS}"));
     let vis = VisualRules { hide_tags: vec!["noise:logging".into()], ..Default::default() };
     let o = layout_options(s.settings(), &vis);
     assert!(o.show_tests && o.include_test_edges && o.show_details && o.show_noise && o.show_wiring);
@@ -42,7 +44,10 @@ fn view_menu_lists_built_in_toggles_then_filters_then_arrows_and_legend() {
     let (_t, s) = store(FILTERS);
     let items = view_items(s.settings());
     let labels: Vec<&str> = items.iter().map(|i| i.label.as_str()).collect();
-    assert_eq!(labels, ["Tests", "Test dependencies", "Details", "Errors", "Wiring", "Complexity hints", "Unused code", "migrations", "generated", "Quiet arrows", "Legend"]);
+    assert_eq!(
+        labels,
+        ["Tests", "Test dependencies", "Details", "Errors", "Wiring", "Complexity hints", "Unused code", "migrations", "generated", "Quiet arrows", "Legend"]
+    );
     assert_eq!(items[5], ViewItem { key: Key::View(View::Complexity), label: "Complexity hints".into(), checked: true });
     assert_eq!(items[6], ViewItem { key: Key::View(View::Unused), label: "Unused code".into(), checked: false });
     assert_eq!(items[7], ViewItem { key: Key::FilterShown("migrations".into()), label: "migrations".into(), checked: false });

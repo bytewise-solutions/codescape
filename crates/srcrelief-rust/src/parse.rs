@@ -109,9 +109,32 @@ const RESULTS: &[&str] = &["Box", "Rc", "Arc", "Option", "Result"];
 const COLLECTIONS: &[&str] = &["Vec", "VecDeque", "HashSet", "BTreeSet", "IndexSet", "BinaryHeap", "LinkedList", "SmallVec"];
 const MAPS: &[&str] = &["HashMap", "BTreeMap", "IndexMap"];
 const CLOSURE_ON_ELEMENTS: &[&str] = &[
-    "map", "filter", "filter_map", "flat_map", "for_each", "any", "all", "find", "find_map", "position", "take_while", "skip_while", "inspect",
-    "max_by_key", "min_by_key", "sort_by_key", "sort_unstable_by_key", "retain", "partition", "and_then", "is_some_and", "is_none_or", "map_or",
-    "map_or_else", "unwrap_or_else", "then",
+    "map",
+    "filter",
+    "filter_map",
+    "flat_map",
+    "for_each",
+    "any",
+    "all",
+    "find",
+    "find_map",
+    "position",
+    "take_while",
+    "skip_while",
+    "inspect",
+    "max_by_key",
+    "min_by_key",
+    "sort_by_key",
+    "sort_unstable_by_key",
+    "retain",
+    "partition",
+    "and_then",
+    "is_some_and",
+    "is_none_or",
+    "map_or",
+    "map_or_else",
+    "unwrap_or_else",
+    "then",
 ];
 
 pub fn parse_rust(src: &[u8]) -> RsFile {
@@ -303,7 +326,10 @@ impl<'s> Ctx<'s> {
                 let base = n.child_by_field_name("type").and_then(|t| self.path_segments(t)).unwrap_or_default();
                 let last = base.last().map_or("", String::as_str);
                 if COLLECTIONS.contains(&last) || MAPS.contains(&last) {
-                    let args: Vec<Node> = n.child_by_field_name("type_arguments").map(|a| named_children(a).into_iter().filter(|x| x.kind() != "lifetime").collect()).unwrap_or_default();
+                    let args: Vec<Node> = n
+                        .child_by_field_name("type_arguments")
+                        .map(|a| named_children(a).into_iter().filter(|x| x.kind() != "lifetime").collect())
+                        .unwrap_or_default();
                     let element = if MAPS.contains(&last) { args.get(1) } else { args.first() };
                     return element.map(|t| format!("[{}]", self.type_name(*t, wrappers))).unwrap_or_default();
                 }
@@ -314,7 +340,9 @@ impl<'s> Ctx<'s> {
                 }
                 base.join("::")
             }
-            "type_identifier" | "scoped_type_identifier" | "primitive_type" => self.path_segments(n).map(|s| s.join("::")).unwrap_or_else(|| self.text(n).to_string()),
+            "type_identifier" | "scoped_type_identifier" | "primitive_type" => {
+                self.path_segments(n).map(|s| s.join("::")).unwrap_or_else(|| self.text(n).to_string())
+            }
             _ => String::new(),
         }
     }
@@ -345,7 +373,17 @@ impl<'s> Ctx<'s> {
             "trait_item" => SubKind::Interface,
             _ => SubKind::Struct,
         };
-        let mut t = RsType { name, kind, visibility: self.visibility(n), fields: Vec::new(), field_decls: Vec::new(), attrs, methods: Vec::new(), start_line: line(n), end_line: end_line(n) };
+        let mut t = RsType {
+            name,
+            kind,
+            visibility: self.visibility(n),
+            fields: Vec::new(),
+            field_decls: Vec::new(),
+            attrs,
+            methods: Vec::new(),
+            start_line: line(n),
+            end_line: end_line(n),
+        };
         let body = n.child_by_field_name("body");
         match (n.kind(), body) {
             ("trait_item", Some(list)) => {
@@ -366,7 +404,12 @@ impl<'s> Ctx<'s> {
                 for fd in named_children(list).into_iter().filter(|f| f.kind() == "field_declaration") {
                     if let (Some(fname), Some(fty)) = (fd.child_by_field_name("name"), fd.child_by_field_name("type")) {
                         t.fields.push((self.text(fname).to_string(), self.type_name(fty, WRAPPERS)));
-                        t.field_decls.push(FieldDecl { name: self.text(fname).to_string(), ty: self.text(fty).to_string(), visibility: self.visibility(fd), line: line(fd) });
+                        t.field_decls.push(FieldDecl {
+                            name: self.text(fname).to_string(),
+                            ty: self.text(fty).to_string(),
+                            visibility: self.visibility(fd),
+                            line: line(fd),
+                        });
                     }
                 }
             }
@@ -450,7 +493,8 @@ impl<'s> Ctx<'s> {
                             Some(("self", _)) => f.has_self = true,
                             Some(("identifier", x)) => f.params.push((self.text(x).to_string(), ty)),
                             Some((_, x)) => {
-                                let name = named_children(x).into_iter().find(|c| c.kind() == "identifier").map(|c| self.text(c).to_string()).unwrap_or_default();
+                                let name =
+                                    named_children(x).into_iter().find(|c| c.kind() == "identifier").map(|c| self.text(c).to_string()).unwrap_or_default();
                                 f.params.push((name, ty));
                             }
                             None => f.params.push((String::new(), ty)),
@@ -491,7 +535,13 @@ impl<'s> Ctx<'s> {
                 }
                 "struct_expression" => {
                     if let Some(path) = n.child_by_field_name("name").and_then(|t| self.path_segments(t)) {
-                        f.calls.push(RsCall { callee: Callee::Struct(path), string_args: Vec::new(), ident_args: Vec::new(), assigned_to: None, line: line(n) });
+                        f.calls.push(RsCall {
+                            callee: Callee::Struct(path),
+                            string_args: Vec::new(),
+                            ident_args: Vec::new(),
+                            assigned_to: None,
+                            line: line(n),
+                        });
                     }
                 }
                 "let_declaration" => {

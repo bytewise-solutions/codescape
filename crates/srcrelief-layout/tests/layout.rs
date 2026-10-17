@@ -42,7 +42,10 @@ fn layer_of(l: &ContainerLayout, n: NodeId) -> u32 {
 
 #[test]
 fn layers_follow_longest_path() {
-    let g = graph(&["android", "bot", "client", "core", "desktop"], &main_deps(&[("bot", "desktop"), ("desktop", "client"), ("client", "core"), ("android", "client")]));
+    let g = graph(
+        &["android", "bot", "client", "core", "desktop"],
+        &main_deps(&[("bot", "desktop"), ("desktop", "client"), ("client", "core"), ("android", "client")]),
+    );
     let gr = g.file.graph();
     let l = layout_container(gr, gr.root(), &[], &LayoutOptions::default());
     let at = |n: &str| layer_of(&l, g.ids[n]);
@@ -91,7 +94,10 @@ fn hidden_children_are_left_out() {
 
 #[test]
 fn auto_prefix_frames() {
-    let g = graph(&["client", "core", "server-core", "server-game", "server-world"], &main_deps(&[("server-game", "server-core"), ("server-world", "server-core"), ("server-core", "core"), ("client", "core")]));
+    let g = graph(
+        &["client", "core", "server-core", "server-game", "server-world"],
+        &main_deps(&[("server-game", "server-core"), ("server-world", "server-core"), ("server-core", "core"), ("client", "core")]),
+    );
     let gr = g.file.graph();
     let l = layout_container(gr, gr.root(), &[FrameRule::AutoPrefix { sep: "-".into() }], &LayoutOptions::default());
     assert!(!l.frames.is_empty() && l.frames.iter().all(|f| f.label == "server"));
@@ -179,7 +185,15 @@ fn large_flat_container_under_budget() {
 fn frames_never_cover_non_members() {
     let g = graph(
         &["android", "client", "core", "desktop", "server-chat", "server-core", "server-game", "server-world"],
-        &main_deps(&[("server-game", "server-core"), ("server-world", "server-core"), ("server-chat", "server-core"), ("server-core", "core"), ("desktop", "client"), ("android", "client"), ("client", "core")]),
+        &main_deps(&[
+            ("server-game", "server-core"),
+            ("server-world", "server-core"),
+            ("server-chat", "server-core"),
+            ("server-core", "core"),
+            ("desktop", "client"),
+            ("android", "client"),
+            ("client", "core"),
+        ]),
     );
     let gr = g.file.graph();
     let l = layout_container(gr, gr.root(), &[FrameRule::AutoPrefix { sep: "-".into() }], &LayoutOptions::default());
@@ -221,7 +235,17 @@ fn with_entries(modules: &[&str], deps: &[(&str, &str)], apps: &[&str]) -> G {
         b.set_span(t, "f", 1, 100);
         let main = b.add_node(t, NodeKind::Member, SubKind::Method, "main", Lang::Java);
         if apps.contains(m) {
-            b.add_entry(EntryPointSpec { node: main, kind: "main".into(), category: Category::Application, label: m.to_string(), parent: None, lifecycle: Lifecycle::Once, order: 0, rule: "r".into(), handoff: None });
+            b.add_entry(EntryPointSpec {
+                node: main,
+                kind: "main".into(),
+                category: Category::Application,
+                label: m.to_string(),
+                parent: None,
+                lifecycle: Lifecycle::Once,
+                order: 0,
+                rule: "r".into(),
+                handoff: None,
+            });
         }
         ids.insert(m.to_string(), id);
     }
@@ -238,7 +262,11 @@ fn with_entries(modules: &[&str], deps: &[(&str, &str)], apps: &[&str]) -> G {
 
 #[test]
 fn pinned_entry_owners_take_the_top_row_alphabetically() {
-    let g = with_entries(&["util", "zeta", "core", "bot", "desktop", "client"], &[("bot", "desktop"), ("desktop", "client"), ("zeta", "core"), ("client", "core"), ("util", "core")], &["zeta", "bot", "desktop"]);
+    let g = with_entries(
+        &["util", "zeta", "core", "bot", "desktop", "client"],
+        &[("bot", "desktop"), ("desktop", "client"), ("zeta", "core"), ("client", "core"), ("util", "core")],
+        &["zeta", "bot", "desktop"],
+    );
     let gr = g.file.graph();
     let l = layout_container(gr, gr.root(), &[], &LayoutOptions::default());
     let row = |n: &str| l.children.iter().find(|c| c.node == g.ids[n]).unwrap();
@@ -416,7 +444,11 @@ fn squeezed_layers_keep_forward_edges_down() {
 
 #[test]
 fn frames_skip_non_members_between_pinned_and_unpinned_members() {
-    let g = with_entries(&["android", "server-chat", "server-game", "server-world", "core"], &[("server-game", "core"), ("server-world", "core"), ("android", "core"), ("server-chat", "core")], &["server-game", "server-world"]);
+    let g = with_entries(
+        &["android", "server-chat", "server-game", "server-world", "core"],
+        &[("server-game", "core"), ("server-world", "core"), ("android", "core"), ("server-chat", "core")],
+        &["server-game", "server-world"],
+    );
     let gr = g.file.graph();
     let l = layout_container(gr, gr.root(), &[FrameRule::AutoPrefix { sep: "-".into() }], &LayoutOptions::default());
     let android = l.child(g.ids["android"]).unwrap().rect;
@@ -527,7 +559,13 @@ fn tagged(types: &[(&str, &str)], calls: &[(&str, &str)]) -> G {
 #[test]
 fn roles_order_layers_top_down() {
     let g = tagged(
-        &[("Invoice", "layer:model"), ("invoiceRepo", "layer:repository"), ("invoiceService", "layer:service"), ("InvoiceHandler", "layer:handler"), ("Price", "")],
+        &[
+            ("Invoice", "layer:model"),
+            ("invoiceRepo", "layer:repository"),
+            ("invoiceService", "layer:service"),
+            ("InvoiceHandler", "layer:handler"),
+            ("Price", ""),
+        ],
         &[("InvoiceHandler", "invoiceService")],
     );
     let gr = g.file.graph();
@@ -606,7 +644,10 @@ fn implementations_fold_into_their_interface() {
     assert_eq!(folded_into(gr, g.ids["pgRepository"]), Some(g.ids["Repository"]));
     let inside = layout_container(gr, g.ids["Repository"], &[], &LayoutOptions::default());
     assert!(inside.child(g.ids["pgRepository"]).is_some(), "opening the interface shows its implementation");
-    assert_eq!(display_path(gr, gr.children(g.ids["pgRepository"]).start), vec![gr.root(), pkg, g.ids["Repository"], g.ids["pgRepository"], gr.children(g.ids["pgRepository"]).start]);
+    assert_eq!(
+        display_path(gr, gr.children(g.ids["pgRepository"]).start),
+        vec![gr.root(), pkg, g.ids["Repository"], g.ids["pgRepository"], gr.children(g.ids["pgRepository"]).start]
+    );
 }
 
 fn tagged_graph() -> G {

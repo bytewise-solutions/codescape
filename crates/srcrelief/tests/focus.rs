@@ -11,7 +11,9 @@ fn fixture() -> Fx {
     let mut b = GraphBuilder::new("p");
     let m = b.add_node(b.root(), NodeKind::Module, SubKind::None, "job-engine", Lang::Go);
     let mut ids: HashMap<&str, NodeId> = HashMap::new();
-    for (pkg, funcs) in [("cmd", &["main"][..]), ("consumer", &["setupConsumer", "runWorker", "handle"][..]), ("jobs", &["send", "retry"][..]), ("store", &["save"][..])] {
+    for (pkg, funcs) in
+        [("cmd", &["main"][..]), ("consumer", &["setupConsumer", "runWorker", "handle"][..]), ("jobs", &["send", "retry"][..]), ("store", &["save"][..])]
+    {
         let p = b.add_node(m, NodeKind::Package, SubKind::None, pkg, Lang::Go);
         for f in funcs {
             let n = b.add_node(p, NodeKind::Member, SubKind::Function, f, Lang::Go);
@@ -19,11 +21,32 @@ fn fixture() -> Fx {
             ids.insert(f, n);
         }
     }
-    for (a, c) in [("main", "setupConsumer"), ("setupConsumer", "runWorker"), ("runWorker", "handle"), ("handle", "send"), ("send", "save"), ("retry", "send")] {
+    for (a, c) in [("main", "setupConsumer"), ("setupConsumer", "runWorker"), ("runWorker", "handle"), ("handle", "send"), ("send", "save"), ("retry", "send")]
+    {
         b.add_edge(ids[a], ids[c], EdgeKind::Calls, Scope::Main, Confidence::Resolved, EdgeFlags::NONE);
     }
-    let main = b.add_entry(EntryPointSpec { node: ids["main"], kind: "main".into(), category: Category::Application, label: "job-engine".into(), parent: None, lifecycle: Lifecycle::Once, order: 0, rule: "r".into(), handoff: None });
-    b.add_entry(EntryPointSpec { node: ids["runWorker"], kind: "message-handler".into(), category: Category::Application, label: "consume in runWorker".into(), parent: Some(main), lifecycle: Lifecycle::OnEvent, order: 0, rule: "r".into(), handoff: None });
+    let main = b.add_entry(EntryPointSpec {
+        node: ids["main"],
+        kind: "main".into(),
+        category: Category::Application,
+        label: "job-engine".into(),
+        parent: None,
+        lifecycle: Lifecycle::Once,
+        order: 0,
+        rule: "r".into(),
+        handoff: None,
+    });
+    b.add_entry(EntryPointSpec {
+        node: ids["runWorker"],
+        kind: "message-handler".into(),
+        category: Category::Application,
+        label: "consume in runWorker".into(),
+        parent: Some(main),
+        lifecycle: Lifecycle::OnEvent,
+        order: 0,
+        rule: "r".into(),
+        handoff: None,
+    });
     let dir = tempfile::tempdir().unwrap();
     write_graph(&b.finish(), &dir.path().join("g")).unwrap();
     let file = ReliefFile::open(&dir.path().join("g")).unwrap();

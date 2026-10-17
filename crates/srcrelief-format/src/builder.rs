@@ -397,9 +397,17 @@ impl GraphBuilder {
                 b = parent_new[b as usize];
             }
             let container = parent_new[a as usize];
-            let agg = agg_map
-                .entry((container, a, b))
-                .or_insert(Agg { a, b, calls: 0, deps: 0, wiring: 0, implements: 0, links: 0, scope_mask: 0, undeclared: false });
+            let agg = agg_map.entry((container, a, b)).or_insert(Agg {
+                a,
+                b,
+                calls: 0,
+                deps: 0,
+                wiring: 0,
+                implements: 0,
+                links: 0,
+                scope_mask: 0,
+                undeclared: false,
+            });
             let kind = EdgeKind::from_u8(e.kind);
             let structural = !EdgeFlags(e.flags).contains(EdgeFlags::WIRING) && !matches!(kind, EdgeKind::Implements | EdgeKind::Inherits);
             if structural && Scope::from_u8(e.scope) == Scope::Main && linked.insert((container, a, b, carrier[*from as usize], carrier[e.to as usize])) {
@@ -516,6 +524,22 @@ impl GraphBuilder {
         }
         str_offsets.push(strings.len() as u32);
 
-        Graph { strings, str_offsets, nodes, child_offsets, edges, edge_index, aggs, agg_offsets, tags, tag_offsets, entries, stats, provenance, fields, complexity }
+        Graph {
+            strings,
+            str_offsets,
+            nodes,
+            child_offsets,
+            edges,
+            edge_index,
+            aggs,
+            agg_offsets,
+            tags,
+            tag_offsets,
+            entries,
+            stats,
+            provenance,
+            fields,
+            complexity,
+        }
     }
 }

@@ -2,7 +2,10 @@ use crate::camera::{Camera, WRect};
 use crate::focus::{Mark, Marks};
 use crate::source::file_font;
 use srcrelief_format::{ArchivedGraph, NodeFlags, NodeId, NodeKind, SubKind};
-use srcrelief_layout::{CARD_MAX_ROWS, CARD_ROW, CARD_TOP, card_field_rows, card_methods_top, ContainerLayout, Direction, LayoutCache, Rect, box_size, card_members, display_children, display_path};
+use srcrelief_layout::{
+    CARD_MAX_ROWS, CARD_ROW, CARD_TOP, ContainerLayout, Direction, LayoutCache, Rect, box_size, card_field_rows, card_members, card_methods_top,
+    display_children, display_path,
+};
 use srcrelief_rules::VisualRules;
 
 pub const OPEN_THRESHOLD_PX: f32 = 220.0;
@@ -274,7 +277,12 @@ impl Builder<'_> {
             .fields(node)
             .take(field_count)
             .enumerate()
-            .map(|(i, f)| FieldRow { name: f.name.to_string(), ty: f.ty.to_string(), visibility: f.visibility, rect: self.cam.world_to_screen_rect(row_rect(CARD_TOP as f64, i), self.view) })
+            .map(|(i, f)| FieldRow {
+                name: f.name.to_string(),
+                ty: f.ty.to_string(),
+                visibility: f.visibility,
+                rect: self.cam.world_to_screen_rect(row_rect(CARD_TOP as f64, i), self.view),
+            })
             .collect();
         let methods_top = card_methods_top(g, node) as f64;
         let opts = self.cache.options();
@@ -310,8 +318,27 @@ impl Builder<'_> {
         let source = file_level && wide && chosen && g.file(node).is_some() && file_font(rect.w).is_some();
         let open = !source && has_children && rect.w >= OPEN_THRESHOLD_PX;
         let tag_color = g.tags(node).find_map(|t| self.vis.style_for(t).map(|s| s.color));
-        self.scene.boxes.push(SceneBox { node, rect, open, depth, kind: g.kind(node), sub: g.sub_kind(node), flags: g.flags(node), mark: self.mark(node), dimmed: self.marks.is_some() && self.mark(node) == Mark::None, tag_color, hidden_details: 0, shown_details: 0, source, rows: Vec::new(), more_rows: 0, field_rows: Vec::new(), more_fields: 0 });
-        let ((rows, more_rows), (field_rows, more_fields)) = if card && !source { self.card_rows(node, world, open) } else { ((Vec::new(), 0), (Vec::new(), 0)) };
+        self.scene.boxes.push(SceneBox {
+            node,
+            rect,
+            open,
+            depth,
+            kind: g.kind(node),
+            sub: g.sub_kind(node),
+            flags: g.flags(node),
+            mark: self.mark(node),
+            dimmed: self.marks.is_some() && self.mark(node) == Mark::None,
+            tag_color,
+            hidden_details: 0,
+            shown_details: 0,
+            source,
+            rows: Vec::new(),
+            more_rows: 0,
+            field_rows: Vec::new(),
+            more_fields: 0,
+        });
+        let ((rows, more_rows), (field_rows, more_fields)) =
+            if card && !source { self.card_rows(node, world, open) } else { ((Vec::new(), 0), (Vec::new(), 0)) };
         let compact = !rows.is_empty() || !field_rows.is_empty();
         let idx = self.scene.boxes.len() - 1;
         self.scene.boxes[idx].rows = rows;
@@ -346,7 +373,16 @@ pub fn build_scene(g: &ArchivedGraph, cache: &mut LayoutCache, cam: &Camera, vie
     build_scene_at(g, cache, cam, view, vis, marks, view.center(), &[])
 }
 
-pub fn build_scene_at(g: &ArchivedGraph, cache: &mut LayoutCache, cam: &Camera, view: Rect, vis: &VisualRules, marks: Option<&Marks>, anchor: [f32; 2], open_files: &[NodeId]) -> Scene {
+pub fn build_scene_at(
+    g: &ArchivedGraph,
+    cache: &mut LayoutCache,
+    cam: &Camera,
+    view: Rect,
+    vis: &VisualRules,
+    marks: Option<&Marks>,
+    anchor: [f32; 2],
+    open_files: &[NodeId],
+) -> Scene {
     let before = cache.computed();
     let world = root_world(cache, g);
     let mut b = Builder { g, cache, cam, view, vis, marks, anchor, open_files, scene: Scene::default() };

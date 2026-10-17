@@ -40,7 +40,6 @@ fn highlighting_marks_keywords_strings_and_comments() {
     assert!(java[0].iter().any(|(t, k)| t == "extends" && *k == Token::Keyword));
 }
 
-
 #[test]
 fn overlapping_spans_merge_into_one_band() {
     assert_eq!(merge_spans(vec![(32, 172), (50, 57), (59, 80)]), [(32, 172)]);

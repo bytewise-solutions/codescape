@@ -15,7 +15,9 @@ fn method<'a>(t: &'a TsType, name: &str) -> &'a TsFunc {
 
 #[test]
 fn imports_and_reexports() {
-    let f = ts("import { A, B as C } from './a';\nimport D from 'x';\nimport * as ns from 'y';\nimport type { T } from './t';\nexport { E } from './e';\nexport * from './f';\nconst r = require('z');\nconst { p, q: s } = require('w');\n");
+    let f = ts(
+        "import { A, B as C } from './a';\nimport D from 'x';\nimport * as ns from 'y';\nimport type { T } from './t';\nexport { E } from './e';\nexport * from './f';\nconst r = require('z');\nconst { p, q: s } = require('w');\n",
+    );
     let spec = |s: &str| f.imports.iter().find(|i| i.spec == s).unwrap_or_else(|| panic!("no import {s}"));
     assert_eq!(spec("./a").named, [("A".to_string(), "A".to_string()), ("B".into(), "C".into())]);
     assert_eq!(spec("x").default.as_deref(), Some("D"));
@@ -109,7 +111,9 @@ bootstrapApplication(AppComponent, appConfig).catch((err) => console.error(err))
 
 #[test]
 fn interfaces_enums_aliases_and_abstract_classes() {
-    let f = ts("interface I extends K, L { m(a: string): number; p: Foo; }\nenum E { A }\ntype T = { a: string };\nexport abstract class Q { abstract run(): void; }\n");
+    let f = ts(
+        "interface I extends K, L { m(a: string): number; p: Foo; }\nenum E { A }\ntype T = { a: string };\nexport abstract class Q { abstract run(): void; }\n",
+    );
     let i = ty(&f, "I");
     assert_eq!(i.kind, SubKind::Interface);
     assert_eq!(i.extends, ["K", "L"]);
@@ -123,9 +127,18 @@ fn interfaces_enums_aliases_and_abstract_classes() {
 
 #[test]
 fn locals_are_typed_from_annotations_new_inject_and_casts() {
-    let f = ts("function f(p: P) {\n  const a: A = x;\n  const b = new B();\n  const c = inject(C);\n  const d = y as D;\n  let e = this.svc;\n  items.forEach((it: Item) => it.go());\n}\n");
+    let f = ts(
+        "function f(p: P) {\n  const a: A = x;\n  const b = new B();\n  const c = inject(C);\n  const d = y as D;\n  let e = this.svc;\n  items.forEach((it: Item) => it.go());\n}\n",
+    );
     let l = &f.funcs[0].locals;
-    for (name, want) in [("a", TypeExpr::Named("A".into())), ("b", TypeExpr::Named("B".into())), ("c", TypeExpr::Named("C".into())), ("d", TypeExpr::Named("D".into())), ("e", TypeExpr::Path("this.svc".into())), ("it", TypeExpr::Named("Item".into()))] {
+    for (name, want) in [
+        ("a", TypeExpr::Named("A".into())),
+        ("b", TypeExpr::Named("B".into())),
+        ("c", TypeExpr::Named("C".into())),
+        ("d", TypeExpr::Named("D".into())),
+        ("e", TypeExpr::Path("this.svc".into())),
+        ("it", TypeExpr::Named("Item".into())),
+    ] {
         assert!(l.contains(&(name.to_string(), want.clone())), "{name}: {l:?}");
     }
 }
@@ -157,7 +170,9 @@ fn javascript_classes_commonjs_exports_and_dynamic_imports() {
 
 #[test]
 fn chained_receivers_keep_the_call_path() {
-    let f = ts("class A {\n  ref = inject(MatDialogRef<A>);\n  run() {\n    this.http.get(url).pipe(map(toX)).subscribe();\n    (a || b).go();\n    const local = (x: number) => x;\n    local(1);\n  }\n}\n");
+    let f = ts(
+        "class A {\n  ref = inject(MatDialogRef<A>);\n  run() {\n    this.http.get(url).pipe(map(toX)).subscribe();\n    (a || b).go();\n    const local = (x: number) => x;\n    local(1);\n  }\n}\n",
+    );
     let t = ty(&f, "A");
     assert!(t.fields.contains(&("ref".to_string(), TypeExpr::Named("MatDialogRef".into()))));
     let run = method(t, "run");

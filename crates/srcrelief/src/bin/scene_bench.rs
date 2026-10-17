@@ -78,9 +78,19 @@ fn main() -> anyhow::Result<()> {
     let rss = peak_rss_mb();
     println!("project: {} files, {} lines, {} nodes, {} edges", s.files, s.lines, g.node_count(), g.edge_count());
     println!("{} index in {index_s:.1} s (target < 60 s)", verdict(index_s < 60.0));
-    println!("{} index size {:.1} MiB = {:.0}% of {:.1} MiB source (target <= 30%)", verdict(ratio <= 0.30), s.index_bytes as f64 / 1048576.0, ratio * 100.0, s.source_bytes as f64 / 1048576.0);
+    println!(
+        "{} index size {:.1} MiB = {:.0}% of {:.1} MiB source (target <= 30%)",
+        verdict(ratio <= 0.30),
+        s.index_bytes as f64 / 1048576.0,
+        ratio * 100.0,
+        s.source_bytes as f64 / 1048576.0
+    );
     println!("{} open + first scene {open_ms:.0} ms (target < 1000 ms), {} boxes", verdict(open_ms < 1000.0), first.stats.drawn);
-    println!("{} zoom: worst scene {worst:.2} ms, p99 {p99:.2} ms over {} steps (target < 16 ms), max {max_boxes} boxes, {layouts} layouts", verdict(worst < 16.0), STEPS + 1);
+    println!(
+        "{} zoom: worst scene {worst:.2} ms, p99 {p99:.2} ms over {} steps (target < 16 ms), max {max_boxes} boxes, {layouts} layouts",
+        verdict(worst < 16.0),
+        STEPS + 1
+    );
     println!("{} biggest container layout {worst_layout:.0} ms (target < 100 ms)", verdict(worst_layout < 100.0));
     println!("zoom range {:.2}x -> {:.0}x (single type {})", cam.zoom, target.zoom, g.name(target_node));
     println!("peak RSS {rss:.0} MiB incl. indexing ({rss_after_index:.0} MiB after index) — viewer target < 500 MiB");

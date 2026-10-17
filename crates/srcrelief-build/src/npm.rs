@@ -121,7 +121,11 @@ impl Workspace {
                 set.add(g);
             }
         }
-        Workspace { dir: dir.to_path_buf(), include: inc.build().unwrap_or_else(|_| GlobSet::empty()), exclude: exc.build().unwrap_or_else(|_| GlobSet::empty()) }
+        Workspace {
+            dir: dir.to_path_buf(),
+            include: inc.build().unwrap_or_else(|_| GlobSet::empty()),
+            exclude: exc.build().unwrap_or_else(|_| GlobSet::empty()),
+        }
     }
 
     fn has_member(&self, dir: &Path) -> bool {
@@ -219,7 +223,8 @@ pub(crate) fn discover_npm(root: &Path, markers: &[PathBuf], excludes: &GlobSet,
     }
     for idx in first..d.modules.len() {
         let manifest = &manifests[&d.modules[idx].dir];
-        let scoped = [("dependencies", Scope::Main), ("peerDependencies", Scope::Main), ("optionalDependencies", Scope::Main), ("devDependencies", Scope::Test)];
+        let scoped =
+            [("dependencies", Scope::Main), ("peerDependencies", Scope::Main), ("optionalDependencies", Scope::Main), ("devDependencies", Scope::Test)];
         for (key, scope) in scoped {
             let Some(Value::Object(deps)) = manifest.get(key) else { continue };
             for dep in deps.keys() {

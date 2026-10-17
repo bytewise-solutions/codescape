@@ -36,11 +36,8 @@ pub fn walk_dirs(root: &Path, excludes: &GlobSet, mut visit: impl FnMut(&Path, &
     }
     for dir in dirs {
         let Ok(read) = std::fs::read_dir(&dir) else { continue };
-        let names: Vec<String> = read
-            .filter_map(|e| e.ok())
-            .filter(|e| e.file_type().is_ok_and(|t| t.is_file()))
-            .map(|e| e.file_name().to_string_lossy().into_owned())
-            .collect();
+        let names: Vec<String> =
+            read.filter_map(|e| e.ok()).filter(|e| e.file_type().is_ok_and(|t| t.is_file())).map(|e| e.file_name().to_string_lossy().into_owned()).collect();
         visit(&dir, &names);
     }
     Ok(())

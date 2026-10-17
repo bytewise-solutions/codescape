@@ -242,16 +242,15 @@ impl<'s> Ctx<'s> {
                 }
             }
             "array_type" => "[]".into(),
-            "union_type" => named_kids(n)
-                .iter()
-                .map(|k| self.type_name(*k))
-                .find(|t| !matches!(t.as_str(), "null" | "undefined" | ""))
+            "union_type" => named_kids(n).iter().map(|k| self.type_name(*k)).find(|t| !matches!(t.as_str(), "null" | "undefined" | "")).unwrap_or_default(),
+            "literal_type" => named_kids(n)
+                .first()
+                .map(|k| match k.kind() {
+                    "string" => "string".to_string(),
+                    "number" => "number".to_string(),
+                    _ => self.text(*k).to_string(),
+                })
                 .unwrap_or_default(),
-            "literal_type" => named_kids(n).first().map(|k| match k.kind() {
-                "string" => "string".to_string(),
-                "number" => "number".to_string(),
-                _ => self.text(*k).to_string(),
-            }).unwrap_or_default(),
             _ => self.text(n).to_string(),
         }
     }
@@ -301,7 +300,12 @@ impl<'s> Ctx<'s> {
                     if let (true, Some(name), Some(fields)) = (property, &name, fields.as_deref_mut()) {
                         fields.push((name.clone(), TypeExpr::Named(ty.clone())));
                         let declared = p.child_by_field_name("type").map(|t| annotation_text(self, t));
-                        f.param_fields.push(FieldDecl { name: name.clone(), ty: declared.unwrap_or_default(), visibility: member_visibility(self, p, name), line: line(p) });
+                        f.param_fields.push(FieldDecl {
+                            name: name.clone(),
+                            ty: declared.unwrap_or_default(),
+                            visibility: member_visibility(self, p, name),
+                            line: line(p),
+                        });
                     }
                     f.params.push((name.unwrap_or_default(), ty));
                 }
@@ -316,7 +320,14 @@ impl<'s> Ctx<'s> {
     }
 
     fn function(&self, name: &str, sub: SubKind, n: Node, fields: Option<&mut Vec<(String, TypeExpr)>>) -> TsFunc {
-        let mut f = TsFunc { name: name.to_string(), sub, complexity: cyclomatic(n, self.src, &DECISIONS), start_line: line(n), end_line: end_line(n), ..Default::default() };
+        let mut f = TsFunc {
+            name: name.to_string(),
+            sub,
+            complexity: cyclomatic(n, self.src, &DECISIONS),
+            start_line: line(n),
+            end_line: end_line(n),
+            ..Default::default()
+        };
         match n.child_by_field_name("parameters") {
             Some(list) => self.params(Some(list), &mut f, fields),
             None => {
@@ -383,7 +394,15 @@ impl<'s> Ctx<'s> {
                 "new_expression" => {
                     if let Some(name) = n.child_by_field_name("constructor").and_then(|c| self.path(c)) {
                         let (string_args, ident_args) = self.args(n.child_by_field_name("arguments"));
-                        f.calls.push(TsCall { method: name, is_new: true, string_args, ident_args, assigned_to: self.assigned_to(n), line: line(n), ..Default::default() });
+                        f.calls.push(TsCall {
+                            method: name,
+                            is_new: true,
+                            string_args,
+                            ident_args,
+                            assigned_to: self.assigned_to(n),
+                            line: line(n),
+                            ..Default::default()
+                        });
                     }
                 }
                 "variable_declarator" => {
@@ -623,7 +642,8 @@ impl<'s> Ctx<'s> {
         if let Some(decl) = n.child_by_field_name("declaration") {
             let before = (out.types.len(), out.funcs.len());
             self.statement(decl, out, &decorators);
-            let declared: Vec<String> = out.types[before.0..].iter().map(|t| t.name.clone()).chain(out.funcs[before.1..].iter().map(|f| f.name.clone())).collect();
+            let declared: Vec<String> =
+                out.types[before.0..].iter().map(|t| t.name.clone()).chain(out.funcs[before.1..].iter().map(|f| f.name.clone())).collect();
             out.exports.extend(declared.into_iter().map(|n| (n.clone(), n)));
             if is_default {
                 out.default_export = out.types.get(before.0).map(|t| t.name.clone()).or_else(|| out.funcs.get(before.1).map(|f| f.name.clone()));
@@ -767,7 +787,13 @@ impl<'s> Ctx<'s> {
                                 let ctor = match t.methods.iter_mut().find(|f| f.sub == SubKind::Constructor) {
                                     Some(c) => c,
                                     None => {
-                                        t.methods.push(TsFunc { name: "constructor".into(), sub: SubKind::Constructor, start_line: line(m), end_line: end_line(m), ..Default::default() });
+                                        t.methods.push(TsFunc {
+                                            name: "constructor".into(),
+                                            sub: SubKind::Constructor,
+                                            start_line: line(m),
+                                            end_line: end_line(m),
+                                            ..Default::default()
+                                        });
                                         t.methods.last_mut().unwrap()
                                     }
                                 };

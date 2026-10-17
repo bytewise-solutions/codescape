@@ -14,11 +14,7 @@ fn run() -> Run {
     let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../tests/fixtures/java-resolve");
     let d = discover(&root, &default_excludes()).unwrap();
     let mut b = GraphBuilder::new("java-resolve");
-    let module_nodes: Vec<NodeId> = d
-        .modules
-        .iter()
-        .map(|m| b.add_node(b.root(), NodeKind::Module, SubKind::None, &m.name, Lang::Java))
-        .collect();
+    let module_nodes: Vec<NodeId> = d.modules.iter().map(|m| b.add_node(b.root(), NodeKind::Module, SubKind::None, &m.name, Lang::Java)).collect();
     let mut facts = ProjectFacts::default();
     let stats = extract_java(&d, &module_nodes, &default_excludes(), &mut b, &mut facts);
     Run { b, facts, stats }
@@ -192,7 +188,9 @@ fn members_and_types_carry_their_visibility() {
     let vis = |path: &[&str]| b.visibility(at(&b, path));
     assert_eq!(vis(&["app", "v", "Vis"]), Visibility::Public);
     assert_eq!(vis(&["app", "v", "Port"]), Visibility::Package);
-    for (m, v) in [("a", Visibility::Public), ("b", Visibility::Protected), ("c", Visibility::Private), ("d", Visibility::Package), ("<init>", Visibility::Package)] {
+    for (m, v) in
+        [("a", Visibility::Public), ("b", Visibility::Protected), ("c", Visibility::Private), ("d", Visibility::Package), ("<init>", Visibility::Package)]
+    {
         assert_eq!(vis(&["app", "v", "Vis", m]), v, "{m}");
     }
     assert_eq!(vis(&["app", "v", "Port", "run"]), Visibility::Public, "interface methods are public");
@@ -212,7 +210,8 @@ fn fields_become_members_with_their_declared_type() {
     let mut facts = ProjectFacts::default();
     extract_java(&d, &module_nodes, &default_excludes(), &mut b, &mut facts);
     let t = at(&b, &["app", "v", "Box"]);
-    let fields: Vec<(String, Visibility)> = b.children(t).iter().filter(|&&c| b.sub_kind(c) == SubKind::Field).map(|&c| (b.name(c).to_string(), b.visibility(c))).collect();
+    let fields: Vec<(String, Visibility)> =
+        b.children(t).iter().filter(|&&c| b.sub_kind(c) == SubKind::Field).map(|&c| (b.name(c).to_string(), b.visibility(c))).collect();
     assert_eq!(fields, [("counts".to_string(), Visibility::Private), ("size".to_string(), Visibility::Protected), ("cap".to_string(), Visibility::Protected)]);
     assert_eq!(b.sub_kind(b.child(t, "size").unwrap()), SubKind::Method, "a method sharing a field's name is still found by name");
     let counts = b.children(t).iter().copied().find(|&c| b.name(c) == "counts").unwrap();

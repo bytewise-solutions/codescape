@@ -43,7 +43,8 @@ fn lists(ws: &Manifest, pkg_dir: &Path) -> bool {
     }
     let Ok(rel) = pkg_dir.strip_prefix(&ws.dir) else { return false };
     let w = ws.table.get("workspace");
-    let hit = |key: &str| strs(w.and_then(|w| w.get(key))).iter().any(|p| rel.starts_with(p.trim_end_matches('/')) || matcher(p).is_some_and(|m| m.is_match(rel)));
+    let hit =
+        |key: &str| strs(w.and_then(|w| w.get(key))).iter().any(|p| rel.starts_with(p.trim_end_matches('/')) || matcher(p).is_some_and(|m| m.is_match(rel)));
     hit("members") && !hit("exclude")
 }
 
@@ -112,7 +113,8 @@ pub(crate) fn discover_cargo(markers: &[PathBuf], d: &mut Discovery) -> Vec<Path
         .filter(|m| !claimed.iter().any(|c| m.dir.starts_with(c)))
         .collect();
     manifests.sort_by(|a, b| a.dir.cmp(&b.dir));
-    let workspaces: Vec<Manifest> = manifests.iter().filter(|m| m.table.contains_key("workspace")).map(|m| Manifest { dir: m.dir.clone(), table: m.table.clone() }).collect();
+    let workspaces: Vec<Manifest> =
+        manifests.iter().filter(|m| m.table.contains_key("workspace")).map(|m| Manifest { dir: m.dir.clone(), table: m.table.clone() }).collect();
     let first = d.modules.len();
     let mut members: Vec<&Manifest> = Vec::new();
     for pkg in manifests.iter().filter(|m| package_name(m).is_some()) {

@@ -119,7 +119,11 @@ fn crate_targets_and_extern_names() {
 fn declared_lib_and_bin_targets() {
     let tmp = tempfile::tempdir().unwrap();
     let r = tmp.path();
-    write(r, "Cargo.toml", "[package]\nname = \"tool\"\n\n[lib]\nname = \"toolkit\"\npath = \"src/kit.rs\"\n\n[[bin]]\nname = \"tool-cli\"\npath = \"src/main.rs\"\n");
+    write(
+        r,
+        "Cargo.toml",
+        "[package]\nname = \"tool\"\n\n[lib]\nname = \"toolkit\"\npath = \"src/kit.rs\"\n\n[[bin]]\nname = \"tool-cli\"\npath = \"src/main.rs\"\n",
+    );
     write(r, "src/kit.rs", "");
     write(r, "src/main.rs", "fn main() {}\n");
     let d = discover(r, &default_excludes()).unwrap();

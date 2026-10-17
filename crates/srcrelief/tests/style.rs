@@ -1,5 +1,5 @@
-use srcrelief_format::{Lang, SubKind};
 use srcrelief::style::{edge_alpha, edge_width};
+use srcrelief_format::{Lang, SubKind};
 
 #[test]
 fn arrow_weight_follows_the_number_of_links() {
@@ -16,16 +16,40 @@ fn arrow_weight_follows_the_number_of_links() {
 
 #[test]
 fn legend_explains_every_style() {
-    use srcrelief::style::{LegendShown, LegendSample, legend};
+    use srcrelief::style::{LegendSample, LegendShown, legend};
     let all = LegendShown { wiring: true, noise: true, complexity: true, unused: true, review: true };
     let items = legend(all);
     let labels: Vec<&str> = items.iter().map(|i| i.label).collect();
     for needed in [
-        "interface", "class / struct", "enum / record", "function / method", "constructor", "wiring (DI)", "error type", "calls / depends on",
-        "upward dependency", "same layer", "undeclared dependency", "implements / extends", "wiring arrow", "test-only dependency", "selected",
-        "the selection uses it", "it uses the selection", "has an entry point", "group", "used from outside its type",
-        "public / protected / package / private", "complexity from 10", "complexity from 20", "unused code", "new", "changed",
-        "reviewed", "arrow the change adds", "lines added / removed",
+        "interface",
+        "class / struct",
+        "enum / record",
+        "function / method",
+        "constructor",
+        "wiring (DI)",
+        "error type",
+        "calls / depends on",
+        "upward dependency",
+        "same layer",
+        "undeclared dependency",
+        "implements / extends",
+        "wiring arrow",
+        "test-only dependency",
+        "selected",
+        "the selection uses it",
+        "it uses the selection",
+        "has an entry point",
+        "group",
+        "used from outside its type",
+        "public / protected / package / private",
+        "complexity from 10",
+        "complexity from 20",
+        "unused code",
+        "new",
+        "changed",
+        "reviewed",
+        "arrow the change adds",
+        "lines added / removed",
     ] {
         assert!(labels.contains(&needed), "legend misses {needed}");
     }
@@ -61,7 +85,7 @@ fn uml_stereotypes_name_the_kind_of_type() {
 
 #[test]
 fn complexity_hints_appear_from_ten_and_turn_red_from_twenty() {
-    use srcrelief::style::{EDGE_UP, EDGE_SIDEWAYS, complexity_hint};
+    use srcrelief::style::{EDGE_SIDEWAYS, EDGE_UP, complexity_hint};
     assert_eq!(complexity_hint(9), None);
     assert_eq!(complexity_hint(10), Some(EDGE_SIDEWAYS));
     assert_eq!(complexity_hint(19), Some(EDGE_SIDEWAYS));
