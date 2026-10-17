@@ -112,6 +112,14 @@ enough to read.
   block nothing uses) and `untested` (no test reaches it). **By package** groups the list instead.
   Zoom into a changed file to see its added lines in green and red marks where lines were removed; hover a mark to
   read them. Renamed or moved blocks show as removed plus new.
+- **Sequence diagrams.** Right-click a method (or select it and press `S`, or use the button in the right panel) to
+  read it as a UML sequence diagram: one lifeline per class (or file for free functions), the chain of callers from
+  the nearest entry point down to it, then its calls in the order they are written, two levels deep. `+ open`
+  shows one level more; a method already on the stack is marked `recursive`. A call through an interface follows its
+  only implementation, or offers the implementations to pick from; a caller in the chain with alternatives is a menu
+  to pick another. Click an arrow to open the code at that call, double-click it to tell the called method instead,
+  double-click a lifeline to see that class on the map; **Back to map** or `Esc` returns. In Review mode new and
+  changed calls are coloured as on the map.
 - **Reviewed marks.** Tick a change (or press `R`) once you have looked at it; `34 / 91 reviewed` tracks progress and
   **Hide reviewed** leaves the rest. A mark remembers the block's text: when the agent changes it again, the change
   comes back as `changed since review`. Marks are kept per project in the cache folder.
@@ -151,6 +159,7 @@ Prints modules, their links, entry points grouped as in the viewer, the call-res
 
 ```sh
 srcrelief <dir> --screenshot out.png [--focus NAME] [--entry LABEL] [--zoom FACTOR] [--settings] [--review REV] [--review-target REV] [--review-by-commit]
+         [--open METHOD] [--sequence METHOD]
 ```
 
 Renders one frame after zooming to the first node matching `NAME`, selecting an entry point, opening the settings

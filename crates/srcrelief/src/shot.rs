@@ -16,6 +16,7 @@ pub struct ShotPlan {
     pub review_target: Option<String>,
     pub review_by_commit: bool,
     pub open: Option<String>,
+    pub sequence: Option<String>,
 }
 
 pub struct Shot {

@@ -1,3 +1,5 @@
+mod sequence_ui;
+
 use crate::camera::Camera;
 use crate::canvas::{Scene, build_scene_at, fit_label, root_world, world_rect};
 use crate::panels::{EntryGroupView, group_entries};
@@ -448,6 +450,11 @@ struct Project {
     analysis: Option<Arc<Analysis>>,
     analysis_job: Option<Receiver<Analysis>>,
     unused_rows: Option<(usize, Vec<(Usage, String, NodeId)>)>,
+    sequence: Option<sequence_ui::SequenceView>,
+    calls: Option<std::rc::Rc<crate::sequence::CallIndex>>,
+    context_node: Option<NodeId>,
+    pending_sequence: Option<NodeId>,
+    pending_open: Option<NodeId>,
     review_error: Option<String>,
     details_in: Vec<NodeId>,
     pointer: Option<Pos2>,
@@ -617,6 +624,11 @@ impl Project {
             analysis: None,
             analysis_job: None,
             unused_rows: None,
+            sequence: None,
+            calls: None,
+            context_node: None,
+            pending_sequence: None,
+            pending_open: None,
             review_bar: None,
             home: None,
             version: None,
@@ -628,8 +640,13 @@ impl Project {
     }
 
     fn open_member(&mut self, m: NodeId) {
-        let Some(t) = self.file.graph().parent(m) else { return };
-        self.goto_line = Some((t, self.file.graph().span(m).0));
+        self.open_member_at(m, None);
+    }
+
+    fn open_member_at(&mut self, m: NodeId, line: Option<u32>) {
+        let g = self.file.graph();
+        let Some(t) = g.parent(m).map(|p| if g.kind(p) == NodeKind::Type { p } else { m }) else { return };
+        self.goto_line = Some((t, line.unwrap_or(g.span(m).0)));
         self.set_focus(m, None, false, true);
         if let Some(r) = world_rect(self.file.graph(), &mut self.cache, t) {
             self.target = Some(Camera::reading(r, self.view));
@@ -666,6 +683,10 @@ impl Project {
         }
         if let Some(m) = plan.open.as_ref().and_then(|name| self.search.query(self.file.graph(), name, 1).first().copied()) {
             self.open_member(m);
+        }
+        if let Some(m) = plan.sequence.as_ref().and_then(|name| self.search.query(self.file.graph(), name, 1).first().copied()) {
+            self.selected = Some(m);
+            self.open_sequence(m);
         }
         self.settings_open |= plan.settings;
         self.shortcuts_open |= plan.shortcuts;
@@ -737,8 +758,12 @@ impl Project {
     fn mode_switch(&mut self, ui: &mut egui::Ui) {
         ui.separator();
         let reviewing = self.review_bar.is_some();
-        if ui.selectable_label(!reviewing, "Overview").on_hover_text("The checkout as it is").clicked() && reviewing {
-            self.exit_review();
+        if ui.selectable_label(!reviewing && self.sequence.is_none(), "Overview").on_hover_text("The checkout as it is").clicked() {
+            if self.sequence.is_some() {
+                self.sequence = None;
+            } else if reviewing {
+                self.exit_review();
+            }
         }
         let review = ui.add_enabled(self.git, egui::Button::selectable(reviewing, "Review")).on_hover_text("What changed between two versions").on_disabled_hover_text(self.review_unavailable());
         if review.clicked() && !reviewing {
@@ -1020,6 +1045,12 @@ impl Project {
             self.shortcuts_open = true;
             return;
         }
+        if plain(Key::S) {
+            if let Some(n) = self.selected {
+                self.open_sequence(n);
+            }
+            return;
+        }
         if let Some(rv) = &mut self.review {
             let forward = plain(Key::N);
             if forward || plain(Key::P) {
@@ -1179,7 +1210,9 @@ impl Project {
             action = Some(Action::OpenFolder);
         }
         if ui.input(|i| i.key_pressed(Key::Escape)) {
-            if self.search_open || self.shortcuts_open {
+            if self.sequence.is_some() && !self.search_open && !self.shortcuts_open {
+                self.sequence = None;
+            } else if self.search_open || self.shortcuts_open {
                 self.search_open = false;
                 self.shortcuts_open = false;
             } else {
@@ -1221,7 +1254,17 @@ impl Project {
         egui::Panel::bottom("status").show(ui, |ui| self.status_bar(ui));
         egui::Panel::left("entries").resizable(true).default_size(270.0).min_size(230.0).show(ui, |ui| self.entries_panel(ui));
         egui::Panel::right("inspector").resizable(true).default_size(290.0).show(ui, |ui| self.inspector(ui));
+        if let Some(n) = self.pending_sequence.take() {
+            self.open_sequence(n);
+        }
+        if let Some(n) = self.pending_open.take() {
+            self.open_member(n);
+        }
         egui::CentralPanel::default().frame(egui::Frame::NONE.fill(style::BG)).show(ui, |ui| {
+            if self.sequence.is_some() {
+                self.sequence_ui(ui);
+                return;
+            }
             self.canvas(ui);
             if self.review_bar.is_some() {
                 ui.painter().rect_stroke(ui.max_rect(), 0.0, Stroke::new(3.0, style::ACCENT), StrokeKind::Inside);
@@ -1571,6 +1614,9 @@ impl Project {
                 ui.label(egui::RichText::new(label).small().color(style::EDGE_UP))
                     .on_hover_text("Nothing in main code calls, creates or names it outside its own lines. Code reached by reflection or a framework can show up here.");
             }
+            if g.kind(n) == NodeKind::Member && ui.small_button("Sequence diagram (S)").clicked() {
+                self.pending_sequence = Some(n);
+            }
             let owns_entry = self.app_counts.contains_key(&n) || (0..g.entries().len()).any(|i| g.entries()[i].node.to_native() == n);
             let chips = inspector::chips(g, n, owns_entry);
             if !chips.is_empty() {
@@ -1723,6 +1769,22 @@ impl Project {
         let (resp, painter) = ui.allocate_painter(ui.available_size(), Sense::click_and_drag());
         self.view = rect_of(resp.rect);
         let g = self.file.graph();
+        if resp.secondary_clicked() {
+            self.context_node = resp.interact_pointer_pos().and_then(|p| self.scene.row_at([p.x, p.y]).or_else(|| self.scene.box_at([p.x, p.y])));
+        }
+        if let Some(n) = self.context_node {
+            resp.context_menu(|ui| {
+                ui.label(egui::RichText::new(g.name(n)).strong());
+                if g.kind(n) == NodeKind::Member {
+                    if ui.add(egui::Button::new("Sequence diagram").shortcut_text("S")).clicked() {
+                        self.pending_sequence = Some(n);
+                    }
+                    if ui.button("Open its code").clicked() {
+                        self.pending_open = Some(n);
+                    }
+                }
+            });
+        }
         if self.needs_fit {
             self.target = None;
             self.cam = Camera::fit(root_world(&mut self.cache, g), self.view);
