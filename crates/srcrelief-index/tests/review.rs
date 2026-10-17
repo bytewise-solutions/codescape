@@ -105,6 +105,47 @@ fn a_branch_is_compared_with_where_it_left_main() {
     assert_eq!(r.removed.iter().map(|x| x.path.as_str()).collect::<Vec<_>>(), ["svc/cart/Cart/Clear"]);
     let status = std::process::Command::new("git").args(["status", "--porcelain"]).current_dir(&repo).output().unwrap();
     assert_eq!(String::from_utf8_lossy(&status.stdout).trim(), "?? svc/cart/extra.go", "the checkout is left alone");
+    assert_eq!(git_out(&repo, &["worktree", "list"]).lines().count(), 1, "no worktree is registered in the repository");
+    assert!(!repo.join(".git/worktrees").exists());
+}
+
+fn small_repo(tmp: &Path) -> std::path::PathBuf {
+    let repo = tmp.join("repo");
+    std::fs::create_dir_all(repo.join("cart")).unwrap();
+    std::fs::write(repo.join("go.mod"), "module example.com/svc\n\ngo 1.22\n").unwrap();
+    std::fs::write(repo.join("cart/cart.go"), BASE_CART).unwrap();
+    git(&repo, &["init", "-q", "-b", "main"]);
+    git(&repo, &["add", "."]);
+    git(&repo, &["commit", "-q", "-m", "base"]);
+    repo
+}
+
+#[test]
+fn cached_versions_unused_for_a_while_are_removed_with_old_worktrees() {
+    let tmp = tempfile::tempdir().unwrap();
+    let repo = small_repo(tmp.path());
+    let cache = tmp.path().join("cache");
+    let cfg = ProjectConfig::default();
+    let head = git_out(&repo, &["rev-parse", "HEAD"]);
+    let fresh = index_revision(&repo, &head, &cfg, &cache, &|_| {}).unwrap();
+    std::fs::write(repo.join("cart/b.go"), "package cart\n").unwrap();
+    git(&repo, &["add", "."]);
+    git(&repo, &["commit", "-q", "-m", "b"]);
+    let second = git_out(&repo, &["rev-parse", "HEAD"]);
+    let stale = index_revision(&repo, &second, &cfg, &cache, &|_| {}).unwrap();
+    let old = std::time::SystemTime::now() - std::time::Duration::from_secs(30 * 24 * 3600);
+    mark_used_at(&stale, old);
+    let legacy = cache.join("worktrees").join(format!("{}-{}", srcrelief_index::project_key(&repo.canonicalize().unwrap()), &head[..12]));
+    git(&repo, &["worktree", "add", "-q", "--detach", &legacy.to_string_lossy(), &head]);
+
+    let removed = clean_versions(&repo, &cache, std::time::Duration::from_secs(14 * 24 * 3600)).unwrap();
+    assert_eq!(removed, 2, "the stale version and the old worktree");
+    assert!(fresh.dir.exists() && fresh.index.exists());
+    assert!(!stale.dir.exists() && !stale.index.exists());
+    assert!(!legacy.exists());
+    assert_eq!(git_out(&repo, &["worktree", "list"]).lines().count(), 1);
+    assert_eq!(clean_versions(&repo, &cache, std::time::Duration::ZERO).unwrap(), 1, "clearing removes everything left");
+    assert!(!fresh.dir.exists());
 }
 
 #[test]

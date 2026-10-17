@@ -11,7 +11,7 @@ use crate::inspector;
 use crate::review_view::{CommitStep, ItemKind, MarkState, ReviewItem, ReviewMarks, Risk, by_risk, items as review_items, step as review_step};
 use srcrelief_index::analysis::{Analysis, Usage, analyse};
 use std::sync::Arc;
-use srcrelief_index::review::{Change, Counts, Review, Status, base_for, branches, commits, compare, current_branch, has_uncommitted, index_revision, is_git};
+use srcrelief_index::review::{Change, Counts, Review, Status, base_for, branches, clean_versions, commits, compare, current_branch, has_uncommitted, index_revision, is_git};
 use crate::source::{LINE_SPACING, SourceCache, Token, advance, file_font, highlight, hscroll_by, initial_scroll, merge_spans, scroll_at, scroll_by, thumb};
 use crate::settings_window::{self, SettingsForm};
 use crate::view::{layout_options, toggle, view_items};
@@ -32,6 +32,7 @@ const SETTINGS: KeyboardShortcut = KeyboardShortcut::new(Modifiers::COMMAND, Key
 const JUMP: KeyboardShortcut = KeyboardShortcut::new(Modifiers::COMMAND, Key::K);
 const LEFT_PANEL: KeyboardShortcut = KeyboardShortcut::new(Modifiers::COMMAND, Key::B);
 const RIGHT_PANEL: KeyboardShortcut = KeyboardShortcut::new(Modifiers::COMMAND, Key::I);
+const UNUSED_VERSIONS: std::time::Duration = std::time::Duration::from_secs(14 * 24 * 3600);
 const BOTH_PANELS: KeyboardShortcut = KeyboardShortcut::new(Modifiers::NONE, Key::F11);
 
 enum Msg {
@@ -793,6 +794,15 @@ impl Project {
             if self.review_bar.is_some() && ui.button("Exit review").clicked() {
                 self.exit_review();
             }
+            ui.separator();
+            let clear = ui.add_enabled(self.git && self.review_bar.is_none(), egui::Button::new("Clear cached versions"));
+            if clear.on_hover_text("Delete the other versions of this project kept to compare with; they are rebuilt when needed").on_disabled_hover_text("Leave review first").clicked() {
+                let (dir, _) = self.origin();
+                let cache = srcrelief_index::cache_path(&dir).parent().map(Path::to_path_buf).unwrap_or_else(std::env::temp_dir);
+                std::thread::spawn(move || {
+                    let _ = clean_versions(&dir, &cache, std::time::Duration::ZERO);
+                });
+            }
         });
     }
 
@@ -868,6 +878,7 @@ impl Project {
         let label = shown.clone();
         std::thread::spawn(move || {
             let result = (|| -> anyhow::Result<ReviewDone> {
+                let _ = clean_versions(&dir, &cache, UNUSED_VERSIONS);
                 let base_rev = match &base {
                     Some(r) => r.clone(),
                     None => base_for(&dir, target.as_deref())?,

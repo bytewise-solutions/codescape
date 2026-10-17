@@ -251,6 +251,63 @@ pub struct RevisionIndex {
     pub dir: PathBuf,
     pub index: PathBuf,
     pub sha: String,
+    pub version: PathBuf,
+}
+
+const USED_MARK: &str = ".srcrelief-used";
+
+fn export(root: &Path, sha: &str, rel: &Path, dest: &Path) -> anyhow::Result<()> {
+    let partial = dest.with_extension("partial");
+    if partial.exists() {
+        std::fs::remove_dir_all(&partial)?;
+    }
+    std::fs::create_dir_all(&partial)?;
+    let mut args = vec!["archive".to_string(), "--format=tar".into(), sha.into()];
+    if !rel.as_os_str().is_empty() {
+        args.extend(["--".into(), rel.to_string_lossy().into_owned()]);
+    }
+    let mut archive = std::process::Command::new("git").args(&args).current_dir(root).stdout(std::process::Stdio::piped()).spawn()?;
+    let tar = std::process::Command::new("tar").arg("-x").arg("-C").arg(&partial).stdin(archive.stdout.take().expect("piped")).output()?;
+    let archived = archive.wait()?;
+    if !archived.success() || !tar.status.success() {
+        anyhow::bail!("exporting {sha}: {}", String::from_utf8_lossy(&tar.stderr).trim());
+    }
+    std::fs::rename(&partial, dest)?;
+    Ok(())
+}
+
+pub fn mark_used_at(r: &RevisionIndex, at: std::time::SystemTime) -> std::io::Result<()> {
+    std::fs::File::create(r.version.join(USED_MARK))?.set_modified(at)
+}
+
+pub fn clean_versions(project_dir: &Path, cache_root: &Path, unused_for: std::time::Duration) -> anyhow::Result<usize> {
+    let root = PathBuf::from(git(project_dir, &["rev-parse", "--show-toplevel"])?);
+    let prefix = format!("{}-", crate::project_key(&project_dir.canonicalize()?));
+    let ours = |dir: &Path| -> Vec<PathBuf> {
+        std::fs::read_dir(dir).into_iter().flatten().flatten().map(|e| e.path()).filter(|p| p.file_name().is_some_and(|n| n.to_string_lossy().starts_with(&prefix))).collect()
+    };
+    let mut removed = 0;
+    for old in ours(&cache_root.join("worktrees")) {
+        let _ = git(&root, &["worktree", "remove", "--force", &old.to_string_lossy()]);
+        if old.exists() {
+            std::fs::remove_dir_all(&old)?;
+        }
+        removed += 1;
+    }
+    let _ = git(&root, &["worktree", "prune"]);
+    let now = std::time::SystemTime::now();
+    for version in ours(&cache_root.join("versions")) {
+        let used = std::fs::metadata(version.join(USED_MARK)).or_else(|_| std::fs::metadata(&version)).and_then(|m| m.modified()).unwrap_or(now);
+        if now.duration_since(used).unwrap_or_default() < unused_for {
+            continue;
+        }
+        std::fs::remove_dir_all(&version)?;
+        if let Some(name) = version.file_name().filter(|n| !n.to_string_lossy().ends_with(".partial")) {
+            let _ = std::fs::remove_file(cache_root.join(format!("{}.relief", name.to_string_lossy())));
+        }
+        removed += 1;
+    }
+    Ok(removed)
 }
 
 fn git(dir: &Path, args: &[&str]) -> anyhow::Result<String> {
@@ -310,17 +367,19 @@ pub fn index_revision(project_dir: &Path, rev: &str, cfg: &crate::ProjectConfig,
     let project = project_dir.canonicalize()?;
     let rel = project.strip_prefix(&root)?.to_path_buf();
     let key = format!("{}-{}", crate::project_key(&project), &sha[..12]);
-    let worktree = cache_root.join("worktrees").join(&key);
-    if !worktree.join(".git").exists() {
-        std::fs::create_dir_all(cache_root.join("worktrees"))?;
-        git(&root, &["worktree", "add", "--detach", &worktree.to_string_lossy(), &sha])?;
+    let version = cache_root.join("versions").join(&key);
+    if !version.exists() {
+        std::fs::create_dir_all(cache_root.join("versions"))?;
+        export(&root, &sha, &rel, &version)?;
     }
-    let dir = worktree.join(rel);
+    let dir = version.join(rel);
     let index = cache_root.join(format!("{key}.relief"));
     let cfg = crate::ProjectConfig { index: Some(index.clone()), ..cfg.clone() };
     let packs = crate::project_packs(&dir, &cfg)?;
     if crate::needs_reindex(&dir, &index, &cfg, &packs) {
         crate::index_project(&dir, &cfg, progress)?;
     }
-    Ok(RevisionIndex { dir, index, sha })
+    let r = RevisionIndex { dir, index, sha, version };
+    mark_used_at(&r, std::time::SystemTime::now())?;
+    Ok(r)
 }

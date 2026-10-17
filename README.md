@@ -101,8 +101,10 @@ enough to read.
   left `main` or `master`) and **Target** (by default the working copy, uncommitted changes included), each from the
   branches or any commit or tag. When the target is another branch, the map and the files show that branch. Choose
   **Whole range** or **Commit by commit**: the latter steps through the commits from base to target (`<` `>` or
-  `[` `]`), each compared with its parent, then the uncommitted changes. Every version is checked out in a git
-  worktree under the cache folder and indexed once; your checkout is never touched. Blocks are matched by their
+  `[` `]`), each compared with its parent, then the uncommitted changes. Every version is exported with
+  `git archive` into the cache folder and indexed once; neither your checkout nor the repository is touched (no
+  worktree, nothing in `.git`). Versions unused for 14 days are deleted when a review starts, and **Review ▸ Clear
+  cached versions** deletes them all. Blocks are matched by their
   names: new ones are outlined green with `NEW`, changed ones amber with `+added −removed` lines, the rest dimmed.
   Open boxes add up what changed inside them (`2 new · 3 changed · 1 removed`), card rows are tinted with their line
   counts and any complexity increase, and arrows the change introduced are drawn green. The left
