@@ -1,3 +1,19 @@
 name = "ts-core"
 version = "0.1.0"
 languages = ["typescript", "javascript"]
+
+[[rule]]
+id = "ts-core.main"
+main = { category = "application", label = "{module}" }
+
+[[rule]]
+id = "ts-core.scripts"
+path = { glob = "**/scripts/**", category = "dev-tool" }
+
+[[rule]]
+id = "ts-core.test-code"
+test_code = { file_imports = ["@angular/core/testing", "@testing-library", "@playwright/test", "jest", "vitest", "mocha", "chai", "sinon", "supertest", "cypress", "jasmine"], dir_names = ["test", "tests", "__tests__", "e2e", "cypress", "testing"] }
+
+[[rule]]
+id = "ts-core.errors"
+noise = { name_suffixes = ["Error"], supertype_suffixes = ["Error"] }

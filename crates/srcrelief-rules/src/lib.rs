@@ -1,4 +1,5 @@
 mod detect;
+mod objects;
 mod pack;
 mod query;
 mod routes;

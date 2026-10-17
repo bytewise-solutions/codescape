@@ -28,6 +28,11 @@ kinds = ["http-route"]
 collapsed = true
 
 [[visual.entry_group]]
+label = "Routes"
+kinds = ["route"]
+collapsed = true
+
+[[visual.entry_group]]
 label = "Message handlers"
 kinds = ["message-handler"]
 collapsed = true

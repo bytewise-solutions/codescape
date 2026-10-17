@@ -33,7 +33,8 @@ pub struct Callback {
 #[derive(Clone, Debug, PartialEq)]
 pub enum Rule {
     Path { glob: String, category: Category },
-    Main { category: Category },
+    Main { category: Category, label: String },
+    MainCall { methods: Vec<String>, file_imports: String, label: String, handoff: String, category: Category },
     Supertype { types: Vec<String>, callbacks: Vec<Callback> },
     Annotation { names: Vec<String>, handoff: String },
     AnnotationRoute { names: Vec<String>, method: String, prefix_from_type: Vec<String> },
@@ -43,7 +44,8 @@ pub enum Rule {
     Dispatch { from_override: String, to_override: String },
     NameTag { kinds: Vec<String>, pattern: String, tag: String },
     Query { language: Lang, query: String, capture: String, kind: String, label: String },
-    Wiring { file_markers: Vec<String>, file_imports: Vec<String>, calls: Vec<String>, annotations: Vec<String>, type_prefixes: Vec<String>, requires_imports: Vec<String> },
+    Wiring { file_markers: Vec<String>, file_imports: Vec<String>, calls: Vec<String>, annotations: Vec<String>, type_prefixes: Vec<String>, requires_imports: Vec<String>, caller_prefixes: Vec<String> },
+    ObjectRoute { var_types: Vec<String>, calls: Vec<String>, path_key: String, target_keys: Vec<String>, children_key: String, kind: String, label: String },
     TestCode { file_imports: Vec<String>, dir_names: Vec<String>, paths: Vec<String> },
     Filter { tag: String, paths: Vec<String>, names: Vec<String> },
     Noise { name_suffixes: Vec<String>, supertype_suffixes: Vec<String>, methods: Vec<String> },
@@ -95,6 +97,8 @@ struct RuleFile {
     id: String,
     path: Option<PathFile>,
     main: Option<MainFile>,
+    main_call: Option<MainCallFile>,
+    object_route: Option<ObjectRouteFile>,
     supertype: Option<SupertypeFile>,
     annotation: Option<AnnotationFile>,
     annotation_route: Option<AnnotationRouteFile>,
@@ -171,6 +175,46 @@ struct WiringFile {
     type_prefixes: Vec<String>,
     #[serde(default)]
     requires_imports: Vec<String>,
+    #[serde(default)]
+    caller_prefixes: Vec<String>,
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct MainCallFile {
+    methods: Vec<String>,
+    #[serde(default)]
+    file_imports: String,
+    #[serde(default = "module_label")]
+    label: String,
+    #[serde(default)]
+    handoff: String,
+    #[serde(default = "application")]
+    category: String,
+}
+
+fn module_label() -> String {
+    "{module}".into()
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct ObjectRouteFile {
+    #[serde(default)]
+    var_types: Vec<String>,
+    #[serde(default)]
+    calls: Vec<String>,
+    path_key: String,
+    target_keys: Vec<String>,
+    #[serde(default)]
+    children_key: String,
+    kind: String,
+    #[serde(default = "path_label")]
+    label: String,
+}
+
+fn path_label() -> String {
+    "{path}".into()
 }
 
 #[derive(Deserialize)]
@@ -196,6 +240,8 @@ struct PathFile {
 struct MainFile {
     #[serde(default = "application")]
     category: String,
+    #[serde(default)]
+    label: String,
 }
 
 fn application() -> String {
@@ -383,6 +429,8 @@ impl RuleFile {
         let count = [
             self.path.is_some(),
             self.main.is_some(),
+            self.main_call.is_some(),
+            self.object_route.is_some(),
             self.supertype.is_some(),
             self.annotation.is_some(),
             self.annotation_route.is_some(),
@@ -410,7 +458,21 @@ impl RuleFile {
             return Ok(Rule::Path { glob: p.glob, category: category(&p.category)? });
         }
         if let Some(m) = self.main {
-            return Ok(Rule::Main { category: category(&m.category)? });
+            return Ok(Rule::Main { category: category(&m.category)?, label: m.label });
+        }
+        if let Some(m) = self.main_call {
+            return Ok(Rule::MainCall { methods: m.methods, file_imports: m.file_imports, label: m.label, handoff: m.handoff, category: category(&m.category)? });
+        }
+        if let Some(o) = self.object_route {
+            return Ok(Rule::ObjectRoute {
+                var_types: o.var_types,
+                calls: o.calls,
+                path_key: o.path_key,
+                target_keys: o.target_keys,
+                children_key: o.children_key,
+                kind: o.kind,
+                label: o.label,
+            });
         }
         if let Some(s) = self.supertype {
             let callbacks = s
@@ -454,7 +516,7 @@ impl RuleFile {
             return Ok(Rule::NameTag { kinds: n.kinds, pattern: n.pattern, tag: n.tag });
         }
         if let Some(w) = self.wiring {
-            return Ok(Rule::Wiring { file_markers: w.file_markers, file_imports: w.file_imports, calls: w.calls, annotations: w.annotations, type_prefixes: w.type_prefixes, requires_imports: w.requires_imports });
+            return Ok(Rule::Wiring { file_markers: w.file_markers, file_imports: w.file_imports, calls: w.calls, annotations: w.annotations, type_prefixes: w.type_prefixes, requires_imports: w.requires_imports, caller_prefixes: w.caller_prefixes });
         }
         if let Some(s) = self.significance {
             for p in [&s.accessor_pattern, &s.detail_packages] {

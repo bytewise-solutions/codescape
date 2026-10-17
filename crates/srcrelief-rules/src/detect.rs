@@ -1,4 +1,5 @@
 use crate::pack::{Packs, Rule};
+use crate::objects::{RouteShape, RouteTarget, object_routes};
 use crate::query;
 use crate::routes::{PrefixFlow, join};
 use globset::Glob;
@@ -63,6 +64,7 @@ pub fn apply_detection(packs: &Packs, facts: &ProjectFacts, sources: &dyn Fn(&st
     cx.callbacks(b);
     cx.annotation_routes(b);
     cx.call_rules(b);
+    cx.object_routes(sources, b);
     cx.queries(sources, b);
     cx.role_tags(b);
     cx.significance(b);
@@ -141,7 +143,7 @@ impl<'a> Ctx<'a> {
                             self.test_files.insert(file.rel_path.as_str());
                         }
                     }
-                    Rule::Wiring { file_markers, file_imports, calls, annotations, type_prefixes, requires_imports } => {
+                    Rule::Wiring { file_markers, file_imports, calls, annotations, type_prefixes, requires_imports, caller_prefixes } => {
                         let marked = !file_markers.is_empty()
                             && sources(&file.rel_path).is_some_and(|src| {
                                 let head = String::from_utf8_lossy(&src[..src.len().min(1024)]).into_owned();
@@ -165,6 +167,9 @@ impl<'a> Ctx<'a> {
                             }
                         }
                         for c in &file.calls {
+                            if caller_prefixes.iter().any(|p| c.method.starts_with(p.as_str())) {
+                                wiring_nodes.push(c.caller);
+                            }
                             let qualified = c.receiver_var.as_ref().map(|r| format!("{r}.{}", c.method));
                             let by_name = qualified.as_ref().is_some_and(|q| calls.contains(q));
                             let by_prefix = c.receiver_var.as_ref().into_iter().chain(c.receiver_type.as_ref()).any(|r| {
@@ -481,18 +486,21 @@ impl<'a> Ctx<'a> {
 
     fn mains(&mut self, b: &mut GraphBuilder) {
         for file in files_sorted(self.facts) {
+            self.call_mains(file, b);
             let main_rule = self.packs.rules_for(file.lang).filter_map(|(id, r)| match r {
-                Rule::Main { category } => Some((id.to_string(), *category)),
+                Rule::Main { category, label } => Some((id.to_string(), *category, label.clone())),
                 _ => None,
             }).last();
-            let Some((rule_id, default)) = main_rule else { continue };
+            let Some((rule_id, default, template)) = main_rule else { continue };
             for func in file.functions.iter().filter(|f| f.is_main) {
+                if self.mains.iter().any(|m| m.node == func.node) {
+                    continue;
+                }
+                let pkg = b.parent(func.node).map(|p| b.name(p).to_string()).unwrap_or_default();
                 let label = match func.owner {
                     Some(o) => b.name(o).to_string(),
-                    None => {
-                        let pkg = b.parent(func.node).map(|p| b.name(p).to_string()).unwrap_or_default();
-                        pkg.rsplit('/').next().unwrap_or(&pkg).to_string()
-                    }
+                    None if !template.is_empty() => fill(&template, &[("module", b.name(file.module)), ("package", &pkg), ("name", &func.name)]),
+                    None => pkg.rsplit('/').next().unwrap_or(&pkg).to_string(),
                 };
                 let category = self.category_for(file, default);
                 let entry = b.add_entry(EntryPointSpec {
@@ -508,6 +516,31 @@ impl<'a> Ctx<'a> {
                 });
                 self.handled.insert(func.node);
                 self.mains.push(MainEntry { entry, node: func.node, module: file.module, category });
+            }
+        }
+    }
+
+    fn call_mains(&mut self, file: &'a FileFacts, b: &mut GraphBuilder) {
+        let rules: Vec<(String, Rule)> = self.packs.rules_for(file.lang).filter(|(_, r)| matches!(r, Rule::MainCall { .. })).map(|(id, r)| (id.to_string(), r.clone())).collect();
+        for (id, rule) in rules {
+            let Rule::MainCall { methods, file_imports, label, handoff, category } = rule else { continue };
+            if !file_imports.is_empty() && !file.imports.iter().any(|i| i.path.starts_with(&file_imports)) {
+                continue;
+            }
+            for c in file.calls.iter().filter(|c| methods.contains(&c.method)) {
+                let handoff = (!handoff.is_empty()).then(|| handoff.clone());
+                if let Some(m) = self.mains.iter().position(|m| m.node == c.caller) {
+                    if let Some(h) = &handoff {
+                        self.set_handoff(b, m, h);
+                    }
+                    continue;
+                }
+                let arg0 = c.ident_args.first().cloned().flatten().or_else(|| c.string_args.first().cloned().flatten()).unwrap_or_default();
+                let text = fill(&label, &[("module", b.name(file.module)), ("caller", b.name(c.caller)), ("arg0", &arg0)]);
+                let category = self.category_for(file, category);
+                let entry = b.add_entry(EntryPointSpec { node: c.caller, kind: "main".into(), category, label: text, parent: None, lifecycle: Lifecycle::Once, order: 0, rule: id.clone(), handoff });
+                self.handled.insert(c.caller);
+                self.mains.push(MainEntry { entry, node: c.caller, module: file.module, category });
             }
         }
     }
@@ -749,6 +782,79 @@ impl<'a> Ctx<'a> {
                     }
                 }
                 _ => {}
+            }
+        }
+    }
+
+    fn route_target(&self, file: &FileFacts, target: &RouteTarget) -> Option<NodeId> {
+        let simple = |t: &TypeFacts| t.fqn.rsplit('.').next().unwrap_or(&t.fqn).to_string();
+        let (spec, member) = match target {
+            RouteTarget::Local(name) => return file.types.iter().find(|t| simple(t) == *name).map(|t| t.node),
+            RouteTarget::Import { spec, member } => (spec, member),
+        };
+        let stem = |rel: &str| rel.rsplit_once('.').map_or(rel.to_string(), |(s, _)| s.to_string());
+        let candidates: Vec<&FileFacts> = if spec.starts_with('.') {
+            let dir = file.rel_path.rsplit_once('/').map_or("", |(d, _)| d);
+            let mut parts: Vec<&str> = dir.split('/').filter(|s| !s.is_empty()).collect();
+            for seg in spec.split('/') {
+                match seg {
+                    "." | "" => {}
+                    ".." => {
+                        parts.pop();
+                    }
+                    other => parts.push(other),
+                }
+            }
+            let base = parts.join("/");
+            let base_stem = stem(&base);
+            self.facts.files.iter().filter(|f| {
+                let s = stem(&f.rel_path);
+                s == base || s == base_stem || s == format!("{base}/index")
+            }).collect()
+        } else {
+            self.facts.files.iter().filter(|f| f.module == file.module).collect()
+        };
+        let types: Vec<&TypeFacts> = candidates.iter().flat_map(|f| f.types.iter()).filter(|t| member.as_ref().is_none_or(|m| simple(t) == *m)).collect();
+        match types.as_slice() {
+            [one] => Some(one.node),
+            [first, ..] if spec.starts_with('.') && member.is_some() => Some(first.node),
+            _ => None,
+        }
+    }
+
+    fn object_routes(&mut self, sources: &dyn Fn(&str) -> Option<Vec<u8>>, b: &mut GraphBuilder) {
+        let facts = self.facts;
+        for file in files_sorted(facts) {
+            let rules: Vec<(String, Rule)> = self.packs.rules_for(file.lang).filter(|(_, r)| matches!(r, Rule::ObjectRoute { .. })).map(|(id, r)| (id.to_string(), r.clone())).collect();
+            if rules.is_empty() {
+                continue;
+            }
+            let Some(src) = sources(&file.rel_path) else { continue };
+            for (id, rule) in rules {
+                let Rule::ObjectRoute { var_types, calls, path_key, target_keys, children_key, kind, label } = rule else { continue };
+                let text = String::from_utf8_lossy(&src);
+                if !var_types.iter().chain(&calls).any(|m| text.contains(m.as_str())) {
+                    continue;
+                }
+                let shape = RouteShape { var_types: &var_types, calls: &calls, path_key: &path_key, target_keys: &target_keys, children_key: &children_key };
+                for r in object_routes(&file.rel_path, &src, &shape) {
+                    let node = r.target.as_ref().and_then(|t| self.route_target(file, t)).or_else(|| {
+                        file.functions
+                            .iter()
+                            .filter(|f| {
+                                let (s, e) = b.span(f.node);
+                                s <= r.line && r.line <= e
+                            })
+                            .min_by_key(|f| {
+                                let (s, e) = b.span(f.node);
+                                e - s
+                            })
+                            .map(|f| f.node)
+                    });
+                    let Some(node) = node else { continue };
+                    let text = fill(&label, &[("path", &r.path)]);
+                    self.add_child(b, node, file.module, &kind, text, Lifecycle::OnEvent, 0, &id);
+                }
             }
         }
     }

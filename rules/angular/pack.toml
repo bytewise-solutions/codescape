@@ -1,3 +1,23 @@
 name = "angular"
 version = "0.1.0"
 languages = ["typescript"]
+
+[[rule]]
+id = "angular.bootstrap"
+main_call = { methods = ["bootstrapApplication", "bootstrapModule"], file_imports = "@angular/platform-browser", label = "{module}", handoff = "Angular" }
+
+[[rule]]
+id = "angular.routes"
+object_route = { var_types = ["Routes", "Route[]"], calls = ["provideRouter", "forRoot", "forChild"], path_key = "path", target_keys = ["component", "loadComponent"], children_key = "children", kind = "route", label = "{path}" }
+
+[[rule]]
+id = "angular.components"
+annotation_tag = { names = ["Component", "Directive", "Pipe"], tag = "layer:handler" }
+
+[[rule]]
+id = "angular.services"
+annotation_tag = { names = ["Injectable"], tag = "layer:service" }
+
+[[rule]]
+id = "angular.wiring"
+wiring = { annotations = ["NgModule"], caller_prefixes = ["provide", "importProvidersFrom"], requires_imports = ["@angular/core"] }

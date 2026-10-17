@@ -1,3 +1,7 @@
 name = "express"
 version = "0.1.0"
 languages = ["typescript", "javascript"]
+
+[[rule]]
+id = "express.routes"
+call_route = { methods = ["get", "post", "put", "patch", "delete", "all", "use", "options", "head"], receiver_types = ["express()", "express.Router()", "express.Router", "express.Express", "express.Application"], file_imports = "express", path_arg = 0, handler_arg = "last", label = "{METHOD} {path}" }
