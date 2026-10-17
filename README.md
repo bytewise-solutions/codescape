@@ -315,9 +315,9 @@ Scale numbers are in `docs/benchmarks.md`.
 
 ## Known limits of the POC
 
-- Calls are resolved from what the source states (imports, declared types, return types); there is no type
-  inference, so callback parameters, loop variables and pattern bindings stay unresolved, and nothing inside Rust
-  macros is read. The status bar shows the ratio (about 55–85% resolved depending on the language).
+- Calls are resolved from what the source states (imports, declared types, return types, element types of
+  collections for loop and closure variables); there is no full type inference, so pattern bindings, tuples and
+  generic results stay unresolved, and nothing inside Rust macros is read. Calls on library values count as resolved
+  library calls. The status bar shows the ratio (about 68–85% resolved depending on the language).
 - Overloaded methods share one row.
-- No tunnel (sequence) view yet; the index already records spans, lifecycles and call edges for it.
 - Maven, Kotlin, Python and other languages are not indexed.
