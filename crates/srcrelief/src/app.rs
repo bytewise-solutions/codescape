@@ -1,5 +1,5 @@
 use crate::camera::Camera;
-use crate::canvas::{Scene, build_scene, root_world, world_rect};
+use crate::canvas::{Scene, build_scene_at, root_world, world_rect};
 use crate::panels::{EntryGroupView, group_entries};
 use crate::focus::{Focus, FocusMode, History, Mark, UsageIndex, focus};
 use crate::search::{self, SearchIndex};
@@ -1104,7 +1104,11 @@ impl Project {
         }
         let started = Instant::now();
         self.hovered = resp.hover_pos().and_then(|p| self.scene.box_at([p.x, p.y]));
-        self.scene = build_scene(g, &mut self.cache, &self.cam, self.view, &self.visual, self.focus.as_ref().map(|f| &f.marks));
+        let anchor = match self.pointer {
+            Some(p) => self.file_page_at(p).and_then(|n| self.scene.boxes.iter().find(|b| b.node == n)).map_or([p.x, p.y], |b| b.rect.center()),
+            None => self.view.center(),
+        };
+        self.scene = build_scene_at(g, &mut self.cache, &self.cam, self.view, &self.visual, self.focus.as_ref().map(|f| &f.marks), anchor);
         let shown: Vec<(NodeId, f32, f32)> = self.scene.boxes.iter().filter(|b| b.source).filter_map(|b| Some((b.node, b.rect.y, file_font(b.rect.w)? * LINE_SPACING))).collect();
         self.file_scroll.retain(|n, _| shown.iter().any(|(s, _, _)| s == n));
         for (n, y, line_h) in shown {
@@ -1392,7 +1396,7 @@ impl Project {
             let band = egui::Rect::from_min_size(Pos2::new(b.rect.x + 2.0, top + (*s - 1) as f32 * line_h), egui::vec2(b.rect.w - 4.0, (*e - *s + 1) as f32 * line_h));
             clip.rect_filled(band, 0.0, style::BOX_STROKE.gamma_multiply(0.10));
         }
-        self.paint_scrollbar(&clip, sheet, b.node, scroll, lines.len(), (sheet.height() / line_h) as usize, &own);
+        self.paint_scrollbar(&clip, sheet, b.node, scroll, lines.len(), (sheet.height() / line_h) as usize);
         let clip = painter.with_clip_rect(egui::Rect::from_min_max(sheet.min, Pos2::new(self.scrollbar_track(sheet).left() - 4.0, sheet.max.y)));
         let first = ((self.view.y - top) / line_h).floor().max(0.0) as usize;
         let last = (((self.view.bottom() - top) / line_h).ceil().max(0.0) as usize).min(lines.len());
@@ -1438,14 +1442,9 @@ impl Project {
         Some(scroll_at(p.y - track.top(), total, visible, track.height()))
     }
 
-    fn paint_scrollbar(&self, painter: &egui::Painter, page: egui::Rect, node: NodeId, scroll: f32, total: usize, visible: usize, own: &[(u32, u32)]) {
+    fn paint_scrollbar(&self, painter: &egui::Painter, page: egui::Rect, node: NodeId, scroll: f32, total: usize, visible: usize) {
         let track = self.scrollbar_track(page);
         painter.rect_filled(track, 4.0, style::BAR);
-        for &(s, e) in own {
-            let y0 = track.top() + (s - 1) as f32 / total.max(1) as f32 * track.height();
-            let h = ((e - s + 1) as f32 / total.max(1) as f32 * track.height()).max(2.0);
-            painter.rect_filled(egui::Rect::from_min_size(Pos2::new(track.left(), y0), egui::vec2(3.0, h)), 1.0, style::BOX_STROKE.gamma_multiply(0.8));
-        }
         let (top, len) = thumb(scroll, total, visible, track.height());
         let hot = self.scroll_drag == Some(node) || self.pointer_in(track);
         let knob = egui::Rect::from_min_size(Pos2::new(track.left() + 1.0, track.top() + top), egui::vec2(track.width() - 2.0, len));

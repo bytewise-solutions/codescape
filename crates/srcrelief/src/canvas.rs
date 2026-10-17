@@ -9,6 +9,7 @@ pub const OPEN_THRESHOLD_PX: f32 = 220.0;
 pub const MIN_DRAW_PX: f32 = 3.0;
 pub const MIN_LABEL_PX: f32 = 7.0;
 pub const MIN_CHILD_PX: f32 = 36.0;
+pub const FILE_VIEW_SHARE: f32 = 0.6;
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct SceneBox {
@@ -165,6 +166,7 @@ struct Builder<'a> {
     view: Rect,
     vis: &'a VisualRules,
     marks: Option<&'a Marks>,
+    anchor: [f32; 2],
     scene: Scene,
 }
 
@@ -245,7 +247,8 @@ impl Builder<'_> {
             NodeKind::Member => g.parent(node).is_some_and(|p| g.kind(p) == NodeKind::Package),
             _ => false,
         };
-        let source = file_level && g.file(node).is_some() && file_font(rect.w).is_some();
+        let aimed = rect.contains(self.anchor) && rect.w >= FILE_VIEW_SHARE * self.view.w;
+        let source = file_level && aimed && g.file(node).is_some() && file_font(rect.w).is_some();
         let open = !source && has_children && rect.w >= OPEN_THRESHOLD_PX;
         let tag_color = g.tags(node).find_map(|t| self.vis.style_for(t).map(|s| s.color));
         self.scene.boxes.push(SceneBox { node, rect, open, depth, kind: g.kind(node), sub: g.sub_kind(node), flags: g.flags(node), mark: self.mark(node), dimmed: self.marks.is_some() && self.mark(node) == Mark::None, tag_color, hidden_details: 0, shown_details: 0, source });
@@ -272,9 +275,13 @@ impl Builder<'_> {
 }
 
 pub fn build_scene(g: &ArchivedGraph, cache: &mut LayoutCache, cam: &Camera, view: Rect, vis: &VisualRules, marks: Option<&Marks>) -> Scene {
+    build_scene_at(g, cache, cam, view, vis, marks, view.center())
+}
+
+pub fn build_scene_at(g: &ArchivedGraph, cache: &mut LayoutCache, cam: &Camera, view: Rect, vis: &VisualRules, marks: Option<&Marks>, anchor: [f32; 2]) -> Scene {
     let before = cache.computed();
     let world = root_world(cache, g);
-    let mut b = Builder { g, cache, cam, view, vis, marks, scene: Scene::default() };
+    let mut b = Builder { g, cache, cam, view, vis, marks, anchor, scene: Scene::default() };
     b.open_container(g.root(), world, 0);
     let computed = b.cache.computed();
     let mut scene = b.scene;

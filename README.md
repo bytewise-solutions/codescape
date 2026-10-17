@@ -68,8 +68,9 @@ enough to read.
   dependency; red arrows point upward (a layering violation), amber ones join two boxes of the same layer.
 - **Box colours by kind:** interface (teal), class/struct (blue), enum/record (violet), function/method (grey),
   constructor (dim blue). A legend sits in the bottom-left corner; close it with its × or **View ▸ Legend**.
-- **The file when you zoom in close.** Once a class, struct or top-level function is wide enough on screen to read
-  its code, its member boxes give way to its whole file, as a page filling the type's column. It opens with the
+- **The file when you zoom in close.** The class, struct or top-level function under the pointer (the middle of the
+  view from the keyboard) gives way to its whole file once it fills most of the view, as a page filling its column;
+  only that one opens. It opens with the
   type's first line where its box was; the wheel scrolls the file, not the map (`Page Up`/`Page Down`/`Home`/`End`
   too), `Ctrl` + wheel still zooms. The type's own lines and its methods sit on a light band. Types that hold other
   boxes (an interface with its implementations) stay boxes. Lines are read from disk.
