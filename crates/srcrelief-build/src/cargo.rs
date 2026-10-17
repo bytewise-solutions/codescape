@@ -201,10 +201,10 @@ pub fn cargo_crate(d: &Discovery, module: usize) -> CargoCrate {
     let ws = find_workspace(&d.root, &m.dir);
     let mut deps: Vec<(String, usize)> = Vec::new();
     for (alias, path, _) in dependencies(&manifest, ws.as_ref()) {
-        if let Some(to) = d.modules.iter().position(|x| x.dir == path) {
-            if !deps.iter().any(|(a, _)| *a == alias) {
-                deps.push((alias, to));
-            }
+        if let Some(to) = d.modules.iter().position(|x| x.dir == path)
+            && !deps.iter().any(|(a, _)| *a == alias)
+        {
+            deps.push((alias, to));
         }
     }
     CargoCrate {

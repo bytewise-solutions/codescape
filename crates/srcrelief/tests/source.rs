@@ -19,7 +19,7 @@ fn files_are_read_once_with_tabs_expanded() {
 fn the_file_replaces_the_box_once_its_text_is_readable() {
     assert_eq!(file_font(300.0), None, "a box this narrow keeps its members");
     let f = file_font(800.0).unwrap();
-    assert!(f >= FILE_MIN_PT && f < 14.0, "{f}");
+    assert!((FILE_MIN_PT..14.0).contains(&f), "{f}");
     assert!(file_font(4000.0).unwrap() > f, "zooming in keeps enlarging the text");
 }
 
@@ -32,7 +32,7 @@ fn highlighting_marks_keywords_strings_and_comments() {
     assert_eq!(first[0], ("func", Token::Keyword));
     assert!(first.contains(&("string", Token::Keyword)));
     assert_eq!(*first.last().unwrap(), ("// starts", Token::Comment));
-    assert!(kinds(1).contains(&("\"if not a keyword\"", Token::Text)) == false);
+    assert!(!kinds(1).contains(&("\"if not a keyword\"", Token::Text)));
     assert!(kinds(1).contains(&("\"if not a keyword\"", Token::String)));
     assert_eq!(kinds(2)[0], ("still comment */", Token::Comment), "block comments carry over lines");
     assert!(kinds(2).contains(&("return", Token::Keyword)));

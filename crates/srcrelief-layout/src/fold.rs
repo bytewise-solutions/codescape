@@ -19,10 +19,10 @@ pub fn folded_into(g: &ArchivedGraph, node: NodeId) -> Option<NodeId> {
 
 pub fn display_children(g: &ArchivedGraph, node: NodeId) -> Vec<NodeId> {
     let mut out: Vec<NodeId> = g.children(node).filter(|&c| folded_into(g, c).is_none()).collect();
-    if is_interface(g, node) {
-        if let Some(p) = g.parent(node) {
-            out.extend(g.children(p).filter(|&c| folded_into(g, c) == Some(node)));
-        }
+    if is_interface(g, node)
+        && let Some(p) = g.parent(node)
+    {
+        out.extend(g.children(p).filter(|&c| folded_into(g, c) == Some(node)));
     }
     out
 }

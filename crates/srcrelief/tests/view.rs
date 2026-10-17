@@ -51,7 +51,7 @@ fn view_menu_lists_built_in_toggles_then_filters_then_arrows_and_legend() {
     assert_eq!(items[5], ViewItem { key: Key::View(View::Complexity), label: "Complexity hints".into(), checked: true });
     assert_eq!(items[6], ViewItem { key: Key::View(View::Unused), label: "Unused code".into(), checked: false });
     assert_eq!(items[7], ViewItem { key: Key::FilterShown("migrations".into()), label: "migrations".into(), checked: false });
-    assert_eq!(items[8].checked, true);
+    assert!(items[8].checked);
     assert_eq!(items[9], ViewItem { key: Key::View(View::QuietArrows), label: "Quiet arrows".into(), checked: true });
     assert_eq!(items[10], ViewItem { key: Key::View(View::Legend), label: "Legend".into(), checked: true });
 }

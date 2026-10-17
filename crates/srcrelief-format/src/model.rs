@@ -27,6 +27,7 @@ u8_enum!(SubKind { None, Class, Interface, Enum, Record, Annotation, Struct, Nam
 u8_enum!(Lang { None, Java, Go, TypeScript, JavaScript, Rust });
 u8_enum!(Visibility { Unknown, Public, Protected, Package, Private });
 
+#[allow(clippy::derivable_impls)]
 impl Default for Visibility {
     fn default() -> Self {
         Visibility::Unknown

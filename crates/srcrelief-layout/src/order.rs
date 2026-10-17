@@ -92,13 +92,13 @@ pub fn crossings(layers: &[Vec<usize>], layer_of: &[u32], edges: &[(usize, usize
             let mut not_greater = 0;
             while i > 0 {
                 not_greater += tree[i];
-                i -= i & i.wrapping_neg();
+                i -= i.isolate_lowest_one();
             }
             total += seen - not_greater;
             let mut i = pv + 1;
             while i <= width {
                 tree[i] += 1;
-                i += i & i.wrapping_neg();
+                i += i.isolate_lowest_one();
             }
         }
     }

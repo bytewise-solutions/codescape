@@ -556,10 +556,10 @@ fn write_layer(path: &Path, old: &SettingsFile, new: &SettingsFile) -> Result<()
     let fresh = toml_edit::ser::to_document(new)?;
     let (before, after) = (toml::Table::try_from(old)?, toml::Table::try_from(new)?);
     for (k, v) in &after {
-        if before.get(k) != Some(v) || !doc.contains_key(k) {
-            if let Some(item) = fresh.get(k) {
-                doc.insert(k, standard(item));
-            }
+        if (before.get(k) != Some(v) || !doc.contains_key(k))
+            && let Some(item) = fresh.get(k)
+        {
+            doc.insert(k, standard(item));
         }
     }
     for k in before.keys().filter(|k| !after.contains_key(*k)) {

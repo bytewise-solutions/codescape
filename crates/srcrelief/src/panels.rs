@@ -21,10 +21,10 @@ pub fn group_entries(g: &ArchivedGraph, vis: &VisualRules) -> Vec<EntryGroupView
     let n = g.entries().len();
     let mut children: Vec<Vec<u32>> = vec![Vec::new(); n];
     for i in 0..n {
-        if let Some(p) = g.entry_parent(i) {
-            if p < n {
-                children[p].push(i as u32);
-            }
+        if let Some(p) = g.entry_parent(i)
+            && p < n
+        {
+            children[p].push(i as u32);
         }
     }
     for i in (0..n).filter(|&i| g.entry_parent(i).is_none() && g.entry_category(i) != Category::Test) {

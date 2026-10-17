@@ -48,11 +48,11 @@ fn is_input(p: &Path) -> bool {
 pub fn inputs_fingerprint(project_dir: &Path, excludes: &GlobSet) -> String {
     let mut entries: Vec<(String, u64, u128)> = Vec::new();
     let _ = srcrelief_build::walk_files(project_dir, excludes, |p| {
-        if is_input(p) {
-            if let Ok(m) = p.metadata() {
-                let mtime = m.modified().ok().and_then(|t| t.duration_since(SystemTime::UNIX_EPOCH).ok()).map_or(0, |d| d.as_nanos());
-                entries.push((srcrelief_build::rel_path(project_dir, p), m.len(), mtime));
-            }
+        if is_input(p)
+            && let Ok(m) = p.metadata()
+        {
+            let mtime = m.modified().ok().and_then(|t| t.duration_since(SystemTime::UNIX_EPOCH).ok()).map_or(0, |d| d.as_nanos());
+            entries.push((srcrelief_build::rel_path(project_dir, p), m.len(), mtime));
         }
     });
     entries.sort();

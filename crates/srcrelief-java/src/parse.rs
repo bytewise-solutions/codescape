@@ -202,13 +202,13 @@ impl<'s> Ctx<'s> {
                 "element_value_array_initializer" => self.annotation_args(ch, out),
                 "element_value_pair" => {
                     let key = ch.child_by_field_name("key").map(|k| self.text(k)).unwrap_or("");
-                    if matches!(key, "value" | "path") {
-                        if let Some(v) = ch.child_by_field_name("value") {
-                            if v.kind() == "string_literal" {
-                                out.push(self.string(v));
-                            } else {
-                                self.annotation_args(v, out);
-                            }
+                    if matches!(key, "value" | "path")
+                        && let Some(v) = ch.child_by_field_name("value")
+                    {
+                        if v.kind() == "string_literal" {
+                            out.push(self.string(v));
+                        } else {
+                            self.annotation_args(v, out);
                         }
                     }
                 }
@@ -414,10 +414,10 @@ impl<'s> Ctx<'s> {
                     });
                 }
                 "lambda_expression" => {
-                    if let Some(params) = node.child_by_field_name("parameters") {
-                        if params.kind() == "identifier" {
-                            jm.locals.push((self.text(params).to_string(), String::new()));
-                        }
+                    if let Some(params) = node.child_by_field_name("parameters")
+                        && params.kind() == "identifier"
+                    {
+                        jm.locals.push((self.text(params).to_string(), String::new()));
                     }
                 }
                 _ => {}

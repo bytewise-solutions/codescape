@@ -299,10 +299,10 @@ impl<'s> Ctx<'s> {
                                     f.locals.push((l.clone(), t));
                                 }
                             }
-                        } else if rights.len() == 1 {
-                            if let (Some(l), Some(t)) = (lefts.first(), self.expr_type(rights[0])) {
-                                f.locals.push((l.clone(), t));
-                            }
+                        } else if rights.len() == 1
+                            && let (Some(l), Some(t)) = (lefts.first(), self.expr_type(rights[0]))
+                        {
+                            f.locals.push((l.clone(), t));
                         }
                     }
                 }

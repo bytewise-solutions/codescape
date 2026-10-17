@@ -619,25 +619,25 @@ impl<'a> Resolver<'a> {
         cf.receiver_var = Some(head.to_string());
         let mut current = self.var_type(fi, func, head);
         let rest: Vec<&str> = segs.collect();
-        if current.is_none() {
-            if let Some(imp) = self.import_for(fi, head) {
-                match self.pkg_by_path.get(&imp.path).copied() {
-                    Some(p) if rest.is_empty() => {
-                        if let Some(&(target, _, _)) = self.pkgs[p].funcs.get(&call.method) {
-                            self.b.add_edge_at(caller, target, EdgeKind::Calls, scope, Confidence::Resolved, EdgeFlags::NONE, call.line);
-                            cf.target = Some(target);
-                            self.stats.resolved += 1;
-                        } else if !self.pkgs[p].types.contains_key(&call.method) {
-                            self.stats.unresolved += 1;
-                        }
-                        return cf;
-                    }
-                    None if rest.is_empty() => {
+        if current.is_none()
+            && let Some(imp) = self.import_for(fi, head)
+        {
+            match self.pkg_by_path.get(&imp.path).copied() {
+                Some(p) if rest.is_empty() => {
+                    if let Some(&(target, _, _)) = self.pkgs[p].funcs.get(&call.method) {
+                        self.b.add_edge_at(caller, target, EdgeKind::Calls, scope, Confidence::Resolved, EdgeFlags::NONE, call.line);
+                        cf.target = Some(target);
                         self.stats.resolved += 1;
-                        return cf;
+                    } else if !self.pkgs[p].types.contains_key(&call.method) {
+                        self.stats.unresolved += 1;
                     }
-                    _ => {}
+                    return cf;
                 }
+                None if rest.is_empty() => {
+                    self.stats.resolved += 1;
+                    return cf;
+                }
+                _ => {}
             }
         }
         for seg in &rest {
@@ -653,12 +653,11 @@ impl<'a> Resolver<'a> {
                     Some((owner, target)) => {
                         self.b.add_edge_at(caller, target, EdgeKind::Calls, scope, Confidence::Resolved, EdgeFlags::NONE, call.line);
                         cf.target = Some(target);
-                        if self.types[owner].kind == SubKind::Interface {
-                            if let Some(imp) = self.single_impl(owner, self.files[fi].module) {
-                                if let Some(&m) = self.types[imp].methods.get(&call.method) {
-                                    self.b.add_edge_at(caller, m, EdgeKind::Calls, scope, Confidence::Resolved, EdgeFlags::NONE, call.line);
-                                }
-                            }
+                        if self.types[owner].kind == SubKind::Interface
+                            && let Some(imp) = self.single_impl(owner, self.files[fi].module)
+                            && let Some(&m) = self.types[imp].methods.get(&call.method)
+                        {
+                            self.b.add_edge_at(caller, m, EdgeKind::Calls, scope, Confidence::Resolved, EdgeFlags::NONE, call.line);
                         }
                         self.stats.resolved += 1;
                     }

@@ -184,10 +184,10 @@ impl<'a> Ctx<'a> {
                                 let simple = r.rsplit('.').next().unwrap_or(r);
                                 type_prefixes.iter().any(|p| simple.starts_with(p.as_str()))
                             });
-                            if by_name || by_prefix {
-                                if let Some(t) = c.target {
-                                    wiring_calls.insert((c.caller, t));
-                                }
+                            if (by_name || by_prefix)
+                                && let Some(t) = c.target
+                            {
+                                wiring_calls.insert((c.caller, t));
                             }
                         }
                     }
@@ -229,13 +229,13 @@ impl<'a> Ctx<'a> {
             if wiring_calls.contains(&(e.from, e.to)) {
                 e.flags |= EdgeFlags::WIRING;
             }
-            if e.kind == EdgeKind::DependsOn {
-                if let Some(&(all_wiring, all_test)) = importers.get(&(e.from, e.to)) {
-                    if all_test {
-                        e.scope = Scope::Test;
-                    } else if all_wiring {
-                        e.flags |= EdgeFlags::WIRING;
-                    }
+            if e.kind == EdgeKind::DependsOn
+                && let Some(&(all_wiring, all_test)) = importers.get(&(e.from, e.to))
+            {
+                if all_test {
+                    e.scope = Scope::Test;
+                } else if all_wiring {
+                    e.flags |= EdgeFlags::WIRING;
                 }
             }
         }
@@ -315,10 +315,10 @@ impl<'a> Ctx<'a> {
                 di_built.insert(target_type);
                 continue;
             }
-            if let (Some(from_pkg), Some(to_pkg)) = (package_of(b, e.from), package_of(b, e.to)) {
-                if from_pkg != to_pkg {
-                    users.entry(target_type).or_default().insert(from_pkg);
-                }
+            if let (Some(from_pkg), Some(to_pkg)) = (package_of(b, e.from), package_of(b, e.to))
+                && from_pkg != to_pkg
+            {
+                users.entry(target_type).or_default().insert(from_pkg);
             }
         }
         let extended: HashSet<NodeId> = b
@@ -491,10 +491,10 @@ impl<'a> Ctx<'a> {
         }
         let mut cat = if file.is_dev { Category::DevTool } else { default };
         for (_, rule) in self.packs.rules_for(file.lang) {
-            if let Rule::Path { glob, category } = rule {
-                if Glob::new(glob).is_ok_and(|g| g.compile_matcher().is_match(&file.rel_path)) {
-                    cat = *category;
-                }
+            if let Rule::Path { glob, category } = rule
+                && Glob::new(glob).is_ok_and(|g| g.compile_matcher().is_match(&file.rel_path))
+            {
+                cat = *category;
             }
         }
         cat

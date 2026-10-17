@@ -139,7 +139,7 @@ fn cached_versions_unused_for_a_while_are_removed_with_old_worktrees() {
     let second = git_out(&repo, &["rev-parse", "HEAD"]);
     let stale = index_revision(&repo, &second, &cfg, &cache, &|_| {}).unwrap();
     let old = std::time::SystemTime::now() - std::time::Duration::from_secs(30 * 24 * 3600);
-    mark_used_at(&stale, old);
+    mark_used_at(&stale, old).unwrap();
     let legacy = cache.join("worktrees").join(format!("{}-{}", srcrelief_index::project_key(&repo.canonicalize().unwrap()), &head[..12]));
     git(&repo, &["worktree", "add", "-q", "--detach", &legacy.to_string_lossy(), &head]);
 

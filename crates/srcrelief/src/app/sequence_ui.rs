@@ -169,15 +169,16 @@ impl Project {
                 let color = if m.focus { style::ACCENT } else { self.message_color(m.target).unwrap_or(style::TEXT) };
                 let width = if m.focus { 2.0 } else { 1.2 };
                 let label = if m.create { format!("«create» {}", g.name(m.callee)) } else { format!("{}()", g.name(m.callee)) };
-                let hit_rect;
-                let label_rect;
-                if m.from == m.to {
+
+                let (label_rect, hit_rect) = if m.from == m.to {
                     let x = lane_x(m.from) + BAR_W / 2.0;
                     let pts = vec![Pos2::new(x, y - 6.0), Pos2::new(x + 28.0, y - 6.0), Pos2::new(x + 28.0, y + 6.0), Pos2::new(x + 2.0, y + 6.0)];
                     painter.add(Shape::line(pts, Stroke::new(width, color)));
                     arrow_head(&painter, Pos2::new(x + 2.0, y + 6.0), -1.0, color);
-                    label_rect = painter.text(Pos2::new(x + 34.0, y), Align2::LEFT_CENTER, &label, FontId::proportional(12.0), color);
-                    hit_rect = egui::Rect::from_min_size(Pos2::new(x, y - 10.0), egui::vec2(LANE_W - 10.0, 20.0));
+                    (
+                        painter.text(Pos2::new(x + 34.0, y), Align2::LEFT_CENTER, &label, FontId::proportional(12.0), color),
+                        egui::Rect::from_min_size(Pos2::new(x, y - 10.0), egui::vec2(LANE_W - 10.0, 20.0)),
+                    )
                 } else {
                     let dir = if x1 > x0 { 1.0 } else { -1.0 };
                     let (a, b) = if dir > 0.0 { (x0, x1) } else { (lane_x(m.from) - BAR_W / 2.0, lane_x(m.to) + BAR_W / 2.0) };
@@ -189,9 +190,11 @@ impl Project {
                     arrow_head(&painter, Pos2::new(b, y), dir, color);
                     let (at, align) =
                         if dir > 0.0 { (Pos2::new(a + 8.0, y - 8.0), Align2::LEFT_CENTER) } else { (Pos2::new(a - 8.0, y - 8.0), Align2::RIGHT_CENTER) };
-                    label_rect = painter.text(at, align, &label, FontId::proportional(12.0), color);
-                    hit_rect = egui::Rect::from_min_max(Pos2::new(a.min(b), y - 16.0), Pos2::new(a.max(b), y + 6.0));
-                }
+                    (
+                        painter.text(at, align, &label, FontId::proportional(12.0), color),
+                        egui::Rect::from_min_max(Pos2::new(a.min(b), y - 16.0), Pos2::new(a.max(b), y + 6.0)),
+                    )
+                };
                 let mut chips_x = label_rect.right() + 8.0;
                 let chip = |text: &str, x: f32, fill: Color32| {
                     let galley = painter.layout_no_wrap(text.to_string(), FontId::proportional(10.5), style::BG);

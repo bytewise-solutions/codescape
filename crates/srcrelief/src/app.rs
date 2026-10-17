@@ -46,7 +46,7 @@ enum Msg {
 
 enum State {
     Start { error: Option<String> },
-    Indexing { dir: PathBuf, visual: VisualRules, settings: Box<SettingsStore>, packs: Vec<String>, rx: Receiver<Msg>, stage: String, started: Instant },
+    Indexing { dir: PathBuf, visual: Box<VisualRules>, settings: Box<SettingsStore>, packs: Vec<String>, rx: Receiver<Msg>, stage: String, started: Instant },
     Open(Box<Project>),
 }
 
@@ -129,7 +129,15 @@ impl ReliefApp {
             });
             let _ = tx.send(Msg::Done(result.map(|o| o.path).map_err(|e| format!("{e:#}"))));
         });
-        self.state = State::Indexing { dir, visual, settings: Box::new(settings), packs: available, rx, stage: "Starting".into(), started: Instant::now() };
+        self.state = State::Indexing {
+            dir,
+            visual: Box::new(visual),
+            settings: Box::new(settings),
+            packs: available,
+            rx,
+            stage: "Starting".into(),
+            started: Instant::now(),
+        };
     }
 
     fn file_menu(&self, ui: &mut egui::Ui, project: bool) -> Option<Action> {
@@ -255,7 +263,7 @@ impl eframe::App for ReliefApp {
                 }
                 match done {
                     Some(Ok(path)) => {
-                        self.state = match Project::open(dir, &path, visual, *settings, packs) {
+                        self.state = match Project::open(dir, &path, *visual, *settings, packs) {
                             Ok(p) => State::Open(Box::new(p)),
                             Err(e) => State::Start { error: Some(e) },
                         }
@@ -716,12 +724,12 @@ impl Project {
         if let Some(n) = focus {
             self.set_focus(n, None, false, true);
             self.fly_to(n);
-            if let (Some(z), Some(w)) = (plan.zoom, world_rect(self.file.graph(), &mut self.cache, n)) {
-                if let Some(t) = self.target.as_mut() {
-                    t.zoom *= z;
-                    let half = [self.view.w as f64 / 2.0 / t.zoom, self.view.h as f64 / 2.0 / t.zoom];
-                    t.center = [w.x + half[0], w.y + half[1]];
-                }
+            if let (Some(z), Some(w)) = (plan.zoom, world_rect(self.file.graph(), &mut self.cache, n))
+                && let Some(t) = self.target.as_mut()
+            {
+                t.zoom *= z;
+                let half = [self.view.w as f64 / 2.0 / t.zoom, self.view.h as f64 / 2.0 / t.zoom];
+                t.center = [w.x + half[0], w.y + half[1]];
             }
         }
         if let Some(m) = plan.open.as_ref().and_then(|name| self.search.query(self.file.graph(), name, 1).first().copied()) {
@@ -869,10 +877,10 @@ impl Project {
         self.review = None;
         self.review_job = None;
         self.review_error = None;
-        if let Some((dir, index)) = self.home.clone() {
-            if let Err(e) = self.show_version(dir, index) {
-                self.review_error = Some(e);
-            }
+        if let Some((dir, index)) = self.home.clone()
+            && let Err(e) = self.show_version(dir, index)
+        {
+            self.review_error = Some(e);
         }
     }
 
@@ -963,11 +971,11 @@ impl Project {
         match rx.try_recv() {
             Ok(Ok(done)) => {
                 self.review_job = None;
-                if done.rebuilt || (done.dir.as_path(), done.index.as_path()) != (self.dir.as_path(), self.index_path.as_path()) {
-                    if let Err(e) = self.show_version(done.dir, done.index) {
-                        self.review_error = Some(e);
-                        return;
-                    }
+                if (done.rebuilt || (done.dir.as_path(), done.index.as_path()) != (self.dir.as_path(), self.index_path.as_path()))
+                    && let Err(e) = self.show_version(done.dir, done.index)
+                {
+                    self.review_error = Some(e);
+                    return;
                 }
                 self.version = done.version;
                 let g = self.file.graph();
@@ -1258,10 +1266,10 @@ impl Project {
         self.set_focus(next, None, false, true);
         let g = self.file.graph();
         let r = siblings.iter().find(|(n, _)| *n == next).map(|(_, r)| *r).unwrap();
-        if !self.view.contains_rect(&r) {
-            if let Some(w) = world_rect(g, &mut self.cache, next) {
-                self.target = Some(Camera { center: w.center(), zoom: self.cam.zoom });
-            }
+        if !self.view.contains_rect(&r)
+            && let Some(w) = world_rect(g, &mut self.cache, next)
+        {
+            self.target = Some(Camera { center: w.center(), zoom: self.cam.zoom });
         }
     }
 
@@ -1813,11 +1821,11 @@ impl Project {
                     ui.colored_label(style::EDGE_UP, format!("{up} upward dependencies inside"));
                 }
             }
-            if let Some(p) = g.parent(n) {
-                if let Some(l) = self.cache.get(p) {
-                    for e in l.edges.iter().filter(|e| e.dir == Direction::Up && (e.a == n || e.b == n)) {
-                        ui.colored_label(style::EDGE_UP, format!("Upward: {} -> {}", g.name(e.a), g.name(e.b)));
-                    }
+            if let Some(p) = g.parent(n)
+                && let Some(l) = self.cache.get(p)
+            {
+                for e in l.edges.iter().filter(|e| e.dir == Direction::Up && (e.a == n || e.b == n)) {
+                    ui.colored_label(style::EDGE_UP, format!("Upward: {} -> {}", g.name(e.a), g.name(e.b)));
                 }
             }
             if let Some(f) = self.focus.as_ref().filter(|f| f.node == n) {
@@ -2026,39 +2034,39 @@ impl Project {
         let mut clicked_box = None;
         let mut display = None;
         let mut details_toggle: Option<(NodeId, bool)> = None;
-        if resp.clicked() {
-            if let Some(p) = resp.interact_pointer_pos() {
-                let root = self.cache.shared(g, g.root());
-                let (legend, legend_toggle) = self.legend_rects();
-                if let Some(node) = self.scrollbar_at(p) {
-                    if let Some(v) = self.pointer_scroll(node, p) {
-                        self.file_scroll.insert(node, v);
-                    }
-                } else if legend_toggle.contains(Pos2::new(p.x, p.y)) {
-                    let shown = self.settings.settings().view(View::Legend).value;
-                    display = Some((View::Legend, !shown));
-                } else if legend.contains(Pos2::new(p.x, p.y)) {
-                } else if let Some(w) = minimap::world_at(&root, self.view, [p.x, p.y]) {
-                    self.target = Some(Camera { center: w, zoom: self.cam.zoom });
-                } else if let Some(b) =
-                    self.scene.boxes.iter().rev().find(|b| b.open && b.hidden_details + b.shown_details > 0 && chip_rect(b.rect).contains([p.x, p.y]))
-                {
-                    details_toggle = Some((b.node, b.hidden_details > 0));
-                } else {
-                    clicked_box = self.file_page_at(p).or_else(|| self.scene.row_at([p.x, p.y])).or_else(|| self.scene.box_at([p.x, p.y]));
+        if resp.clicked()
+            && let Some(p) = resp.interact_pointer_pos()
+        {
+            let root = self.cache.shared(g, g.root());
+            let (legend, legend_toggle) = self.legend_rects();
+            if let Some(node) = self.scrollbar_at(p) {
+                if let Some(v) = self.pointer_scroll(node, p) {
+                    self.file_scroll.insert(node, v);
                 }
+            } else if legend_toggle.contains(Pos2::new(p.x, p.y)) {
+                let shown = self.settings.settings().view(View::Legend).value;
+                display = Some((View::Legend, !shown));
+            } else if legend.contains(Pos2::new(p.x, p.y)) {
+            } else if let Some(w) = minimap::world_at(&root, self.view, [p.x, p.y]) {
+                self.target = Some(Camera { center: w, zoom: self.cam.zoom });
+            } else if let Some(b) =
+                self.scene.boxes.iter().rev().find(|b| b.open && b.hidden_details + b.shown_details > 0 && chip_rect(b.rect).contains([p.x, p.y]))
+            {
+                details_toggle = Some((b.node, b.hidden_details > 0));
+            } else {
+                clicked_box = self.file_page_at(p).or_else(|| self.scene.row_at([p.x, p.y])).or_else(|| self.scene.box_at([p.x, p.y]));
             }
         }
         let mut fly = None;
         let mut open_row: Option<(NodeId, NodeId)> = None;
-        if resp.double_clicked() {
-            if let Some(p) = resp.interact_pointer_pos() {
-                if let Some(m) = self.scene.row_at([p.x, p.y]) {
-                    open_row = g.parent(m).map(|t| (m, t));
-                } else if let Some(n) = self.file_page_at(p).or_else(|| self.scene.box_at([p.x, p.y])) {
-                    self.selected = Some(n);
-                    fly = Some(n);
-                }
+        if resp.double_clicked()
+            && let Some(p) = resp.interact_pointer_pos()
+        {
+            if let Some(m) = self.scene.row_at([p.x, p.y]) {
+                open_row = g.parent(m).map(|t| (m, t));
+            } else if let Some(n) = self.file_page_at(p).or_else(|| self.scene.box_at([p.x, p.y])) {
+                self.selected = Some(n);
+                fly = Some(n);
             }
         }
         if let Some(t) = self.target {

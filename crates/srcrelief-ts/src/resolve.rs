@@ -648,10 +648,10 @@ impl<'a> Resolver<'a> {
         if let Some((_, e)) = tf.vars.iter().find(|(n, _)| n == name) {
             return Some(Sym::Var(fi, e.clone()));
         }
-        if name == "default" {
-            if let Some(de) = tf.default_export.as_deref().filter(|d| *d != "default") {
-                return self.symbol(fi, de, depth + 1);
-            }
+        if name == "default"
+            && let Some(de) = tf.default_export.as_deref().filter(|d| *d != "default")
+        {
+            return self.symbol(fi, de, depth + 1);
         }
         if let Some((local, _)) = tf.exports.iter().find(|(l, e)| e == name && l != name) {
             return self.symbol(fi, local, depth + 1);
@@ -852,10 +852,10 @@ impl<'a> Resolver<'a> {
             if let Some(e) = info.fields.get(name) {
                 return self.value_of(Ctx { fi: info.file, ti: Some(cur), func: None }, e, false);
             }
-            if info.methods.contains_key(name) {
-                if let Some(ret) = info.returns.get(name) {
-                    return self.resolve_type(info.file, ret, false).map(Val::Inst);
-                }
+            if info.methods.contains_key(name)
+                && let Some(ret) = info.returns.get(name)
+            {
+                return self.resolve_type(info.file, ret, false).map(Val::Inst);
             }
         }
         None
@@ -946,10 +946,10 @@ impl<'a> Resolver<'a> {
             for t in &f.tf.types {
                 let scope = if f.is_test { Scope::Test } else { Scope::Main };
                 for r in &t.decorator_refs {
-                    if let Some(Val::Static(target)) = self.resolve_value(Ctx { fi, ti: None, func: None }, r) {
-                        if target != ti {
-                            self.b.add_edge(self.types[ti].node, self.types[target].node, EdgeKind::Instantiates, scope, Confidence::Resolved, EdgeFlags::NONE);
-                        }
+                    if let Some(Val::Static(target)) = self.resolve_value(Ctx { fi, ti: None, func: None }, r)
+                        && target != ti
+                    {
+                        self.b.add_edge(self.types[ti].node, self.types[target].node, EdgeKind::Instantiates, scope, Confidence::Resolved, EdgeFlags::NONE);
                     }
                 }
                 ti += 1;

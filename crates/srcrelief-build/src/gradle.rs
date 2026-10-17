@@ -36,8 +36,7 @@ fn normalize_path(p: &str) -> String {
 
 pub fn parse_settings(src: &str) -> GradleSettings {
     let src = strip_comments(src);
-    let mut out = GradleSettings::default();
-    out.root_name = ROOT_NAME.captures(&src).map(|c| c[1].to_string());
+    let mut out = GradleSettings { root_name: ROOT_NAME.captures(&src).map(|c| c[1].to_string()), ..Default::default() };
     for m in INCLUDE.find_iter(&src) {
         let args = include_arguments(&src[m.end()..]);
         for q in QUOTED.captures_iter(args) {

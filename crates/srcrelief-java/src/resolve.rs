@@ -524,10 +524,11 @@ impl<'a> Resolver<'a> {
                         self.packages[&(tf.module, name)]
                     })
                 };
-                if let Some(t) = target {
-                    if Some(t) != package && !import_targets.contains(&t) {
-                        import_targets.push(t);
-                    }
+                if let Some(t) = target
+                    && Some(t) != package
+                    && !import_targets.contains(&t)
+                {
+                    import_targets.push(t);
                 }
             }
             let mut ff = FileFacts {

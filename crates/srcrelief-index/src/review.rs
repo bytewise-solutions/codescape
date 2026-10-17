@@ -108,7 +108,7 @@ fn line_delta(before: &[String], after: &[String]) -> (u32, u32) {
 }
 
 fn fingerprint(lines: &[String]) -> u64 {
-    lines.iter().flat_map(|l| l.bytes().chain([b'\n'])).fold(0xcbf2_9ce4_8422_2325, |h, b| (h ^ u64::from(b)).wrapping_mul(0x0100_0000_01b3))
+    lines.iter().flat_map(|l| l.bytes().chain(*b"\n")).fold(0xcbf2_9ce4_8422_2325, |h, b| (h ^ u64::from(b)).wrapping_mul(0x0100_0000_01b3))
 }
 
 fn openness(v: Visibility) -> Option<u8> {
@@ -186,15 +186,15 @@ pub fn compare(base: &ArchivedGraph, base_root: &Path, target: &ArchivedGraph, t
                     let (add, del) = line_delta(&old, &new);
                     *c = Change { status: Status::Changed, added: add, removed: del, signature: old.first() != new.first(), ..c.clone() };
                 }
-                if let (Some(x), Some(y)) = (openness(base.visibility(b)), openness(target.visibility(n))) {
-                    if y > x {
-                        c.widened = Some((base.visibility(b), target.visibility(n)));
-                    }
+                if let (Some(x), Some(y)) = (openness(base.visibility(b)), openness(target.visibility(n)))
+                    && y > x
+                {
+                    c.widened = Some((base.visibility(b), target.visibility(n)));
                 }
-                if let (Some(x), Some(y)) = (base.complexity(b), target.complexity(n)) {
-                    if x != y {
-                        c.complexity = Some((x, y));
-                    }
+                if let (Some(x), Some(y)) = (base.complexity(b), target.complexity(n))
+                    && x != y
+                {
+                    c.complexity = Some((x, y));
                 }
             }
             Some(_) => {}

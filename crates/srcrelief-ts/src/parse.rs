@@ -763,7 +763,7 @@ impl<'s> Ctx<'s> {
                     }
                 }
                 "public_field_definition" | "field_definition" => {
-                    let mut decorators: Vec<Annotation> = pending.drain(..).collect();
+                    let mut decorators: Vec<Annotation> = std::mem::take(&mut pending);
                     decorators.extend(named_kids(m).into_iter().filter(|k| k.kind() == "decorator").map(|k| self.decorator(k).0));
                     let Some(name) = m.child_by_field_name("name").or_else(|| m.child_by_field_name("property")) else { continue };
                     let name = self.text(name).to_string();

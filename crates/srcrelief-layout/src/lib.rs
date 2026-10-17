@@ -130,11 +130,12 @@ impl LayoutOptions {
     pub fn reveal(&mut self, g: &ArchivedGraph, node: NodeId) -> bool {
         let mut changed = false;
         for n in g.path(node) {
-            if g.flags(n).contains(NodeFlags::DETAIL) && self.hides(g, n) {
-                if let Some(p) = g.parent(n) {
-                    self.details_in.push(p);
-                    changed = true;
-                }
+            if g.flags(n).contains(NodeFlags::DETAIL)
+                && self.hides(g, n)
+                && let Some(p) = g.parent(n)
+            {
+                self.details_in.push(p);
+                changed = true;
             }
         }
         changed

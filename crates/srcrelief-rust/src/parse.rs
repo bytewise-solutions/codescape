@@ -333,10 +333,10 @@ impl<'s> Ctx<'s> {
                     let element = if MAPS.contains(&last) { args.get(1) } else { args.first() };
                     return element.map(|t| format!("[{}]", self.type_name(*t, wrappers))).unwrap_or_default();
                 }
-                if wrappers.contains(&last) {
-                    if let Some(arg) = n.child_by_field_name("type_arguments").and_then(|a| named_children(a).into_iter().find(|x| x.kind() != "lifetime")) {
-                        return self.type_name(arg, wrappers);
-                    }
+                if wrappers.contains(&last)
+                    && let Some(arg) = n.child_by_field_name("type_arguments").and_then(|a| named_children(a).into_iter().find(|x| x.kind() != "lifetime"))
+                {
+                    return self.type_name(arg, wrappers);
                 }
                 base.join("::")
             }

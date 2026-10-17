@@ -166,11 +166,11 @@ fn layout_structure(g: &ArchivedGraph, node: NodeId, frames: &[FrameRule], opts:
 
     let rank: Vec<Option<usize>> = kids.iter().map(|&k| role_rank(g, k)).collect();
     for e in edges.iter_mut() {
-        if let (Some(ra), Some(rb)) = (rank[e.a], rank[e.b]) {
-            if ra > rb {
-                e.back = true;
-                e.layering = false;
-            }
+        if let (Some(ra), Some(rb)) = (rank[e.a], rank[e.b])
+            && ra > rb
+        {
+            e.back = true;
+            e.layering = false;
         }
     }
     let mut out: Vec<Vec<usize>> = vec![Vec::new(); n];
@@ -480,10 +480,11 @@ fn group_names(g: &ArchivedGraph, kids: &[NodeId], frames: &[FrameRule]) -> Vec<
                     if out[i].is_some() {
                         continue;
                     }
-                    if let Some((prefix, _)) = name.split_once(sep.as_str()) {
-                        if counts[prefix] >= 2 && counts[prefix] < names.len() {
-                            out[i] = Some(prefix.to_string());
-                        }
+                    if let Some((prefix, _)) = name.split_once(sep.as_str())
+                        && counts[prefix] >= 2
+                        && counts[prefix] < names.len()
+                    {
+                        out[i] = Some(prefix.to_string());
                     }
                 }
             }

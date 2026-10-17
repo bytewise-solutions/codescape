@@ -171,10 +171,10 @@ pub fn object_routes(rel_path: &str, src: &[u8], shape: &RouteShape) -> Vec<Foun
             }
             _ => continue,
         };
-        if let Some(arr) = arr.filter(|a| a.kind() == "array") {
-            if seen.insert(arr.id()) {
-                w.routes(arr, "");
-            }
+        if let Some(arr) = arr.filter(|a| a.kind() == "array")
+            && seen.insert(arr.id())
+        {
+            w.routes(arr, "");
         }
     }
     w.out

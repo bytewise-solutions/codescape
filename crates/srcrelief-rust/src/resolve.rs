@@ -964,10 +964,11 @@ impl<'a> Resolver<'a> {
         let p = &self.pkgs[pi];
         let mut out = Vec::new();
         for u in &self.files[p.file].rf.bodies[p.body].uses {
-            if let Some(q) = self.resolve_path(pi, &u.path, 0).and_then(|it| self.item_pkg(&it)) {
-                if q != pi && !out.contains(&q) {
-                    out.push(q);
-                }
+            if let Some(q) = self.resolve_path(pi, &u.path, 0).and_then(|it| self.item_pkg(&it))
+                && q != pi
+                && !out.contains(&q)
+            {
+                out.push(q);
             }
         }
         out
@@ -1004,10 +1005,10 @@ impl<'a> Resolver<'a> {
         if let Some(&m) = c.externs.get(name) {
             return self.crates.get(&m).and_then(|x| x.lib_root).map(Item::Pkg);
         }
-        if name == c.lib_name {
-            if let Some(r) = c.lib_root {
-                return Some(Item::Pkg(r));
-            }
+        if name == c.lib_name
+            && let Some(r) = c.lib_root
+        {
+            return Some(Item::Pkg(r));
         }
         (STD_CRATES.contains(&name) || c.ext_names.contains(name)).then(|| Item::Ext(name.to_string()))
     }
@@ -1064,10 +1065,8 @@ impl<'a> Resolver<'a> {
                 _ => {}
             }
         }
-        if project_glob {
-            if let Some(&t) = self.impl_only.get(&(p.module, name.to_string())) {
-                return Some(Item::Type(t));
-            }
+        if project_glob && let Some(&t) = self.impl_only.get(&(p.module, name.to_string())) {
+            return Some(Item::Type(t));
         }
         ext_glob.map(|s| Item::Ext(format!("{s}.{name}")))
     }
