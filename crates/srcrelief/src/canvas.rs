@@ -244,7 +244,7 @@ impl Builder<'_> {
         let shown: Vec<NodeId> = display_children(g, node).into_iter().filter(|&c| !opts.hides(g, c)).collect();
         let has_children = !shown.is_empty();
         let file_level = match g.kind(node) {
-            NodeKind::Type => shown.iter().all(|&c| g.kind(c) != NodeKind::Type),
+            NodeKind::Type => shown.iter().all(|&c| g.kind(c) != NodeKind::Type || g.parent(c) == Some(node)),
             NodeKind::Member => g.parent(node).is_some_and(|p| g.kind(p) == NodeKind::Package),
             _ => false,
         };

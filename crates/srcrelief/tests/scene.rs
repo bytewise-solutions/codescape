@@ -340,3 +340,24 @@ fn an_open_file_stays_open_until_zoomed_out() {
     let out = build_scene_at(g, &mut cache, &half, VIEW, &VisualRules::default(), None, [600.0, 400.0], &[api]);
     assert!(out.boxes.iter().all(|b| !b.source), "zooming out closes it");
 }
+
+#[test]
+fn a_class_with_a_nested_class_still_opens_as_a_file() {
+    let mut b = GraphBuilder::new("p");
+    let pkg = b.add_node(b.root(), NodeKind::Package, SubKind::None, "chat", Lang::Java);
+    let outer = b.add_node(pkg, NodeKind::Type, SubKind::Class, "HistoryActor", Lang::Java);
+    b.set_span(outer, "HistoryActor.java", 1, 180);
+    let m = b.add_node(outer, NodeKind::Member, SubKind::Method, "addMessage", Lang::Java);
+    b.set_span(m, "HistoryActor.java", 10, 40);
+    let inner = b.add_node(outer, NodeKind::Type, SubKind::Class, "ChatChannelsModel", Lang::Java);
+    b.set_span(inner, "HistoryActor.java", 150, 175);
+    let dir = tempfile::tempdir().unwrap();
+    write_graph(&b.finish(), &dir.path().join("g")).unwrap();
+    let f = ReliefFile::open(&dir.path().join("g")).unwrap();
+    let g = f.graph();
+    let mut cache = LayoutCache::new(Vec::new(), LayoutOptions { show_details: true, ..Default::default() });
+    let outer = g.children(g.children(g.root()).start).start;
+    let cam = Camera::fit(world_rect(g, &mut cache, outer).unwrap(), VIEW);
+    let s = scene(g, &mut cache, &cam);
+    assert!(s.boxes.iter().any(|b| b.node == outer && b.source), "the nested class is part of the same file");
+}
