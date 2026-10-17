@@ -6,6 +6,8 @@ use crate::search::{self, SearchIndex};
 use crate::shot::{Shot, ShotPlan, ShotStep};
 use crate::input::{CHEATSHEET, Nav, Step, interpret, nearest_in};
 use crate::inspector;
+use crate::review_view::{ItemKind, ReviewItem, items as review_items, step as review_step};
+use srcrelief_index::review::{Change, Counts, Review, Status, compare, default_base, index_revision};
 use crate::source::{LINE_SPACING, SourceCache, Token, advance, file_font, highlight, hscroll_by, initial_scroll, merge_spans, scroll_at, scroll_by, thumb};
 use crate::settings_window::{self, SettingsForm};
 use crate::view::{layout_options, toggle, view_items};
@@ -263,6 +265,7 @@ impl eframe::App for ReliefApp {
                 let menu = egui::Panel::top("top").show(ui, |ui| egui::MenuBar::new().ui(ui, |ui| {
                     let file = self.file_menu(ui, true);
                     project.view_menu(ui);
+                    project.review_menu(ui);
                     ui.menu_button("Help", |ui| {
                         if ui.add(egui::Button::new("Shortcuts").shortcut_text("? / F1")).clicked() {
                             project.shortcuts_open = true;
@@ -272,7 +275,7 @@ impl eframe::App for ReliefApp {
                 }).inner).inner;
                 let action = project.ui(ui).or(menu);
                 if let Some(shot) = &mut self.shot {
-                    match shot.step(project.target.is_some()) {
+                    match shot.step(project.target.is_some() || project.review_job.is_some()) {
                         ShotStep::Setup => project.apply_plan(&shot.plan),
                         ShotStep::Capture => shot.request(ui.ctx()),
                         ShotStep::Close => ui.ctx().send_viewport_cmd(egui::ViewportCommand::Close),
@@ -287,6 +290,27 @@ impl eframe::App for ReliefApp {
             }
         }
     }
+}
+
+fn review_dim(rv: &ReviewState, scene: &mut Scene) {
+    let quiet = |n: NodeId| {
+        let c = rv.review.change(n);
+        c.status == Status::Unchanged && c.inside == Default::default()
+    };
+    for b in scene.boxes.iter_mut().filter(|b| matches!(b.kind, NodeKind::Module | NodeKind::Package | NodeKind::Type | NodeKind::Member)) {
+        b.dimmed |= quiet(b.node);
+    }
+    for e in scene.edges.iter_mut() {
+        e.dimmed |= !rv.new_arrows.contains(&(e.a, e.b));
+    }
+}
+
+struct ReviewState {
+    label: String,
+    review: Review,
+    items: Vec<ReviewItem>,
+    cursor: Option<usize>,
+    new_arrows: std::collections::HashSet<(NodeId, NodeId)>,
 }
 
 enum Action {
@@ -351,6 +375,10 @@ struct Project {
     file_hscroll: HashMap<NodeId, f32>,
     scripted: bool,
     scroll_drag: Option<NodeId>,
+    review: Option<ReviewState>,
+    review_job: Option<(String, Receiver<Result<(String, Review), String>>)>,
+    review_dialog: Option<String>,
+    review_error: Option<String>,
     details_in: Vec<NodeId>,
     pointer: Option<Pos2>,
 }
@@ -375,6 +403,34 @@ fn pos(p: [f32; 2]) -> Pos2 {
 
 const LIST_LIMIT: usize = 60;
 const LEGEND_ROW: f32 = 14.0;
+
+fn review_badge(c: &Change, open: bool) -> Option<(String, Color32)> {
+    let i = c.inside;
+    if (open || c.status != Status::New) && i != Counts::default() {
+        let parts: Vec<String> = [(i.new, "new"), (i.changed, "changed"), (i.removed, "removed")].iter().filter(|(n, _)| *n > 0).map(|(n, w)| format!("{n} {w}")).collect();
+        let color = if i.new > 0 { style::REACH } else { style::EDGE_SIDEWAYS };
+        return Some((parts.join(" · "), color));
+    }
+    match c.status {
+        Status::New => Some(("NEW".into(), style::REACH)),
+        Status::Changed => Some((format!("+{} −{}", c.added, c.removed), style::EDGE_SIDEWAYS)),
+        Status::Unchanged => None,
+    }
+}
+
+fn row_delta(c: &Change) -> Option<(String, Color32)> {
+    match c.status {
+        Status::New => Some(("new".into(), style::REACH)),
+        Status::Changed => {
+            let mut d = format!("+{} −{}", c.added, c.removed);
+            if let Some((before, after)) = c.complexity.filter(|(b, a)| a > b) {
+                d.push_str(&format!(" · {before}→{after}"));
+            }
+            Some((d, style::EDGE_SIDEWAYS))
+        }
+        Status::Unchanged => None,
+    }
+}
 
 fn chip_rect(r: Rect) -> Rect {
     Rect::new(r.right() - 100.0, r.y + 6.0, 92.0, 18.0)
@@ -476,6 +532,10 @@ impl Project {
             file_hscroll: HashMap::new(),
             scripted: false,
             scroll_drag: None,
+            review: None,
+            review_job: None,
+            review_dialog: None,
+            review_error: None,
             details_in: Vec::new(),
             pointer: None,
         })
@@ -511,6 +571,9 @@ impl Project {
         }
         self.settings_open |= plan.settings;
         self.shortcuts_open |= plan.shortcuts;
+        if let Some(rev) = &plan.review {
+            self.start_review((rev != "main").then(|| rev.clone()));
+        }
     }
 
     fn set_display(&mut self, key: &SettingKey, on: bool) {
@@ -550,12 +613,83 @@ impl Project {
         }
     }
 
+    fn review_menu(&mut self, ui: &mut egui::Ui) {
+        ui.menu_button("Review", |ui| {
+            if ui.button("Compare with main").on_hover_text("changes since this branch left main, uncommitted work included").clicked() {
+                self.start_review(None);
+            }
+            if ui.button("Compare with…").clicked() {
+                self.review_dialog = Some(String::new());
+            }
+            if self.review.is_some() && ui.button("Exit review").clicked() {
+                self.review = None;
+            }
+        });
+    }
+
+    fn start_review(&mut self, rev: Option<String>) {
+        let (dir, cfg, target) = (self.dir.clone(), self.settings.config(), self.index_path.clone());
+        let cache = srcrelief_index::cache_path(&dir).parent().map(Path::to_path_buf).unwrap_or_else(std::env::temp_dir);
+        let shown = rev.clone().unwrap_or_else(|| "main".into());
+        let (tx, rx) = channel();
+        std::thread::spawn(move || {
+            let result = (|| -> anyhow::Result<(String, Review)> {
+                let base_rev = match &rev {
+                    Some(r) => r.clone(),
+                    None => default_base(&dir)?,
+                };
+                let base = index_revision(&dir, &base_rev, &cfg, &cache, &|_| {})?;
+                let (bf, tf) = (ReliefFile::open(&base.index)?, ReliefFile::open(&target)?);
+                let review = compare(bf.graph(), &base.dir, tf.graph(), &dir);
+                Ok((format!("{} @ {}", rev.unwrap_or_else(|| "main".into()), &base.sha[..7]), review))
+            })();
+            let _ = tx.send(result.map_err(|e| format!("{e:#}")));
+        });
+        self.review_error = None;
+        self.review_job = Some((shown, rx));
+    }
+
+    fn poll_review(&mut self, ctx: &egui::Context) {
+        let Some((_, rx)) = &self.review_job else { return };
+        match rx.try_recv() {
+            Ok(Ok((label, review))) => {
+                let items = review_items(self.file.graph(), &review);
+                let new_arrows = review.new_arrows.iter().copied().collect();
+                self.review = Some(ReviewState { label, review, items, cursor: None, new_arrows });
+                self.review_job = None;
+            }
+            Ok(Err(e)) => {
+                self.review_error = Some(e);
+                self.review_job = None;
+            }
+            Err(_) => ctx.request_repaint_after(std::time::Duration::from_millis(200)),
+        }
+    }
+
+    fn goto_review_item(&mut self, i: usize) {
+        let Some(rv) = &mut self.review else { return };
+        rv.cursor = Some(i);
+        let item = &rv.items[i];
+        if let Some(n) = item.node.or(item.parent) {
+            self.set_focus(n, None, true, true);
+        }
+    }
+
     fn keyboard(&mut self, ui: &egui::Ui) {
         let plain = |k: Key| ui.input(|i| i.key_pressed(k) && !i.modifiers.alt && !i.modifiers.command && !i.modifiers.ctrl);
         let typed = |c: &str| ui.input(|i| i.events.iter().any(|e| matches!(e, egui::Event::Text(t) if t == c)));
         if typed("?") || plain(Key::F1) {
             self.shortcuts_open = true;
             return;
+        }
+        if let Some(rv) = &self.review {
+            let forward = plain(Key::N);
+            if forward || plain(Key::P) {
+                if let Some(i) = review_step(rv.items.len(), rv.cursor, forward) {
+                    self.goto_review_item(i);
+                }
+                return;
+            }
         }
         let pointer = ui.input(|i| i.pointer.hover_pos());
         let page = pointer.and_then(|p| self.file_page_at(p)).or(self.selected.filter(|&s| self.scene.boxes.iter().any(|b| b.node == s && b.source)));
@@ -679,6 +813,25 @@ impl Project {
 
     fn ui(&mut self, ui: &mut egui::Ui) -> Option<Action> {
         let mut action = None;
+        self.poll_review(ui.ctx());
+        if let Some(text) = &mut self.review_dialog {
+            let mut open = true;
+            let mut go = None;
+            egui::Window::new("Compare with").open(&mut open).collapsible(false).resizable(false).anchor(Align2::CENTER_TOP, [0.0, 60.0]).show(ui.ctx(), |ui| {
+                ui.label(egui::RichText::new("Branch, tag or commit to compare the current checkout with").color(style::MUTED));
+                let edit = ui.add(egui::TextEdit::singleline(text).hint_text("main, origin/develop, a1b2c3d…").desired_width(320.0));
+                edit.request_focus();
+                if (ui.button("Compare").clicked() || ui.input(|i| i.key_pressed(Key::Enter))) && !text.trim().is_empty() {
+                    go = Some(text.trim().to_string());
+                }
+            });
+            if let Some(rev) = go {
+                self.review_dialog = None;
+                self.start_review(Some(rev));
+            } else if !open {
+                self.review_dialog = None;
+            }
+        }
         let (jump, open, settings) = ui.input_mut(|i| (i.consume_shortcut(&JUMP), i.consume_shortcut(&OPEN), i.consume_shortcut(&SETTINGS)));
         self.search_open |= jump;
         self.settings_open |= settings;
@@ -773,6 +926,25 @@ impl Project {
         let level = self.scene.deepest_open_at(self.view.center()).map(|n| format!("{:?}", g.kind(n))).unwrap_or_else(|| "Project".into());
         let up = self.cache.get(g.root()).map_or(0, |l| l.up_edges());
         ui.horizontal(|ui| {
+            if let Some((shown, _)) = &self.review_job {
+                ui.spinner();
+                ui.label(egui::RichText::new(format!("Comparing with {shown}…")).color(style::ACCENT));
+                ui.separator();
+            }
+            if let Some(e) = &self.review_error {
+                ui.colored_label(style::EDGE_UP, format!("Review failed: {e}"));
+                ui.separator();
+            }
+            let mut exit = false;
+            if let Some(rv) = &self.review {
+                let t = rv.review.totals();
+                ui.label(egui::RichText::new(format!("REVIEW vs {} · {} new · {} changed · {} removed", rv.label, t.new, t.changed, t.removed)).strong().color(style::ACCENT));
+                exit = ui.link("exit").clicked();
+                ui.separator();
+            }
+            if exit {
+                self.review = None;
+            }
             ui.label(egui::RichText::new(format!("zoom {:.0}% · inside {level}", self.cam.zoom * 100.0)).color(style::MUTED));
             ui.separator();
             let t = &self.totals;
@@ -803,8 +975,51 @@ impl Project {
     fn entries_panel(&mut self, ui: &mut egui::Ui) {
         let mut select: Option<usize> = None;
         let mut fly: Option<NodeId> = None;
+        let mut review_pick: Option<usize> = None;
         egui::ScrollArea::vertical().show(ui, |ui| {
             let g = self.file.graph();
+            if let Some(rv) = &self.review {
+                ui.label(egui::RichText::new(format!("CHANGES ({})  ·  N / P to step", rv.items.len())).small().color(style::ACCENT));
+                let mut groups: Vec<(&str, Vec<usize>)> = Vec::new();
+                for (i, item) in rv.items.iter().enumerate() {
+                    match groups.last_mut() {
+                        Some((g0, v)) if *g0 == item.group.as_str() => v.push(i),
+                        _ => groups.push((item.group.as_str(), vec![i])),
+                    }
+                }
+                for (group, idx) in groups {
+                    egui::CollapsingHeader::new(format!("{group} ({})", idx.len())).id_salt(("review", group)).default_open(true).show(ui, |ui| {
+                        for i in idx {
+                            let item = &rv.items[i];
+                            let color = match item.kind {
+                                ItemKind::New => style::REACH,
+                                ItemKind::Changed => style::EDGE_SIDEWAYS,
+                                ItemKind::Removed => style::EDGE_UP,
+                            };
+                            let text = egui::RichText::new(format!("{}   {}", item.label, item.detail)).color(color);
+                            if ui.selectable_label(rv.cursor == Some(i), text).clicked() {
+                                review_pick = Some(i);
+                            }
+                        }
+                    });
+                }
+                if !rv.review.new_arrows.is_empty() {
+                    ui.add_space(6.0);
+                    ui.label(egui::RichText::new(format!("NEW DEPENDENCIES ({})", rv.review.new_arrows.len())).small().color(style::ACCENT));
+                    for &(a, b) in &rv.review.new_arrows {
+                        if ui.selectable_label(false, egui::RichText::new(format!("{} → {}", g.name(a), g.name(b))).color(style::REACH)).on_hover_text(format!("{} → {}", full_path(g, a), full_path(g, b))).clicked() {
+                            fly = Some(a);
+                        }
+                    }
+                }
+                if !rv.review.removed_arrows.is_empty() {
+                    ui.label(egui::RichText::new(format!("REMOVED DEPENDENCIES ({})", rv.review.removed_arrows.len())).small().color(style::MUTED));
+                    for (a, b) in &rv.review.removed_arrows {
+                        ui.label(egui::RichText::new(format!("{} → {}", a.rsplit('/').next().unwrap_or(a), b.rsplit('/').next().unwrap_or(b))).color(style::MUTED)).on_hover_text(format!("{a} → {b}"));
+                    }
+                }
+                ui.add_space(12.0);
+            }
             ui.label(egui::RichText::new("ENTRY POINTS").small().color(style::MUTED));
             for (gi, group) in self.groups.iter().enumerate() {
                 egui::CollapsingHeader::new(format!("{} ({})", group.label, group.items.len())).id_salt(("group", gi)).default_open(!group.collapsed).show(ui, |ui| {
@@ -856,6 +1071,9 @@ impl Project {
                 });
             }
         });
+        if let Some(i) = review_pick {
+            self.goto_review_item(i);
+        }
         if let Some(i) = select {
             self.select_entry(i);
         }
@@ -1160,6 +1378,9 @@ impl Project {
         let anchor = self.pointer.filter(|_| !self.scripted).map_or(self.view.center(), |p| [p.x, p.y]);
         let open_files: Vec<NodeId> = self.scene.boxes.iter().filter(|b| b.source).map(|b| b.node).collect();
         self.scene = build_scene_at(g, &mut self.cache, &self.cam, self.view, &self.visual, self.focus.as_ref().map(|f| &f.marks), anchor, &open_files);
+        if let Some(rv) = &self.review {
+            review_dim(rv, &mut self.scene);
+        }
         let shown: Vec<(NodeId, f32, f32)> = self.scene.boxes.iter().filter(|b| b.source).filter_map(|b| Some((b.node, b.rect.y, file_font(b.rect.w)? * LINE_SPACING))).collect();
         self.file_scroll.retain(|n, _| shown.iter().any(|(s, _, _)| s == n));
         self.file_hscroll.retain(|n, _| shown.iter().any(|(s, _, _)| s == n));
@@ -1270,6 +1491,14 @@ impl Project {
             Mark::Focus => stroke = Stroke::new(1.5, style::ACCENT),
             Mark::None => {}
         }
+        let change = self.review.as_ref().map(|rv| rv.review.change(b.node));
+        if let Some(c) = change {
+            if c.status == Status::New {
+                stroke = Stroke::new(2.0, style::REACH);
+            } else if c.status == Status::Changed {
+                stroke = Stroke::new(2.0, style::EDGE_SIDEWAYS);
+            }
+        }
         if b.dimmed {
             stroke.color = stroke.color.gamma_multiply(0.3);
         }
@@ -1289,6 +1518,15 @@ impl Project {
         }
         if self.app_counts.contains_key(&b.node) && b.rect.w > 24.0 {
             painter.circle_filled(Pos2::new(b.rect.right() - 9.0, b.rect.y + 9.0), 4.0, style::ENTRY);
+        }
+        if let Some((text, color)) = change.and_then(|c| review_badge(c, b.open)).filter(|_| b.rect.w > 60.0 && b.rect.h > 22.0) {
+            let galley = painter.layout_no_wrap(text, FontId::proportional(10.5), style::BG);
+            let size = galley.size() + egui::vec2(10.0, 4.0);
+            let chip = egui::Rect::from_min_size(r.right_bottom() - size - egui::vec2(5.0, 5.0), size);
+            if chip.left() > r.left() {
+                painter.rect_filled(chip, 7.0, color);
+                painter.galley(chip.center() - galley.size() / 2.0, galley, style::BG);
+            }
         }
     }
 
@@ -1320,6 +1558,13 @@ impl Project {
             Mark::Up => color = style::CALLER,
             Mark::None => {}
         }
+        let introduced = self.review.as_ref().is_some_and(|rv| rv.new_arrows.contains(&(e.a, e.b)));
+        let (width, alpha) = if introduced {
+            color = style::REACH;
+            (width.max(2.5), 1.0)
+        } else {
+            (width, alpha)
+        };
         if e.dimmed && !hovered {
             color = color.gamma_multiply(0.2);
         } else {
@@ -1589,6 +1834,11 @@ impl Project {
             if self.pointer.is_some_and(|p| r.contains(p)) || self.selected == Some(row.node) {
                 clip.rect_filled(r, 0.0, style::ACCENT.gamma_multiply(if self.selected == Some(row.node) { 0.18 } else { 0.08 }));
             }
+            let change = self.review.as_ref().map(|rv| rv.review.change(row.node));
+            let delta = change.and_then(row_delta);
+            if let Some((_, c)) = &delta {
+                clip.rect_filled(r, 0.0, c.gamma_multiply(0.14));
+            }
             let mark = Pos2::new(row.rect.x + size * 0.45, r.center().y);
             if srcrelief_layout::is_constructor(g, row.node) {
                 let d = size * 0.28;
@@ -1606,7 +1856,13 @@ impl Project {
             let base = if g.name(row.node) == "<init>" { g.parent(row.node).map_or("<init>", |t| g.name(t)) } else { g.name(row.node) };
             let vis = g.visibility(row.node).uml();
             let shown = if vis.is_empty() { format!("{base}()") } else { format!("{vis} {base}()") };
-            let pill = self.complexity_pill(&clip, Pos2::new(row.rect.right(), r.center().y), g.complexity(row.node), size);
+            let mut pill = self.complexity_pill(&clip, Pos2::new(row.rect.right(), r.center().y), g.complexity(row.node), size);
+            if let Some((d, c)) = delta {
+                let galley = clip.layout_no_wrap(d, FontId::proportional(size * 0.85), c);
+                let w = galley.size().x;
+                clip.galley(Pos2::new(row.rect.right() - pill - w, r.center().y - galley.size().y / 2.0), galley, c);
+                pill += w + size * 0.4;
+            }
             let text = fit_label(&shown, row.rect.w - size * 1.4 - pill, size);
             clip.text(Pos2::new(row.rect.x + size * 1.1, r.center().y), Align2::LEFT_CENTER, text, font.clone(), color);
         }

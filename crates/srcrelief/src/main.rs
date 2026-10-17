@@ -19,6 +19,8 @@ struct Args {
     zoom: Option<f64>,
     #[arg(long, help = "With --screenshot: open the shortcuts cheatsheet")]
     shortcuts: bool,
+    #[arg(long, help = "With --screenshot: compare with this revision (\"main\" for the merge-base with main)")]
+    review: Option<String>,
 }
 
 fn main() -> eframe::Result {
@@ -28,6 +30,6 @@ fn main() -> eframe::Result {
         renderer: eframe::Renderer::Wgpu,
         ..Default::default()
     };
-    let shot = args.screenshot.map(|path| srcrelief::shot::ShotPlan { path, focus: args.focus, entry: args.entry, settings: args.settings, zoom: args.zoom, shortcuts: args.shortcuts });
+    let shot = args.screenshot.map(|path| srcrelief::shot::ShotPlan { path, focus: args.focus, entry: args.entry, settings: args.settings, zoom: args.zoom, shortcuts: args.shortcuts, review: args.review });
     eframe::run_native("SrcRelief", options, Box::new(move |cc| Ok(Box::new(srcrelief::app::ReliefApp::new(cc, args.dir, args.config, shot)))))
 }

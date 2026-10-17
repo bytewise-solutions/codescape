@@ -12,6 +12,7 @@ pub struct ShotPlan {
     pub settings: bool,
     pub zoom: Option<f64>,
     pub shortcuts: bool,
+    pub review: Option<String>,
 }
 
 pub struct Shot {

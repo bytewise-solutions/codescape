@@ -7,6 +7,7 @@ pub mod inspector;
 pub mod minimap;
 pub mod panels;
 pub mod reach;
+pub mod review_view;
 pub mod search;
 pub mod settings_window;
 pub mod shot;

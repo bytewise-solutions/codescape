@@ -4,6 +4,7 @@ mod input;
 mod inspector;
 mod panels;
 mod reach;
+mod review;
 mod scene;
 mod search;
 mod source;

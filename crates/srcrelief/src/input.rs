@@ -89,6 +89,13 @@ pub const CHEATSHEET: &[(&str, &[(&str, &str)])] = &[
         ],
     ),
     (
+        "Review",
+        &[
+            ("Review ▸ Compare with main", "see what this checkout changed since it left main"),
+            ("N / P", "next / previous change"),
+        ],
+    ),
+    (
         "Windows",
         &[("Ctrl+O", "open a folder"), ("Ctrl+,", "project settings"), ("? or F1", "this cheatsheet")],
     ),

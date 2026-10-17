@@ -96,6 +96,14 @@ enough to read.
   non-default `case` or extra `match` arm, `catch`, ternary, `&&`, `||`, `??`). From 10 a method row or function box
   carries an amber number, red from 20; a card's header shows its highest. The right panel gives the exact value.
   **View ▸ Complexity hints** turns them off.
+- **Review mode.** **Review ▸ Compare with main** compares the checkout, uncommitted changes included, with the
+  point where it left `main` (or `master`); **Compare with…** takes any branch, tag or commit. The base is checked out
+  in a git worktree under the cache folder and indexed there once; your checkout is never touched. Blocks are matched
+  by their names: new ones are outlined green with `NEW`, changed ones amber with `+added −removed` lines, the rest
+  dimmed. Open boxes add up what changed inside them (`2 new · 3 changed · 1 removed`), card rows are tinted with
+  their line counts and any complexity increase (`· 4→9`), and arrows the change introduced are drawn green. The left
+  panel lists every change grouped by package, then new and removed dependencies; click one to fly to it, or step
+  through them with `N` / `P`. Renamed or moved blocks show as removed plus new.
 - **Constructors live inside their type.** A Go `func NewX(...) *X` is a row of `X`'s card, not a box of its own.
 - **Dependency injection is set aside.** Code recognised as wiring (Google Wire's generated injectors and provider
   sets, Dagger components/modules) is hidden with its arrows, so it never changes the layering. Tick **View ▸ Wiring**
@@ -126,11 +134,11 @@ Prints modules, their links, entry points grouped as in the viewer, the call-res
 ### Screenshots without a person at the window
 
 ```sh
-srcrelief <dir> --screenshot out.png [--focus NAME] [--entry LABEL] [--zoom FACTOR] [--settings]
+srcrelief <dir> --screenshot out.png [--focus NAME] [--entry LABEL] [--zoom FACTOR] [--settings] [--review REV]
 ```
 
-Renders one frame after zooming to the first node matching `NAME`, selecting an entry point and/or opening the
-settings window, writes a PNG and exits.
+Renders one frame after zooming to the first node matching `NAME`, selecting an entry point, opening the settings
+window and/or comparing with `REV` (`main` for the merge-base), writes a PNG and exits.
 
 ## Project settings (optional)
 
