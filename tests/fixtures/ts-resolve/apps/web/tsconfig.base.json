@@ -1,0 +1,7 @@
+{
+  // paths live in the base config
+  "compilerOptions": {
+    "baseUrl": ".",
+    "paths": { "@app/*": ["src/app/*"], },
+  },
+}

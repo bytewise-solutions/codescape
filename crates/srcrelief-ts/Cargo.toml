@@ -14,6 +14,7 @@ tree-sitter-typescript.workspace = true
 tree-sitter-javascript.workspace = true
 rayon.workspace = true
 globset.workspace = true
+serde_json.workspace = true
 
 [dev-dependencies]
 tempfile.workspace = true
