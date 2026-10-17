@@ -72,7 +72,7 @@ pub struct RsFn {
     pub complexity: u16,
     pub ret: Option<String>,
     pub generics: Vec<(String, String)>,
-    pub locals: Vec<(String, Expr)>,
+    pub locals: Vec<(String, Expr, (u32, u32))>,
     pub calls: Vec<RsCall>,
     pub start_line: u32,
     pub end_line: u32,
@@ -83,6 +83,7 @@ pub enum Expr {
     Ty(String),
     Var(String, Vec<String>),
     Call(Box<Callee>),
+    Elem(Box<Expr>),
     Unknown,
 }
 
@@ -105,6 +106,13 @@ pub struct RsCall {
 
 const WRAPPERS: &[&str] = &["Box", "Rc", "Arc", "Option"];
 const RESULTS: &[&str] = &["Box", "Rc", "Arc", "Option", "Result"];
+const COLLECTIONS: &[&str] = &["Vec", "VecDeque", "HashSet", "BTreeSet", "IndexSet", "BinaryHeap", "LinkedList", "SmallVec"];
+const MAPS: &[&str] = &["HashMap", "BTreeMap", "IndexMap"];
+const CLOSURE_ON_ELEMENTS: &[&str] = &[
+    "map", "filter", "filter_map", "flat_map", "for_each", "any", "all", "find", "find_map", "position", "take_while", "skip_while", "inspect",
+    "max_by_key", "min_by_key", "sort_by_key", "sort_unstable_by_key", "retain", "partition", "and_then", "is_some_and", "is_none_or", "map_or",
+    "map_or_else", "unwrap_or_else", "then",
+];
 
 pub fn parse_rust(src: &[u8]) -> RsFile {
     let mut parser = Parser::new();
@@ -290,9 +298,16 @@ impl<'s> Ctx<'s> {
             "reference_type" | "pointer_type" => n.child_by_field_name("type").map(|t| self.type_name(t, wrappers)).unwrap_or_default(),
             "dynamic_type" | "abstract_type" => n.child_by_field_name("trait").map(|t| self.type_name(t, wrappers)).unwrap_or_default(),
             "bounded_type" => named_children(n).first().map(|t| self.type_name(*t, wrappers)).unwrap_or_default(),
+            "array_type" => n.child_by_field_name("element").map(|t| format!("[{}]", self.type_name(t, wrappers))).unwrap_or_default(),
             "generic_type" => {
                 let base = n.child_by_field_name("type").and_then(|t| self.path_segments(t)).unwrap_or_default();
-                if base.last().is_some_and(|l| wrappers.contains(&l.as_str())) {
+                let last = base.last().map_or("", String::as_str);
+                if COLLECTIONS.contains(&last) || MAPS.contains(&last) {
+                    let args: Vec<Node> = n.child_by_field_name("type_arguments").map(|a| named_children(a).into_iter().filter(|x| x.kind() != "lifetime").collect()).unwrap_or_default();
+                    let element = if MAPS.contains(&last) { args.get(1) } else { args.first() };
+                    return element.map(|t| format!("[{}]", self.type_name(*t, wrappers))).unwrap_or_default();
+                }
+                if wrappers.contains(&last) {
                     if let Some(arg) = n.child_by_field_name("type_arguments").and_then(|a| named_children(a).into_iter().find(|x| x.kind() != "lifetime")) {
                         return self.type_name(arg, wrappers);
                     }
@@ -458,7 +473,7 @@ impl<'s> Ctx<'s> {
             match n.kind() {
                 "function_item" => {
                     if let Some(name) = n.child_by_field_name("name") {
-                        f.locals.push((self.text(name).to_string(), Expr::Unknown));
+                        f.locals.push((self.text(name).to_string(), Expr::Unknown, (0, u32::MAX)));
                     }
                     continue;
                 }
@@ -466,6 +481,12 @@ impl<'s> Ctx<'s> {
                 "call_expression" => {
                     if let Some(call) = self.call(n) {
                         f.calls.push(call);
+                    }
+                    f.locals.extend(self.closure_elements(n));
+                }
+                "for_expression" => {
+                    if let (Some(name), Some(value)) = (n.child_by_field_name("pattern").and_then(|p| self.binding(p)), n.child_by_field_name("value")) {
+                        f.locals.push((name, Expr::Elem(Box::new(self.expr(value))), (line(n), end_line(n))));
                     }
                 }
                 "struct_expression" => {
@@ -477,7 +498,8 @@ impl<'s> Ctx<'s> {
                     if let Some(name) = n.child_by_field_name("pattern").and_then(|p| self.binding(p)) {
                         let ty = n.child_by_field_name("type").map(|t| Expr::Ty(self.type_name(t, WRAPPERS))).filter(|e| *e != Expr::Ty(String::new()));
                         let expr = ty.or_else(|| n.child_by_field_name("value").map(|v| self.expr(v))).unwrap_or(Expr::Unknown);
-                        f.locals.push((name, expr));
+                        let block = std::iter::successors(n.parent(), |p| p.parent()).find(|p| p.kind() == "block").unwrap_or(n);
+                        f.locals.push((name, expr, (line(n), end_line(block))));
                     }
                 }
                 _ => {}
@@ -487,10 +509,26 @@ impl<'s> Ctx<'s> {
         }
     }
 
+    fn closure_elements(&self, call: Node) -> Vec<(String, Expr, (u32, u32))> {
+        let Some(func) = call.child_by_field_name("function").filter(|f| f.kind() == "field_expression") else { return Vec::new() };
+        let (Some(method), Some(value)) = (func.child_by_field_name("field"), func.child_by_field_name("value")) else { return Vec::new() };
+        if !CLOSURE_ON_ELEMENTS.contains(&self.text(method)) {
+            return Vec::new();
+        }
+        let receiver = self.expr(value);
+        let args = call.child_by_field_name("arguments").map(named_children).unwrap_or_default();
+        args.into_iter()
+            .filter(|a| a.kind() == "closure_expression")
+            .filter_map(|c| Some((c, named_children(c.child_by_field_name("parameters")?).into_iter().next()?)))
+            .filter_map(|(c, p)| Some((c, self.binding(p.child_by_field_name("pattern").unwrap_or(p))?)))
+            .map(|(c, name)| (name, Expr::Elem(Box::new(receiver.clone())), (line(c), end_line(c))))
+            .collect()
+    }
+
     fn binding(&self, p: Node) -> Option<String> {
         match p.kind() {
             "identifier" => Some(self.text(p).to_string()),
-            "mut_pattern" | "ref_pattern" => named_children(p).into_iter().find_map(|c| self.binding(c)),
+            "mut_pattern" | "ref_pattern" | "reference_pattern" => named_children(p).into_iter().find_map(|c| self.binding(c)),
             _ => None,
         }
     }

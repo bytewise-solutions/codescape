@@ -26,7 +26,20 @@ const SELF_RETURNING: &[&str] = &["default", "from", "try_from", "from_str"];
 
 const BUILTIN_CALLS: &[&str] = &["Some", "Ok", "Err", "drop"];
 
-const PASS_THROUGH: &[&str] = &["unwrap", "expect", "unwrap_or_default", "clone", "to_owned", "as_ref", "as_mut", "borrow", "borrow_mut"];
+const PASS_THROUGH: &[&str] = &[
+    "unwrap", "expect", "unwrap_or_default", "unwrap_or", "unwrap_or_else", "clone", "to_owned", "as_ref", "as_mut", "borrow", "borrow_mut",
+    "map_err", "context", "with_context", "ok_or", "ok_or_else", "cloned", "copied", "as_deref", "as_deref_mut", "lock", "to_vec",
+];
+
+const ITER_KEEP: &[&str] = &[
+    "iter", "iter_mut", "into_iter", "filter", "rev", "skip", "take", "chain", "peekable", "skip_while", "take_while", "inspect", "step_by",
+    "values", "values_mut", "into_values", "drain", "cycle", "fuse",
+];
+
+const ELEMENT_PICK: &[&str] = &[
+    "first", "last", "get", "get_mut", "first_mut", "last_mut", "next", "next_back", "pop", "pop_front", "pop_back", "front", "back", "find", "nth",
+    "max_by_key", "min_by_key", "max_by", "min_by", "max", "min", "remove", "swap_remove",
+];
 
 const STD_METHODS: &[&str] = &[
     "clone", "clone_from", "to_string", "to_owned", "fmt", "eq", "ne", "cmp", "partial_cmp", "lt", "le", "gt", "ge", "hash", "into", "from",
@@ -66,6 +79,7 @@ enum Item {
 #[derive(Clone, Debug)]
 enum TypeRef {
     Project(usize),
+    Elements(usize),
     External(String),
     Opaque,
 }
@@ -215,6 +229,7 @@ struct FnCtx<'f> {
     scope: Scope,
     module: usize,
     imported: &'f HashSet<usize>,
+    at: u32,
 }
 
 impl<'a> Resolver<'a> {
@@ -783,6 +798,12 @@ impl<'a> Resolver<'a> {
         if let Some((_, bound)) = generics.iter().find(|(g, _)| g == s) {
             return self.resolve_ty(pkg, bound, self_ty, &[]);
         }
+        if let Some(inner) = s.strip_prefix('[').and_then(|r| r.strip_suffix(']')) {
+            return Some(match self.resolve_ty(pkg, inner, self_ty, generics) {
+                Some(TypeRef::Project(t)) => TypeRef::Elements(t),
+                _ => TypeRef::Opaque,
+            });
+        }
         match self.resolve_path(pkg, &segments(s), 0)? {
             Item::Type(t) => Some(TypeRef::Project(t)),
             Item::Ext(x) => Some(TypeRef::External(x)),
@@ -795,29 +816,30 @@ impl<'a> Resolver<'a> {
         self.resolve_ty(f.pkg, f.ret.as_deref()?, f.owner, &f.generics)
     }
 
-    fn var_type(&self, cx: &FnCtx, name: &str, upto: usize, depth: u32) -> Option<TypeRef> {
+    fn var_type(&self, cx: &FnCtx, name: &str, upto: usize, at: u32, depth: u32) -> Option<TypeRef> {
         if name == "self" {
             return cx.self_ty.map(TypeRef::Project);
         }
-        if let Some(i) = cx.f.locals[..upto].iter().rposition(|(n, _)| n == name) {
-            return self.expr_type(cx, &cx.f.locals[i].1, i, depth + 1);
+        let local = cx.f.locals[..upto].iter().enumerate().filter(|(_, (n, _, (from, to)))| n == name && (*from..=*to).contains(&at)).max_by_key(|(i, (_, _, (from, _)))| (*from, *i));
+        if let Some((i, (_, expr, (from, _)))) = local {
+            return self.expr_type(cx, expr, i, *from, depth + 1);
         }
         let (_, ty) = cx.f.params.iter().find(|(n, _)| n == name)?;
         self.resolve_ty(cx.pkg, ty, cx.self_ty, &cx.f.generics)
     }
 
-    fn expr_type(&self, cx: &FnCtx, e: &Expr, upto: usize, depth: u32) -> Option<TypeRef> {
+    fn expr_type(&self, cx: &FnCtx, e: &Expr, upto: usize, at: u32, depth: u32) -> Option<TypeRef> {
         if depth > MAX_DEPTH {
             return None;
         }
         match e {
             Expr::Ty(s) => self.resolve_ty(cx.pkg, s, cx.self_ty, &cx.f.generics),
             Expr::Var(head, fields) => {
-                let mut cur = self.var_type(cx, head, upto, depth)?;
+                let mut cur = self.var_type(cx, head, upto, at, depth)?;
                 for f in fields {
                     cur = match cur {
                         TypeRef::Project(t) => self.field_type(t, f)?,
-                        TypeRef::External(_) | TypeRef::Opaque => TypeRef::Opaque,
+                        TypeRef::Elements(_) | TypeRef::External(_) | TypeRef::Opaque => TypeRef::Opaque,
                     };
                 }
                 Some(cur)
@@ -830,12 +852,23 @@ impl<'a> Resolver<'a> {
                     Item::Ext(_) => Some(TypeRef::Opaque),
                     _ => None,
                 },
-                Callee::Method(recv, name) if PASS_THROUGH.contains(&name.as_str()) => self.expr_type(cx, recv, upto, depth + 1),
-                Callee::Method(recv, name) => match self.expr_type(cx, recv, upto, depth + 1)? {
-                    TypeRef::Project(t) => self.lookup_method(t, name).and_then(|(_, f)| self.fn_ret(f)),
-                    TypeRef::External(_) | TypeRef::Opaque => Some(TypeRef::Opaque),
-                },
+                Callee::Method(recv, name) => {
+                    let recv = self.expr_type(cx, recv, upto, at, depth + 1)?;
+                    let name = name.as_str();
+                    match recv {
+                        TypeRef::Project(t) if self.lookup_method(t, name).is_some() => self.lookup_method(t, name).and_then(|(_, f)| self.fn_ret(f)),
+                        _ if PASS_THROUGH.contains(&name) => Some(recv),
+                        TypeRef::Elements(_) if ITER_KEEP.contains(&name) => Some(recv),
+                        TypeRef::Elements(t) if ELEMENT_PICK.contains(&name) => Some(TypeRef::Project(t)),
+                        TypeRef::Project(_) => None,
+                        _ => Some(TypeRef::Opaque),
+                    }
+                }
                 _ => None,
+            },
+            Expr::Elem(of) => match self.expr_type(cx, of, upto, at, depth + 1)? {
+                TypeRef::Elements(t) | TypeRef::Project(t) => Some(TypeRef::Project(t)),
+                _ => Some(TypeRef::Opaque),
             },
             Expr::Unknown => None,
         }
@@ -921,7 +954,7 @@ impl<'a> Resolver<'a> {
                 cf.method = name.clone();
                 if segs.len() > 1 {
                     cf.receiver_var = Some(segs[..segs.len() - 1].join("::"));
-                } else if BUILTIN_CALLS.contains(&name.as_str()) || cx.f.params.iter().any(|(n, _)| *n == name) || cx.f.locals.iter().any(|(n, _)| *n == name) {
+                } else if BUILTIN_CALLS.contains(&name.as_str()) || cx.f.params.iter().any(|(n, _)| *n == name) || cx.f.locals.iter().any(|(n, _, _)| *n == name) {
                     return cf;
                 }
                 match self.resolve_callee(cx, segs) {
@@ -948,7 +981,7 @@ impl<'a> Resolver<'a> {
                 if let Expr::Var(head, _) = recv {
                     cf.receiver_var = Some(head.clone());
                 }
-                match self.expr_type(cx, recv, cx.f.locals.len(), 0) {
+                match self.expr_type(cx, recv, cx.f.locals.len(), cx.at, 0) {
                     Some(TypeRef::Project(t)) => {
                         cf.receiver_type = Some(self.types[t].fqn.clone());
                         match self.lookup_method(t, name) {
@@ -957,11 +990,15 @@ impl<'a> Resolver<'a> {
                             None => self.unknown_receiver(cx, name, false, &mut cf),
                         }
                     }
+                    Some(TypeRef::Elements(t)) => {
+                        cf.receiver_type = Some(format!("[{}]", self.types[t].fqn));
+                        self.stats.resolved += 1;
+                    }
                     Some(TypeRef::External(s)) => {
                         cf.receiver_type = Some(s);
                         self.stats.resolved += 1;
                     }
-                    Some(TypeRef::Opaque) => self.unknown_receiver(cx, name, false, &mut cf),
+                    Some(TypeRef::Opaque) => self.stats.resolved += 1,
                     None => self.unknown_receiver(cx, name, true, &mut cf),
                 }
             }
@@ -1043,8 +1080,9 @@ impl<'a> Resolver<'a> {
                     overrides_external: occ.overrides_external.clone(),
                 });
                 let test = is_test || self.b.flags(node).contains(NodeFlags::TEST);
-                let cx = FnCtx { pkg: occ.pkg, self_ty: owner, f: func, caller: node, scope: if test { Scope::Test } else { Scope::Main }, module: f.module, imported: &imported };
+                let mut cx = FnCtx { pkg: occ.pkg, self_ty: owner, f: func, caller: node, scope: if test { Scope::Test } else { Scope::Main }, module: f.module, imported: &imported, at: 0 };
                 for call in &func.calls {
+                    cx.at = call.line;
                     let cf = self.resolve_call(&cx, call);
                     ff.calls.push(cf);
                 }

@@ -503,11 +503,11 @@ fn unknown_receivers_guess_only_into_imported_crates() {
     let module_nodes: Vec<NodeId> = d.modules.iter().map(|m| b.add_node(b.root(), NodeKind::Module, SubKind::None, &m.name, m.lang)).collect();
     let mut facts = ProjectFacts::default();
     let stats = extract_rust(&d, &module_nodes, &default_excludes(), &mut b, &mut facts);
-    assert_eq!((stats.resolved, stats.guessed, stats.unresolved), (1, 1, 3), "a method nothing defines is not resolved by elimination");
+    assert_eq!((stats.resolved, stats.guessed, stats.unresolved), (4, 0, 1), "only the call on an unknown type is unresolved: nothing is resolved by elimination");
     let target = at(&b, &["a", "(lib)", "Thing", "unique_name"]);
-    let guessed: Vec<&str> = b.edges().iter().filter(|e| e.to == target).map(|e| b.name(e.from)).collect();
-    assert_eq!(guessed, ["k"]);
-    assert_eq!(b.edges().iter().find(|e| e.to == target).unwrap().confidence, Confidence::Guessed);
+    let callers: Vec<&str> = b.edges().iter().filter(|e| e.to == target).map(|e| b.name(e.from)).collect();
+    assert_eq!(callers, ["k"], "u8 elements have no unique_name, so h is not guessed into a");
+    assert_eq!(b.edges().iter().find(|e| e.to == target).unwrap().confidence, Confidence::Resolved, "Vec<Thing> elements are Things");
 }
 
 #[test]
@@ -578,4 +578,118 @@ fn functions_carry_their_cyclomatic_complexity() {
     extract_rust(&d, &module_nodes, &default_excludes(), &mut b, &mut facts);
     assert_eq!(b.complexity(at(&b, &["cx", "(lib)", "easy"])), 1);
     assert_eq!(b.complexity(at(&b, &["cx", "(lib)", "hard"])), 8, "if && for if || and two extra match arms");
+}
+
+#[test]
+fn derive_generated_types_resolve_from_another_crate() {
+    let tmp = tempfile::tempdir().unwrap();
+    let r = tmp.path();
+    write(r, "Cargo.toml", "[workspace]\nmembers = [\"fmt\", \"app\"]\n");
+    write(r, "fmt/Cargo.toml", "[package]\nname = \"fmt\"\n");
+    write(r, "fmt/src/lib.rs", "mod model;\nmod file;\npub use model::*;\n");
+    write(r, "fmt/src/model.rs", "#[derive(Archive)]\npub struct Graph;\n");
+    write(r, "fmt/src/file.rs", "use crate::model::*;\nimpl ArchivedGraph {\n    pub fn path(&self) -> u32 { 1 }\n}\n");
+    write(r, "app/Cargo.toml", "[package]\nname = \"app\"\n\n[dependencies]\nfmt = { path = \"../fmt\" }\n");
+    write(r, "app/src/lib.rs", "use fmt::ArchivedGraph;\npub fn f(g: &ArchivedGraph) -> u32 {\n    g.path()\n}\n");
+    let d = discover(r, &default_excludes()).unwrap();
+    let mut b = GraphBuilder::new("derive");
+    let module_nodes: Vec<NodeId> = d.modules.iter().map(|m| b.add_node(b.root(), NodeKind::Module, SubKind::None, &m.name, m.lang)).collect();
+    let mut facts = ProjectFacts::default();
+    let stats = extract_rust(&d, &module_nodes, &default_excludes(), &mut b, &mut facts);
+    let f = at(&b, &["app", "(lib)", "f"]);
+    let path = at(&b, &["fmt", "file", "ArchivedGraph", "path"]);
+    assert!(edge(&b, f, path, EdgeKind::Calls).is_some_and(|e| e.confidence == Confidence::Resolved), "{stats:?}");
+}
+
+const BAG: &str = r#"
+pub struct Item {
+    pub name: String,
+}
+
+impl Item {
+    pub fn weight(&self) -> u32 { 1 }
+}
+
+pub struct Bag {
+    pub items: Vec<Item>,
+}
+
+impl Bag {
+    pub fn open(p: &str) -> Result<Bag, String> {
+        Ok(Bag { items: Vec::new() })
+    }
+
+    pub fn looped(&self) -> u32 {
+        let mut t = 0;
+        for i in &self.items {
+            t += i.weight();
+        }
+        t
+    }
+
+    pub fn mapped(&self) -> u32 {
+        self.items.iter().filter(|i| i.weight() > 0).map(|i| i.weight()).sum()
+    }
+
+    pub fn picked(&self) -> u32 {
+        let first = self.items.first().unwrap();
+        first.weight() + self.items.get(1).map(|i| i.weight()).unwrap_or(0)
+    }
+
+    pub fn shadowed(bag: &Bag) -> u32 {
+        let b = Bag::open("x").unwrap();
+        let n = bag.items.iter().filter(|b| b.weight() > 0).count() as u32;
+        b.looped() + n
+    }
+
+    pub fn load() -> Result<u32, String> {
+        let b = Bag::open("x").map_err(|e| e.to_string())?;
+        Ok(b.looped())
+    }
+}
+"#;
+
+#[test]
+fn loop_and_closure_variables_take_the_element_type_and_adapters_keep_it() {
+    let tmp = tempfile::tempdir().unwrap();
+    let r = tmp.path();
+    write(r, "Cargo.toml", "[package]\nname = \"bag\"\n");
+    write(r, "src/lib.rs", BAG);
+    let d = discover(r, &default_excludes()).unwrap();
+    let mut b = GraphBuilder::new("bag");
+    let module_nodes: Vec<NodeId> = d.modules.iter().map(|m| b.add_node(b.root(), NodeKind::Module, SubKind::None, &m.name, m.lang)).collect();
+    let mut facts = ProjectFacts::default();
+    extract_rust(&d, &module_nodes, &default_excludes(), &mut b, &mut facts);
+    let n = |p: &[&str]| at(&b, p);
+    let weight = n(&["bag", "(lib)", "Item", "weight"]);
+    for caller in ["looped", "mapped", "picked"] {
+        let e = edge(&b, n(&["bag", "(lib)", "Bag", caller]), weight, EdgeKind::Calls);
+        assert!(e.is_some_and(|e| e.confidence == Confidence::Resolved), "{caller} calls Item::weight");
+    }
+    let shadowed = n(&["bag", "(lib)", "Bag", "shadowed"]);
+    assert!(edge(&b, shadowed, weight, EdgeKind::Calls).is_some(), "the closure's b is an Item");
+    assert!(edge(&b, shadowed, n(&["bag", "(lib)", "Bag", "looped"]), EdgeKind::Calls).is_some(), "after the closure, b is the Bag again");
+    let load = n(&["bag", "(lib)", "Bag", "load"]);
+    assert!(edge(&b, load, n(&["bag", "(lib)", "Bag", "looped"]), EdgeKind::Calls).is_some_and(|e| e.confidence == Confidence::Resolved), "map_err(...)? keeps Bag");
+}
+
+#[test]
+fn integration_tests_resolve_calls_into_their_crate_dependencies() {
+    let tmp = tempfile::tempdir().unwrap();
+    let r = tmp.path();
+    write(r, "Cargo.toml", "[workspace]\nmembers = [\"fmt\", \"app\"]\n\n[workspace.dependencies]\nmy-fmt = { path = \"fmt\" }\n");
+    write(r, "fmt/Cargo.toml", "[package]\nname = \"my-fmt\"\n");
+    write(r, "fmt/src/lib.rs", "mod builder;\npub use builder::{GraphBuilder, Kind};\n");
+    write(r, "fmt/src/builder.rs", "pub enum Kind { A }\npub struct GraphBuilder;\nimpl GraphBuilder {\n    pub fn new(name: &str) -> GraphBuilder { GraphBuilder }\n    pub fn root(&self) -> u32 { 0 }\n    pub fn add_node(&mut self, parent: u32, kind: Kind) -> u32 { parent }\n}\n");
+    write(r, "app/Cargo.toml", "[package]\nname = \"app\"\n\n[dependencies]\nmy-fmt.workspace = true\n");
+    write(r, "app/src/lib.rs", "pub fn x() {}\n");
+    write(r, "app/tests/all.rs", "mod scene;\n");
+    write(r, "app/tests/scene.rs", "use my_fmt::*;\n\n#[test]\nfn builds() {\n    let mut b = GraphBuilder::new(\"p\");\n    let m = b.add_node(b.root(), Kind::A);\n}\n");
+    let d = discover(r, &default_excludes()).unwrap();
+    let mut b = GraphBuilder::new("it");
+    let module_nodes: Vec<NodeId> = d.modules.iter().map(|m| b.add_node(b.root(), NodeKind::Module, SubKind::None, &m.name, m.lang)).collect();
+    let mut facts = ProjectFacts::default();
+    let stats = extract_rust(&d, &module_nodes, &default_excludes(), &mut b, &mut facts);
+    let targets: Vec<&str> = b.edges().iter().filter(|e| e.kind == EdgeKind::Calls && b.name(e.from) == "builds").map(|e| b.name(e.to)).collect();
+    assert!(targets.contains(&"add_node") && targets.contains(&"root"), "{targets:?} {stats:?}");
 }
