@@ -108,6 +108,11 @@ fn crate_targets_and_extern_names() {
     assert_eq!(core.lib_name, "core_lib");
     assert_eq!(core.lib, Some(d.modules[index(&d, "core-lib")].dir.join("src/lib.rs")));
     assert!(core.bins.is_empty());
+    assert_eq!(core.externs, ["serde"]);
+    assert_eq!(c.examples, [("demo".to_string(), dir.join("examples/demo.rs"))]);
+    assert_eq!(c.tests, [("it".to_string(), dir.join("tests/it.rs"))]);
+    assert_eq!(c.benches, [("b".to_string(), dir.join("benches/b.rs"))]);
+    assert_eq!(c.build_script, None);
 }
 
 #[test]

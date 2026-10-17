@@ -10,6 +10,7 @@ pub struct CargoCrate {
     pub lib: Option<PathBuf>,
     pub bins: Vec<(String, PathBuf)>,
     pub deps: Vec<(String, usize)>,
+    pub externs: Vec<String>,
     pub examples: Vec<(String, PathBuf)>,
     pub tests: Vec<(String, PathBuf)>,
     pub benches: Vec<(String, PathBuf)>,
@@ -78,9 +79,13 @@ fn dep_tables(t: &Table) -> impl Iterator<Item = (&Table, Scope)> {
         .filter_map(|(key, scope)| Some((t.get(key)?.as_table()?, scope)))
 }
 
-fn dependencies(m: &Manifest, ws: Option<&Manifest>) -> Vec<(String, PathBuf, Scope)> {
+fn all_dep_tables(m: &Manifest) -> Vec<(&Table, Scope)> {
     let targets = m.table.get("target").and_then(Value::as_table).into_iter().flat_map(|t| t.values()).filter_map(Value::as_table);
-    let tables: Vec<(&Table, Scope)> = dep_tables(&m.table).chain(targets.flat_map(dep_tables)).collect();
+    dep_tables(&m.table).chain(targets.flat_map(dep_tables)).collect()
+}
+
+fn dependencies(m: &Manifest, ws: Option<&Manifest>) -> Vec<(String, PathBuf, Scope)> {
+    let tables = all_dep_tables(m);
     let ws_deps = ws.and_then(|w| Some((w, w.table.get("workspace")?.get("dependencies")?.as_table()?)));
     let mut out = Vec::new();
     for (table, scope) in tables {
@@ -205,6 +210,7 @@ pub fn cargo_crate(d: &Discovery, module: usize) -> CargoCrate {
         lib,
         bins,
         deps,
+        externs: all_dep_tables(&manifest).iter().flat_map(|(t, _)| t.keys()).map(|k| k.replace('-', "_")).collect(),
         examples: rs_targets(&m.dir.join("examples")),
         tests: rs_targets(&m.dir.join("tests")),
         benches: rs_targets(&m.dir.join("benches")),
