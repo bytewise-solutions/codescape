@@ -662,3 +662,16 @@ fn details_can_be_opened_for_one_container_and_closed_again() {
     let global = layout_container(gr, pkg, &[], &LayoutOptions { show_details: true, ..Default::default() });
     assert_eq!(global.shown_details, 0, "View > Details is not undone from a box");
 }
+
+#[test]
+fn revealing_a_detail_opens_its_container_details() {
+    let g = ports();
+    let gr = g.file.graph();
+    let pkg = gr.children(gr.root()).start;
+    let mut opts = LayoutOptions::default();
+    assert!(opts.hides(gr, g.ids["Price"]));
+    assert!(opts.reveal(gr, g.ids["Price"]));
+    assert_eq!(opts.details_in, [pkg]);
+    assert!(!opts.hides(gr, g.ids["Price"]));
+    assert!(!opts.reveal(gr, g.ids["Handler"]), "a visible box needs nothing");
+}

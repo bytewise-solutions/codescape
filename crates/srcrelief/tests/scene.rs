@@ -315,14 +315,28 @@ fn only_the_type_being_zoomed_into_opens_as_a_file() {
     let api = node(g, &["left", "left.api", "T"]);
     let imp = node(g, &["left", "left.impl", "T"]);
     let r = world_rect(g, &mut cache, api).unwrap();
-    let wide = Camera::fit(r, Rect::new(0.0, 0.0, 1200.0 * 0.5, 800.0 * 0.5));
-    let at = |p: [f32; 2]| build_scene_at(g, &mut LayoutCache::new(Vec::new(), LayoutOptions::default()), &wide, VIEW, &VisualRules::default(), None, p);
+    let wide = Camera::fit(r, Rect::new(0.0, 0.0, 1200.0 * 0.35, 800.0 * 0.35));
+    let at = |p: [f32; 2]| build_scene_at(g, &mut LayoutCache::new(Vec::new(), LayoutOptions::default()), &wide, VIEW, &VisualRules::default(), None, p, &[]);
     let s = at([600.0, 400.0]);
-    assert!(s.boxes.iter().all(|b| !b.source), "a type filling half the view stays boxes");
+    assert!(s.boxes.iter().all(|b| !b.source), "a type filling a third of the view stays boxes");
     let close = Camera::fit(r, VIEW);
-    let elsewhere = build_scene_at(g, &mut cache, &close, VIEW, &VisualRules::default(), None, [-50.0, -50.0]);
+    let elsewhere = build_scene_at(g, &mut cache, &close, VIEW, &VisualRules::default(), None, [-50.0, -50.0], &[]);
     assert!(elsewhere.boxes.iter().all(|b| !b.source), "the pointer is not on it");
-    let on = build_scene_at(g, &mut cache, &close, VIEW, &VisualRules::default(), None, [600.0, 400.0]);
+    let on = build_scene_at(g, &mut cache, &close, VIEW, &VisualRules::default(), None, [600.0, 400.0], &[]);
     assert_eq!(on.boxes.iter().filter(|b| b.source).map(|b| b.node).collect::<Vec<_>>(), [api]);
     assert!(on.boxes.iter().all(|b| b.node != imp || !b.source));
+}
+
+#[test]
+fn an_open_file_stays_open_until_zoomed_out() {
+    let fx = fixture();
+    let g = fx.file.graph();
+    let mut cache = LayoutCache::new(Vec::new(), LayoutOptions::default());
+    let api = node(g, &["left", "left.api", "T"]);
+    let close = Camera::fit(world_rect(g, &mut cache, api).unwrap(), VIEW);
+    let away = build_scene_at(g, &mut cache, &close, VIEW, &VisualRules::default(), None, [-50.0, -50.0], &[api]);
+    assert_eq!(away.boxes.iter().filter(|b| b.source).map(|b| b.node).collect::<Vec<_>>(), [api], "moving the pointer off keeps it open");
+    let half = Camera { zoom: close.zoom * 0.4, ..close };
+    let out = build_scene_at(g, &mut cache, &half, VIEW, &VisualRules::default(), None, [600.0, 400.0], &[api]);
+    assert!(out.boxes.iter().all(|b| !b.source), "zooming out closes it");
 }

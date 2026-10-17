@@ -83,3 +83,11 @@ fn rust_and_typescript_keywords_highlight_and_lifetimes_are_not_strings() {
         assert!(kinds.contains(&(k, Token::Keyword)), "{k} in {kinds:?}");
     }
 }
+
+#[test]
+fn sideways_scrolling_stops_once_the_longest_line_is_in_view() {
+    assert_eq!(hscroll_by(0.0, -50.0, 200, 5.0, 600.0), 50.0, "wheel to the right moves the text left");
+    assert_eq!(hscroll_by(10.0, 100.0, 200, 5.0, 600.0), 0.0);
+    assert_eq!(hscroll_by(390.0, -100.0, 200, 5.0, 600.0), 400.0 + 5.0 * 4.0, "stops with the longest line's end visible, plus a margin");
+    assert_eq!(hscroll_by(0.0, -100.0, 50, 5.0, 600.0), 0.0, "short lines do not scroll");
+}

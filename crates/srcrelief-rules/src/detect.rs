@@ -313,6 +313,12 @@ impl<'a> Ctx<'a> {
                 }
             }
         }
+        let extended: HashSet<NodeId> = b
+            .edges()
+            .iter()
+            .filter(|e| matches!(e.kind, EdgeKind::Inherits | EdgeKind::Implements) && !b.flags(e.from).intersects(set_aside))
+            .map(|e| e.to)
+            .collect();
         let entry_nodes: Vec<NodeId> = b.entries().iter().map(|e| e.node).collect();
         let mut details: Vec<NodeId> = Vec::new();
         for file in &self.facts.files {
@@ -328,6 +334,7 @@ impl<'a> Ctx<'a> {
                 let model = b.has_tag(n, "layer:model");
                 let strong = !model && (COMPONENT_ROLES.iter().any(|r| b.has_tag(n, r))
                     || sub == SubKind::Interface
+                    || extended.contains(&n)
                     || entry_nodes.iter().any(|&e| e == n || b.parent(e) == Some(n))
                     || t.annotations.iter().any(|a| annotations.contains(&a.name))
                     || all_fns.iter().chain(fns.iter()).any(|f| f.annotations.iter().any(|a| ctor_annotations.contains(&a.name)))

@@ -76,8 +76,9 @@ enough to read.
 - **Box colours by kind:** interface (teal), class/struct (blue), enum/record (violet), function/method (grey),
   constructor (dim blue). A legend sits in the bottom-left corner; close it with its × or **View ▸ Legend**.
 - **The file when you zoom in close.** The class, struct or top-level function under the pointer (the middle of the
-  view from the keyboard) gives way to its whole file once it fills most of the view, as a page filling its column;
-  only that one opens. It opens with the
+  view from the keyboard) gives way to its whole file once it fills about half the view, as a page filling its
+  column; only that one opens, and it stays open until you zoom back out. The wheel scrolls the file, sideways too
+  (horizontal wheel or `Shift` + wheel). It opens with the
   type's first line where its box was; the wheel scrolls the file, not the map (`Page Up`/`Page Down`/`Home`/`End`
   too), `Ctrl` + wheel still zooms. The type's own lines and its methods sit on a light band. Types that hold other
   boxes (an interface with its implementations) stay boxes. Lines are read from disk.
@@ -90,7 +91,7 @@ enough to read.
   sets, Dagger components/modules) is hidden with its arrows, so it never changes the layering. Tick **View ▸ Wiring**
   to show it muted, with faint dotted arrows. Highlighting an entry point still follows wiring.
 - **Architecture first.** Only architectural types are drawn by default: handlers, services, repositories,
-  interfaces, entry-point owners, what the DI framework assembles (Wire/Dagger, Spring `@Component`/`@Service`,
+  interfaces, classes other classes extend, entry-point owners, what the DI framework assembles (Wire/Dagger, Spring `@Component`/`@Service`,
   `@Inject` constructors) and types used from two or more other packages. Data types (structs without methods,
   records, enums, getter/setter classes, `*Request`/`*Response`/models), nested types and helpers in
   `util`/`common` packages are *details*: an open box shows `+ N details`; click it to show that box's details and

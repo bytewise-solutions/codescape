@@ -622,3 +622,19 @@ fn package_helper_functions_are_details_unless_shared() {
     assert!(!fx.b.flags(shared).contains(NodeFlags::DETAIL), "used from two packages");
     assert!(!fx.b.flags(main).contains(NodeFlags::DETAIL), "entry point");
 }
+
+#[test]
+fn classes_other_classes_extend_are_components() {
+    let mut fx = Fx::new();
+    let j = fx.file("server", "server/src/main/java/s/ai/MoveTask.java", Lang::Java, false, &[]);
+    let base = ty_sub(&mut fx, j, "s.ai.MoveTask", SubKind::Class);
+    let lone = ty_sub(&mut fx, j, "s.ai.Helper", SubKind::Class);
+    member(&mut fx, j, lone, "help", SubKind::Method);
+    let child = ty_sub(&mut fx, j, "s.ai.RangedMoveTask", SubKind::Class);
+    member(&mut fx, j, child, "run", SubKind::Method);
+    fx.b.add_edge(child, base, EdgeKind::Inherits, Scope::Main, Confidence::Resolved, EdgeFlags::NONE);
+    fx.run(&builtins());
+    let detail = |n: NodeId| fx.b.flags(n).contains(NodeFlags::DETAIL);
+    assert!(!detail(base), "a base class with no methods of its own is still part of the design");
+    assert!(detail(lone), "an unshared class nobody extends stays a detail");
+}

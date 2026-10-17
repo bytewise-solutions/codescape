@@ -6,7 +6,7 @@ use crate::search::{self, SearchIndex};
 use crate::shot::{Shot, ShotPlan, ShotStep};
 use crate::input::{Nav, SHORTCUTS, Step, interpret, nearest_in};
 use crate::inspector;
-use crate::source::{LINE_SPACING, SourceCache, Token, advance, file_font, highlight, initial_scroll, merge_spans, scroll_at, scroll_by, thumb};
+use crate::source::{LINE_SPACING, SourceCache, Token, advance, file_font, highlight, hscroll_by, initial_scroll, merge_spans, scroll_at, scroll_by, thumb};
 use crate::settings_window::{self, SettingsForm};
 use crate::view::{layout_options, toggle, view_items};
 use crate::{minimap, style};
@@ -341,6 +341,8 @@ struct Project {
     last_frame: Instant,
     source: std::cell::RefCell<SourceCache>,
     file_scroll: HashMap<NodeId, f32>,
+    file_hscroll: HashMap<NodeId, f32>,
+    scripted: bool,
     scroll_drag: Option<NodeId>,
     details_in: Vec<NodeId>,
     pointer: Option<Pos2>,
@@ -461,6 +463,8 @@ impl Project {
             last_frame: Instant::now(),
             source,
             file_scroll: HashMap::new(),
+            file_hscroll: HashMap::new(),
+            scripted: false,
             scroll_drag: None,
             details_in: Vec::new(),
             pointer: None,
@@ -475,6 +479,7 @@ impl Project {
     }
 
     fn apply_plan(&mut self, plan: &ShotPlan) {
+        self.scripted = true;
         let entry = plan.entry.as_ref().and_then(|label| {
             let g = self.file.graph();
             (0..g.entries().len()).find(|&i| g.entry_label(i) == label)
@@ -627,6 +632,11 @@ impl Project {
 
     fn set_focus(&mut self, node: NodeId, entry: Option<usize>, fly: bool, record: bool) {
         let g = self.file.graph();
+        let mut opts = self.cache.options().clone();
+        if opts.reveal(g, node) {
+            self.details_in = opts.details_in.clone();
+            self.cache.set_options(opts);
+        }
         self.focus = Some(focus(g, &self.usage, node, entry, self.focus_mode));
         self.selected = Some(node);
         self.selected_entry = entry;
@@ -1046,10 +1056,14 @@ impl Project {
         }
         if let Some(p) = resp.hover_pos() {
             let (scroll, pinch, mods) = ui.input(|i| (i.smooth_scroll_delta, i.zoom_delta(), i.modifiers));
-            let page = self.file_page_at(p).filter(|_| !(mods.command || mods.ctrl || mods.shift) && scroll.y != 0.0 && (pinch - 1.0).abs() < 1e-4);
+            let page = self.file_page_at(p).filter(|_| !(mods.command || mods.ctrl) && scroll != egui::Vec2::ZERO && (pinch - 1.0).abs() < 1e-4);
             if let Some(node) = page {
-                if let Some(v) = self.scrolled(node, scroll.y) {
+                let (sideways, down) = if mods.shift { (if scroll.x != 0.0 { scroll.x } else { scroll.y }, 0.0) } else { (scroll.x, scroll.y) };
+                if let Some(v) = self.scrolled(node, down).filter(|_| down != 0.0) {
                     self.file_scroll.insert(node, v);
+                }
+                if let Some(v) = self.hscrolled(node, sideways).filter(|_| sideways != 0.0) {
+                    self.file_hscroll.insert(node, v);
                 }
             } else { match interpret(mods.command || mods.ctrl, mods.shift, [scroll.x, scroll.y], pinch) {
                 Nav::Zoom(f) => {
@@ -1104,13 +1118,12 @@ impl Project {
         }
         let started = Instant::now();
         self.hovered = resp.hover_pos().and_then(|p| self.scene.box_at([p.x, p.y]));
-        let anchor = match self.pointer {
-            Some(p) => self.file_page_at(p).and_then(|n| self.scene.boxes.iter().find(|b| b.node == n)).map_or([p.x, p.y], |b| b.rect.center()),
-            None => self.view.center(),
-        };
-        self.scene = build_scene_at(g, &mut self.cache, &self.cam, self.view, &self.visual, self.focus.as_ref().map(|f| &f.marks), anchor);
+        let anchor = self.pointer.filter(|_| !self.scripted).map_or(self.view.center(), |p| [p.x, p.y]);
+        let open_files: Vec<NodeId> = self.scene.boxes.iter().filter(|b| b.source).map(|b| b.node).collect();
+        self.scene = build_scene_at(g, &mut self.cache, &self.cam, self.view, &self.visual, self.focus.as_ref().map(|f| &f.marks), anchor, &open_files);
         let shown: Vec<(NodeId, f32, f32)> = self.scene.boxes.iter().filter(|b| b.source).filter_map(|b| Some((b.node, b.rect.y, file_font(b.rect.w)? * LINE_SPACING))).collect();
         self.file_scroll.retain(|n, _| shown.iter().any(|(s, _, _)| s == n));
+        self.file_hscroll.retain(|n, _| shown.iter().any(|(s, _, _)| s == n));
         for (n, y, line_h) in shown {
             let start = g.span(n).0;
             let view_y = self.view.y;
@@ -1366,6 +1379,21 @@ impl Project {
         Some((line_h, total, (self.view.h / line_h) as usize))
     }
 
+    fn hscrolled(&self, node: NodeId, wheel_px: f32) -> Option<f32> {
+        let b = self.scene.boxes.iter().find(|b| b.node == node && b.source)?;
+        let size = file_font(b.rect.w)?;
+        let lines = self.source.borrow_mut().file(self.file.graph().file(node)?)?;
+        let longest = lines.iter().map(|l| l.chars().count()).max().unwrap_or(0);
+        let text = self.file_text_area(b, size, lines.len());
+        Some(hscroll_by(self.file_hscroll.get(&node).copied().unwrap_or(0.0), wheel_px, longest, advance(size), text.width()))
+    }
+
+    fn file_text_area(&self, b: &crate::canvas::SceneBox, size: f32, total: usize) -> egui::Rect {
+        let page = self.file_page(b);
+        let gutter = total.to_string().len() as f32 * advance(size) + 2.0 * advance(size);
+        egui::Rect::from_min_max(Pos2::new(b.rect.x + gutter + advance(size) * 0.5, page.top()), Pos2::new(self.scrollbar_track(page).left() - 4.0, page.bottom()))
+    }
+
     fn scrolled(&self, node: NodeId, wheel_px: f32) -> Option<f32> {
         let (line_h, total, visible) = self.file_metrics(node)?;
         Some(scroll_by(self.file_scroll.get(&node).copied().unwrap_or(0.0), wheel_px, line_h, total, visible))
@@ -1397,7 +1425,8 @@ impl Project {
             clip.rect_filled(band, 0.0, style::BOX_STROKE.gamma_multiply(0.10));
         }
         self.paint_scrollbar(&clip, sheet, b.node, scroll, lines.len(), (sheet.height() / line_h) as usize);
-        let clip = painter.with_clip_rect(egui::Rect::from_min_max(sheet.min, Pos2::new(self.scrollbar_track(sheet).left() - 4.0, sheet.max.y)));
+        let text_clip = painter.with_clip_rect(self.file_text_area(b, size, lines.len()));
+        let hscroll = self.file_hscroll.get(&b.node).copied().unwrap_or(0.0);
         let first = ((self.view.y - top) / line_h).floor().max(0.0) as usize;
         let last = (((self.view.bottom() - top) / line_h).ceil().max(0.0) as usize).min(lines.len());
         if first >= last {
@@ -1419,7 +1448,7 @@ impl Project {
                 };
                 job.append(&text, 0.0, egui::TextFormat { font_id: mono.clone(), color, ..Default::default() });
             }
-            clip.galley(Pos2::new(b.rect.x + gutter + advance(size), y), clip.layout_job(job), style::TEXT);
+            text_clip.galley(Pos2::new(b.rect.x + gutter + advance(size) - hscroll, y), text_clip.layout_job(job), style::TEXT);
         }
     }
 

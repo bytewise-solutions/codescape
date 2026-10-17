@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
-pub const FILE_MIN_PT: f32 = 8.0;
+pub const FILE_MIN_PT: f32 = 7.0;
 const FILE_COLUMNS: f32 = 100.0;
 const MONO_ADVANCE: f32 = 0.62;
 pub const LINE_SPACING: f32 = 1.25;
@@ -208,4 +208,11 @@ pub fn scroll_at(y: f32, total: usize, visible: usize, track: f32) -> f32 {
         return 0.0;
     }
     ((y - len / 2.0).clamp(0.0, room) / room) * max_scroll(total, visible)
+}
+
+const END_MARGIN_COLUMNS: f32 = 4.0;
+
+pub fn hscroll_by(current: f32, wheel_px: f32, longest_line: usize, advance: f32, text_width: f32) -> f32 {
+    let max = ((longest_line as f32 + END_MARGIN_COLUMNS) * advance - text_width).max(0.0);
+    (current - wheel_px).clamp(0.0, max)
 }

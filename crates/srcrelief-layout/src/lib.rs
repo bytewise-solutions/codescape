@@ -124,6 +124,19 @@ impl LayoutOptions {
         g.flags(node).intersects(hidden) || self.tag_hidden(g, node)
     }
 
+    pub fn reveal(&mut self, g: &ArchivedGraph, node: NodeId) -> bool {
+        let mut changed = false;
+        for n in g.path(node) {
+            if g.flags(n).contains(NodeFlags::DETAIL) && self.hides(g, n) {
+                if let Some(p) = g.parent(n) {
+                    self.details_in.push(p);
+                    changed = true;
+                }
+            }
+        }
+        changed
+    }
+
     pub fn details_shown_in(&self, container: NodeId) -> bool {
         self.show_details || self.details_in.contains(&container)
     }
