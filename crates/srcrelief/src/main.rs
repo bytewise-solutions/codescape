@@ -21,6 +21,10 @@ struct Args {
     shortcuts: bool,
     #[arg(long, help = "With --screenshot: compare with this revision (\"main\" for the merge-base with main)")]
     review: Option<String>,
+    #[arg(long, help = "With --screenshot: review this branch or commit instead of the working copy")]
+    review_target: Option<String>,
+    #[arg(long, help = "With --screenshot: review commit by commit, starting at the first")]
+    review_by_commit: bool,
 }
 
 fn main() -> eframe::Result {
@@ -30,6 +34,6 @@ fn main() -> eframe::Result {
         renderer: eframe::Renderer::Wgpu,
         ..Default::default()
     };
-    let shot = args.screenshot.map(|path| srcrelief::shot::ShotPlan { path, focus: args.focus, entry: args.entry, settings: args.settings, zoom: args.zoom, shortcuts: args.shortcuts, review: args.review });
+    let shot = args.screenshot.map(|path| srcrelief::shot::ShotPlan { path, focus: args.focus, entry: args.entry, settings: args.settings, zoom: args.zoom, shortcuts: args.shortcuts, review: args.review, review_target: args.review_target, review_by_commit: args.review_by_commit });
     eframe::run_native("SrcRelief", options, Box::new(move |cc| Ok(Box::new(srcrelief::app::ReliefApp::new(cc, args.dir, args.config, shot)))))
 }

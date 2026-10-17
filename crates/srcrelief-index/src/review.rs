@@ -261,13 +261,47 @@ fn git(dir: &Path, args: &[&str]) -> anyhow::Result<String> {
     Ok(String::from_utf8_lossy(&out.stdout).trim().to_string())
 }
 
-pub fn default_base(project_dir: &Path) -> anyhow::Result<String> {
+#[derive(Clone, Debug, PartialEq)]
+pub struct Commit {
+    pub sha: String,
+    pub subject: String,
+}
+
+pub fn is_git(dir: &Path) -> bool {
+    git(dir, &["rev-parse", "--show-toplevel"]).is_ok()
+}
+
+pub fn current_branch(dir: &Path) -> Option<String> {
+    git(dir, &["symbolic-ref", "--short", "-q", "HEAD"]).ok().filter(|b| !b.is_empty())
+}
+
+pub fn branches(dir: &Path) -> Vec<String> {
+    let list = |refs: &str| git(dir, &["for-each-ref", "--format=%(refname:short)", refs]).unwrap_or_default();
+    let (local, remote) = (list("refs/heads"), list("refs/remotes"));
+    let current = current_branch(dir);
+    let mut out: Vec<String> = current.clone().into_iter().collect();
+    out.extend(local.lines().filter(|b| Some(*b) != current.as_deref()).map(str::to_string));
+    out.extend(remote.lines().filter(|b| b.contains('/') && !b.ends_with("/HEAD")).map(str::to_string));
+    out
+}
+
+pub fn commits(dir: &Path, base: &str, target: &str) -> anyhow::Result<Vec<Commit>> {
+    let listed = git(dir, &["log", "--reverse", "--format=%H%x09%s", &format!("{base}..{target}")])?;
+    Ok(listed.lines().filter_map(|l| l.split_once('\t')).map(|(sha, subject)| Commit { sha: sha.into(), subject: subject.into() }).collect())
+}
+
+pub fn has_uncommitted(dir: &Path) -> bool {
+    git(dir, &["status", "--porcelain", "--", "."]).is_ok_and(|s| !s.is_empty())
+}
+
+pub fn base_for(project_dir: &Path, target: Option<&str>) -> anyhow::Result<String> {
+    let target = target.unwrap_or("HEAD");
     for main in ["main", "master", "origin/main", "origin/master"] {
-        if let Ok(sha) = git(project_dir, &["merge-base", "HEAD", main]) {
+        if let Ok(sha) = git(project_dir, &["merge-base", target, main]) {
             return Ok(sha);
         }
     }
-    git(project_dir, &["rev-parse", "HEAD"])
+    git(project_dir, &["rev-parse", target])
 }
 
 pub fn index_revision(project_dir: &Path, rev: &str, cfg: &crate::ProjectConfig, cache_root: &Path, progress: &dyn Fn(crate::Progress)) -> anyhow::Result<RevisionIndex> {

@@ -96,12 +96,16 @@ enough to read.
   non-default `case` or extra `match` arm, `catch`, ternary, `&&`, `||`, `??`). From 10 a method row or function box
   carries an amber number, red from 20; a card's header shows its highest. The right panel gives the exact value.
   **View ▸ Complexity hints** turns them off.
-- **Review mode.** **Review ▸ Compare with main** compares the checkout, uncommitted changes included, with the
-  point where it left `main` (or `master`); **Compare with…** takes any branch, tag or commit. The base is checked out
-  in a git worktree under the cache folder and indexed there once; your checkout is never touched. Blocks are matched
-  by their names: new ones are outlined green with `NEW`, changed ones amber with `+added −removed` lines, the rest
-  dimmed. Open boxes add up what changed inside them (`2 new · 3 changed · 1 removed`), card rows are tinted with
-  their line counts and any complexity increase (`· complexity 4 to 9`), and arrows the change introduced are drawn green. The left
+- **Review mode.** The **Overview | Review** switch at the top says which mode you are in (Review is greyed out
+  outside a git repository). In Review an orange bar picks what to compare: **Base** (by default where the target
+  left `main` or `master`) and **Target** (by default the working copy, uncommitted changes included), each from the
+  branches or any commit or tag. When the target is another branch, the map and the files show that branch. Choose
+  **Whole range** or **Commit by commit**: the latter steps through the commits from base to target (`<` `>` or
+  `[` `]`), each compared with its parent, then the uncommitted changes. Every version is checked out in a git
+  worktree under the cache folder and indexed once; your checkout is never touched. Blocks are matched by their
+  names: new ones are outlined green with `NEW`, changed ones amber with `+added −removed` lines, the rest dimmed.
+  Open boxes add up what changed inside them (`2 new · 3 changed · 1 removed`), card rows are tinted with their line
+  counts and any complexity increase, and arrows the change introduced are drawn green. The left
   panel lists every change, riskiest first, then new and removed dependencies (upward ones flagged); click one to fly
   to it, or step through them with `N` / `P`. Each change says why it may deserve a look: `complexity 8 to 14`,
   `used by 12` (many callers), `signature` (a public block's first line changed), `made public`, `unused` (a new
@@ -146,11 +150,12 @@ Prints modules, their links, entry points grouped as in the viewer, the call-res
 ### Screenshots without a person at the window
 
 ```sh
-srcrelief <dir> --screenshot out.png [--focus NAME] [--entry LABEL] [--zoom FACTOR] [--settings] [--review REV]
+srcrelief <dir> --screenshot out.png [--focus NAME] [--entry LABEL] [--zoom FACTOR] [--settings] [--review REV] [--review-target REV] [--review-by-commit]
 ```
 
 Renders one frame after zooming to the first node matching `NAME`, selecting an entry point, opening the settings
-window and/or comparing with `REV` (`main` for the merge-base), writes a PNG and exits.
+window and/or reviewing (base `REV`, `main` for the merge-base; another target; commit by commit), writes a PNG
+and exits.
 
 ## Project settings (optional)
 

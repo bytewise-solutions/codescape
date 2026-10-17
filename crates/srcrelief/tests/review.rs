@@ -86,3 +86,13 @@ fn a_reviewed_mark_holds_until_the_block_changes_again() {
     let states: Vec<(&str, MarkState)> = second.iter().map(|i| (i.label.as_str(), marks.state(i))).collect();
     assert_eq!(states, [("Cart.Add", MarkState::ChangedSince), ("Cart.Clear", MarkState::Reviewed), ("Coupon", MarkState::Reviewed)]);
 }
+
+#[test]
+fn each_commit_step_compares_a_commit_with_its_parent() {
+    use srcrelief_index::review::Commit;
+    let steps = [CommitStep::Commit(Commit { sha: "abc".into(), subject: "add A".into() }), CommitStep::Uncommitted];
+    assert_eq!(steps[0].range(), (Some("abc^".to_string()), Some("abc".to_string())));
+    assert_eq!(steps[1].range(), (Some("HEAD".to_string()), None), "the working copy against its last commit");
+    assert_eq!(steps[0].label(), "add A");
+    assert_eq!(steps[1].label(), "Uncommitted changes");
+}

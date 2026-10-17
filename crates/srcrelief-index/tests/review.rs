@@ -87,7 +87,7 @@ fn a_branch_is_compared_with_where_it_left_main() {
     git(&repo, &["commit", "-q", "-am", "drop clear"]);
     std::fs::write(proj.join("cart/extra.go"), "package cart\n\nfunc Extra() {}\n").unwrap();
 
-    let base_rev = default_base(&proj).unwrap();
+    let base_rev = base_for(&proj, None).unwrap();
     let cache = tmp.path().join("cache");
     let cfg = ProjectConfig::default();
     let base = index_revision(&proj, &base_rev, &cfg, &cache, &|_| {}).unwrap();
@@ -152,4 +152,41 @@ fn signature_and_visibility_changes_are_told() {
     let tg = target.file.graph();
     let helper = (0..tg.node_count() as NodeId).find(|&n| tg.name(n) == "helper").unwrap();
     assert_eq!(r.change(helper).widened, Some((Visibility::Private, Visibility::Public)));
+}
+
+#[test]
+fn branches_and_the_commits_between_two_versions_are_listed() {
+    let tmp = tempfile::tempdir().unwrap();
+    assert!(!is_git(tmp.path()));
+    let repo = tmp.path().join("repo");
+    std::fs::create_dir_all(repo.join("cart")).unwrap();
+    std::fs::write(repo.join("go.mod"), "module example.com/svc\n\ngo 1.22\n").unwrap();
+    std::fs::write(repo.join("cart/cart.go"), BASE_CART).unwrap();
+    git(&repo, &["init", "-q", "-b", "main"]);
+    git(&repo, &["add", "."]);
+    git(&repo, &["commit", "-q", "-m", "base"]);
+    let main = git_out(&repo, &["rev-parse", "HEAD"]);
+    git(&repo, &["checkout", "-q", "-b", "agent"]);
+    std::fs::write(repo.join("cart/a.go"), "package cart\n\nfunc A() {}\n").unwrap();
+    git(&repo, &["add", "."]);
+    git(&repo, &["commit", "-q", "-m", "add A"]);
+    std::fs::write(repo.join("cart/b.go"), "package cart\n\nfunc B() {}\n").unwrap();
+    git(&repo, &["add", "."]);
+    git(&repo, &["commit", "-q", "-m", "add B"]);
+    git(&repo, &["checkout", "-q", "main"]);
+
+    assert!(is_git(&repo.join("cart")));
+    assert_eq!(current_branch(&repo).as_deref(), Some("main"));
+    assert_eq!(branches(&repo), ["main", "agent"], "the checked-out branch first");
+    let subjects: Vec<String> = commits(&repo, "main", "agent").unwrap().into_iter().map(|c| c.subject).collect();
+    assert_eq!(subjects, ["add A", "add B"], "oldest first");
+    assert_eq!(base_for(&repo, Some("agent")).unwrap(), main, "where agent left main");
+    assert!(!has_uncommitted(&repo));
+    std::fs::write(repo.join("cart/c.go"), "package cart\n").unwrap();
+    assert!(has_uncommitted(&repo));
+}
+
+fn git_out(dir: &Path, args: &[&str]) -> String {
+    let out = std::process::Command::new("git").args(args).current_dir(dir).output().unwrap();
+    String::from_utf8_lossy(&out.stdout).trim().to_string()
 }

@@ -6,10 +6,10 @@ use crate::search::{self, SearchIndex};
 use crate::shot::{Shot, ShotPlan, ShotStep};
 use crate::input::{CHEATSHEET, Nav, Step, interpret, nearest_in};
 use crate::inspector;
-use crate::review_view::{ItemKind, MarkState, ReviewItem, ReviewMarks, Risk, by_risk, items as review_items, step as review_step};
+use crate::review_view::{CommitStep, ItemKind, MarkState, ReviewItem, ReviewMarks, Risk, by_risk, items as review_items, step as review_step};
 use srcrelief_index::analysis::{Analysis, Usage, analyse};
 use std::sync::Arc;
-use srcrelief_index::review::{Change, Counts, Review, Status, compare, default_base, index_revision};
+use srcrelief_index::review::{Change, Counts, Review, Status, base_for, branches, commits, compare, current_branch, has_uncommitted, index_revision, is_git};
 use crate::source::{LINE_SPACING, SourceCache, Token, advance, file_font, highlight, hscroll_by, initial_scroll, merge_spans, scroll_at, scroll_by, thumb};
 use crate::settings_window::{self, SettingsForm};
 use crate::view::{layout_options, toggle, view_items};
@@ -273,6 +273,7 @@ impl eframe::App for ReliefApp {
                             project.shortcuts_open = true;
                         }
                     });
+                    project.mode_switch(ui);
                     file
                 }).inner).inner;
                 let action = project.ui(ui).or(menu);
@@ -305,6 +306,32 @@ fn review_dim(rv: &ReviewState, scene: &mut Scene) {
     for e in scene.edges.iter_mut() {
         e.dimmed |= !rv.new_arrows.contains(&(e.a, e.b));
     }
+}
+
+struct ReviewBar {
+    base: Option<String>,
+    target: Option<String>,
+    by_commit: bool,
+    steps: Vec<CommitStep>,
+    step: usize,
+    branches: Vec<String>,
+    current: Option<String>,
+    other: Option<(bool, String)>,
+}
+
+struct ReviewDone {
+    label: String,
+    review: Review,
+    analysis: Analysis,
+    dir: PathBuf,
+    index: PathBuf,
+    rebuilt: bool,
+    version: Option<String>,
+}
+
+fn short_rev(rev: &str) -> String {
+    let hex = rev.trim_end_matches('^');
+    if hex.len() >= 20 && hex.chars().all(|c| c.is_ascii_hexdigit()) { format!("{}{}", &hex[..7], &rev[hex.len()..]) } else { rev.to_string() }
 }
 
 struct ReviewState {
@@ -413,10 +440,13 @@ struct Project {
     scripted: bool,
     scroll_drag: Option<NodeId>,
     review: Option<ReviewState>,
-    review_job: Option<(String, Receiver<Result<(String, Review, Analysis), String>>)>,
+    review_job: Option<(String, Receiver<Result<ReviewDone, String>>)>,
+    review_bar: Option<ReviewBar>,
+    home: Option<(PathBuf, PathBuf)>,
+    version: Option<String>,
+    git: bool,
     analysis: Option<Arc<Analysis>>,
     analysis_job: Option<Receiver<Analysis>>,
-    review_dialog: Option<String>,
     review_error: Option<String>,
     details_in: Vec<NodeId>,
     pointer: Option<Pos2>,
@@ -500,6 +530,7 @@ fn lifecycle_badge(l: Lifecycle) -> &'static str {
 
 impl Project {
     fn open(dir: PathBuf, path: &Path, visual: VisualRules, settings: SettingsStore, packs: Vec<String>) -> Result<Project, String> {
+        let git = is_git(&dir);
         let source = std::cell::RefCell::new(SourceCache::new(&dir));
         let file = ReliefFile::open(path).map_err(|e| format!("{e}"))?;
         let g = file.graph();
@@ -584,7 +615,10 @@ impl Project {
             review_job: None,
             analysis: None,
             analysis_job: None,
-            review_dialog: None,
+            review_bar: None,
+            home: None,
+            version: None,
+            git,
             review_error: None,
             details_in: Vec::new(),
             pointer: None,
@@ -621,8 +655,15 @@ impl Project {
         }
         self.settings_open |= plan.settings;
         self.shortcuts_open |= plan.shortcuts;
-        if let Some(rev) = &plan.review {
-            self.start_review((rev != "main").then(|| rev.clone()));
+        if plan.review.is_some() || plan.review_target.is_some() || plan.review_by_commit {
+            self.enter_review(plan.review.clone().filter(|r| r != "main"), plan.review_target.clone());
+        }
+        if plan.review_by_commit {
+            if let Some(bar) = self.review_bar.as_mut() {
+                bar.by_commit = true;
+            }
+            self.refresh_steps();
+            self.compare_now();
         }
     }
 
@@ -665,34 +706,106 @@ impl Project {
 
     fn review_menu(&mut self, ui: &mut egui::Ui) {
         ui.menu_button("Review", |ui| {
-            if ui.button("Compare with main").on_hover_text("changes since this branch left main, uncommitted work included").clicked() {
-                self.start_review(None);
+            let start = ui.add_enabled(self.git && self.review_bar.is_none(), egui::Button::new("Start review"));
+            if start.on_disabled_hover_text(self.review_unavailable()).clicked() {
+                self.enter_review(None, None);
             }
-            if ui.button("Compare with…").clicked() {
-                self.review_dialog = Some(String::new());
-            }
-            if self.review.is_some() && ui.button("Exit review").clicked() {
-                self.review = None;
+            if self.review_bar.is_some() && ui.button("Exit review").clicked() {
+                self.exit_review();
             }
         });
     }
 
-    fn start_review(&mut self, rev: Option<String>) {
-        let (dir, cfg, target) = (self.dir.clone(), self.settings.config(), self.index_path.clone());
+    fn review_unavailable(&self) -> &'static str {
+        if self.git { "Already reviewing" } else { "Review compares git versions: this folder is not in a git repository" }
+    }
+
+    fn mode_switch(&mut self, ui: &mut egui::Ui) {
+        ui.separator();
+        let reviewing = self.review_bar.is_some();
+        if ui.selectable_label(!reviewing, "Overview").on_hover_text("The checkout as it is").clicked() && reviewing {
+            self.exit_review();
+        }
+        let review = ui.add_enabled(self.git, egui::Button::selectable(reviewing, "Review")).on_hover_text("What changed between two versions").on_disabled_hover_text(self.review_unavailable());
+        if review.clicked() && !reviewing {
+            self.enter_review(None, None);
+        }
+    }
+
+    fn origin(&self) -> (PathBuf, PathBuf) {
+        self.home.clone().unwrap_or_else(|| (self.dir.clone(), self.index_path.clone()))
+    }
+
+    fn enter_review(&mut self, base: Option<String>, target: Option<String>) {
+        let (dir, _) = self.origin();
+        self.review_bar = Some(ReviewBar { base, target, by_commit: false, steps: Vec::new(), step: 0, branches: branches(&dir), current: current_branch(&dir), other: None });
+        self.compare_now();
+    }
+
+    fn exit_review(&mut self) {
+        self.review_bar = None;
+        self.review = None;
+        self.review_job = None;
+        self.review_error = None;
+        if let Some((dir, index)) = self.home.clone() {
+            if let Err(e) = self.show_version(dir, index) {
+                self.review_error = Some(e);
+            }
+        }
+    }
+
+    fn refresh_steps(&mut self) {
+        let (dir, _) = self.origin();
+        let Some(bar) = &mut self.review_bar else { return };
+        let target = bar.target.clone().unwrap_or_else(|| "HEAD".into());
+        let base = bar.base.clone().or_else(|| base_for(&dir, bar.target.as_deref()).ok());
+        bar.steps = base.and_then(|b| commits(&dir, &b, &target).ok()).unwrap_or_default().into_iter().map(CommitStep::Commit).collect();
+        if bar.target.is_none() && has_uncommitted(&dir) {
+            bar.steps.push(CommitStep::Uncommitted);
+        }
+        bar.step = 0;
+    }
+
+    fn compare_now(&mut self) {
+        let Some(bar) = &self.review_bar else { return };
+        let (base, target) = match bar.steps.get(bar.step).filter(|_| bar.by_commit) {
+            Some(step) => step.range(),
+            None => (bar.base.clone(), bar.target.clone()),
+        };
+        self.start_review(base, target);
+    }
+
+    fn start_review(&mut self, base: Option<String>, target: Option<String>) {
+        let (dir, index) = self.origin();
+        let cfg = self.settings.config();
         let cache = srcrelief_index::cache_path(&dir).parent().map(Path::to_path_buf).unwrap_or_else(std::env::temp_dir);
-        let shown = rev.clone().unwrap_or_else(|| "main".into());
+        let shown = format!("{} to {}", short_rev(base.as_deref().unwrap_or("main")), target.as_deref().map_or("working copy".into(), short_rev));
         let (tx, rx) = channel();
+        let label = shown.clone();
         std::thread::spawn(move || {
-            let result = (|| -> anyhow::Result<(String, Review, Analysis)> {
-                let base_rev = match &rev {
+            let result = (|| -> anyhow::Result<ReviewDone> {
+                let base_rev = match &base {
                     Some(r) => r.clone(),
-                    None => default_base(&dir)?,
+                    None => base_for(&dir, target.as_deref())?,
                 };
-                let base = index_revision(&dir, &base_rev, &cfg, &cache, &|_| {})?;
-                let (bf, tf) = (ReliefFile::open(&base.index)?, ReliefFile::open(&target)?);
-                let review = compare(bf.graph(), &base.dir, tf.graph(), &dir);
-                let analysis = analyse(tf.graph(), &dir);
-                Ok((format!("{} @ {}", rev.unwrap_or_else(|| "main".into()), &base.sha[..7]), review, analysis))
+                let b = index_revision(&dir, &base_rev, &cfg, &cache, &|_| {})?;
+                let (target_dir, target_index, rebuilt) = match &target {
+                    Some(t) => {
+                        let r = index_revision(&dir, t, &cfg, &cache, &|_| {})?;
+                        (r.dir, r.index, false)
+                    }
+                    None => {
+                        let stale = needs_reindex(&dir, &index, &cfg, &project_packs(&dir, &cfg)?);
+                        if stale {
+                            index_project(&dir, &cfg, &|_| {})?;
+                        }
+                        (dir.clone(), index.clone(), stale)
+                    }
+                };
+                let (bf, tf) = (ReliefFile::open(&b.index)?, ReliefFile::open(&target_index)?);
+                let review = compare(bf.graph(), &b.dir, tf.graph(), &target_dir);
+                let analysis = analyse(tf.graph(), &target_dir);
+                Ok(ReviewDone { label: format!("{label} @ {}", &b.sha[..7]), review, analysis, dir: target_dir, index: target_index, rebuilt, version: target.as_deref().map(short_rev) })
             })();
             let _ = tx.send(result.map_err(|e| format!("{e:#}")));
         });
@@ -700,33 +813,148 @@ impl Project {
         self.review_job = Some((shown, rx));
     }
 
+    fn show_version(&mut self, dir: PathBuf, index: PathBuf) -> Result<(), String> {
+        let origin = self.origin();
+        let fresh = Project::open(dir.clone(), &index, self.visual.clone(), self.settings.clone(), self.packs.clone())?;
+        let mut old = std::mem::replace(self, fresh);
+        self.home = (dir != origin.0).then_some(origin);
+        self.review_bar = old.review_bar.take();
+        self.review_job = old.review_job.take();
+        self.cam = old.cam;
+        self.view = old.view;
+        self.needs_fit = false;
+        self.scripted = old.scripted;
+        Ok(())
+    }
+
     fn poll_review(&mut self, ctx: &egui::Context) {
         let Some((_, rx)) = &self.review_job else { return };
         match rx.try_recv() {
-            Ok(Ok((label, review, analysis))) => {
+            Ok(Ok(done)) => {
+                self.review_job = None;
+                if done.rebuilt || (done.dir.as_path(), done.index.as_path()) != (self.dir.as_path(), self.index_path.as_path()) {
+                    if let Err(e) = self.show_version(done.dir, done.index) {
+                        self.review_error = Some(e);
+                        return;
+                    }
+                }
+                self.version = done.version;
                 let g = self.file.graph();
-                let items = review_items(g, &review, &analysis);
-                let new_arrows = review.new_arrows.iter().copied().collect();
-                let upward = review
+                let items = review_items(g, &done.review, &done.analysis);
+                let new_arrows = done.review.new_arrows.iter().copied().collect();
+                let upward = done
+                    .review
                     .new_arrows
                     .iter()
                     .copied()
                     .filter(|&(a, b)| g.parent(a).is_some_and(|p| self.cache.get_or_compute(g, p).edges.iter().any(|e| e.a == a && e.b == b && e.dir == Direction::Up)))
                     .collect();
-                let marks_path = srcrelief_index::cache_path(&self.dir).with_extension("marks");
+                let marks_path = srcrelief_index::cache_path(&self.origin().0).with_extension("marks");
                 let marks = ReviewMarks::load(&marks_path);
-                let mut rv = ReviewState { label, review, items, cursor: None, new_arrows, upward, marks, marks_path, states: HashMap::new(), hide_reviewed: false, by_package: false };
+                let (hide_reviewed, by_package) = self.review.as_ref().map_or((false, false), |r| (r.hide_reviewed, r.by_package));
+                let mut rv = ReviewState { label: done.label, review: done.review, items, cursor: None, new_arrows, upward, marks, marks_path, states: HashMap::new(), hide_reviewed, by_package };
                 rv.reorder();
                 rv.refresh();
-                self.analysis = Some(Arc::new(analysis));
+                self.analysis = Some(Arc::new(done.analysis));
                 self.review = Some(rv);
-                self.review_job = None;
             }
             Ok(Err(e)) => {
                 self.review_error = Some(e);
                 self.review_job = None;
             }
             Err(_) => ctx.request_repaint_after(std::time::Duration::from_millis(200)),
+        }
+    }
+
+    fn review_bar(&mut self, ui: &mut egui::Ui) {
+        let Some(bar) = &mut self.review_bar else { return };
+        let mut changed = false;
+        let mut steps_changed = false;
+        let mut rerun = false;
+        let mut exit = false;
+        ui.horizontal(|ui| {
+            ui.label(egui::RichText::new("REVIEW").strong().color(style::BG).background_color(style::ACCENT));
+            ui.add_space(6.0);
+            ui.label(egui::RichText::new("Base").color(style::MUTED));
+            let base_text = bar.base.clone().unwrap_or_else(|| "where it left main".into());
+            egui::ComboBox::from_id_salt("review_base").selected_text(base_text).width(170.0).show_ui(ui, |ui| {
+                changed |= ui.selectable_value(&mut bar.base, None, "where it left main").clicked();
+                for b in &bar.branches {
+                    changed |= ui.selectable_value(&mut bar.base, Some(b.clone()), b.as_str()).clicked();
+                }
+                if ui.button("Other commit or tag…").clicked() {
+                    bar.other = Some((false, String::new()));
+                }
+            });
+            ui.label(egui::RichText::new("Target").color(style::MUTED));
+            let working = format!("Working copy{}", bar.current.as_ref().map(|c| format!(" · {c}")).unwrap_or_default());
+            let target_text = bar.target.clone().unwrap_or_else(|| working.clone());
+            egui::ComboBox::from_id_salt("review_target").selected_text(target_text).width(190.0).show_ui(ui, |ui| {
+                changed |= ui.selectable_value(&mut bar.target, None, working.as_str()).clicked();
+                for b in &bar.branches {
+                    changed |= ui.selectable_value(&mut bar.target, Some(b.clone()), b.as_str()).clicked();
+                }
+                if ui.button("Other commit or tag…").clicked() {
+                    bar.other = Some((true, String::new()));
+                }
+            });
+            if let Some((for_target, text)) = &mut bar.other {
+                let edit = ui.add(egui::TextEdit::singleline(text).hint_text("tag, commit, origin/x…").desired_width(150.0));
+                edit.request_focus();
+                if ui.input(|i| i.key_pressed(Key::Enter)) && !text.trim().is_empty() {
+                    let rev = Some(text.trim().to_string());
+                    if *for_target { bar.target = rev } else { bar.base = rev }
+                    bar.other = None;
+                    changed = true;
+                } else if ui.input(|i| i.key_pressed(Key::Escape)) {
+                    bar.other = None;
+                }
+            }
+            ui.separator();
+            if ui.selectable_label(!bar.by_commit, "Whole range").clicked() && bar.by_commit {
+                bar.by_commit = false;
+                rerun = true;
+            }
+            if ui.selectable_label(bar.by_commit, "Commit by commit").clicked() && !bar.by_commit {
+                bar.by_commit = true;
+                steps_changed = true;
+            }
+            if bar.by_commit {
+                let n = bar.steps.len();
+                if n == 0 {
+                    ui.label(egui::RichText::new("no commits in this range").color(style::MUTED));
+                } else {
+                    if ui.add_enabled(bar.step > 0, egui::Button::new("<")).on_hover_text("Previous commit ([)").clicked() {
+                        bar.step -= 1;
+                        rerun = true;
+                    }
+                    let step = &bar.steps[bar.step];
+                    let sha = match step {
+                        CommitStep::Commit(c) => c.sha[..7].to_string(),
+                        CommitStep::Uncommitted => String::new(),
+                    };
+                    ui.label(egui::RichText::new(format!("{}/{n}", bar.step + 1)).strong());
+                    ui.label(egui::RichText::new(sha).monospace().color(style::MUTED));
+                    ui.label(fit_label(step.label(), 260.0, 13.0));
+                    if ui.add_enabled(bar.step + 1 < n, egui::Button::new(">")).on_hover_text("Next commit (])").clicked() {
+                        bar.step += 1;
+                        rerun = true;
+                    }
+                }
+            }
+            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                exit = ui.button("Exit review").clicked();
+            });
+        });
+        if exit {
+            self.exit_review();
+            return;
+        }
+        if (changed || steps_changed) && self.review_bar.as_ref().is_some_and(|b| b.by_commit) {
+            self.refresh_steps();
+        }
+        if changed || steps_changed || rerun {
+            self.compare_now();
         }
     }
 
@@ -783,6 +1011,17 @@ impl Project {
                 let at = rv.cursor.and_then(|c| visible.iter().position(|&v| v == c));
                 if let Some(i) = review_step(visible.len(), at, forward) {
                     self.goto_review_item(visible[i]);
+                }
+                return;
+            }
+            let (back, ahead) = (typed("["), typed("]"));
+            if back || ahead {
+                if let Some(bar) = self.review_bar.as_mut().filter(|b| b.by_commit && !b.steps.is_empty()) {
+                    let next = if ahead { (bar.step + 1).min(bar.steps.len() - 1) } else { bar.step.saturating_sub(1) };
+                    if next != bar.step {
+                        bar.step = next;
+                        self.compare_now();
+                    }
                 }
                 return;
             }
@@ -917,24 +1156,6 @@ impl Project {
         let mut action = None;
         self.poll_review(ui.ctx());
         self.poll_analysis(ui.ctx());
-        if let Some(text) = &mut self.review_dialog {
-            let mut open = true;
-            let mut go = None;
-            egui::Window::new("Compare with").open(&mut open).collapsible(false).resizable(false).anchor(Align2::CENTER_TOP, [0.0, 60.0]).show(ui.ctx(), |ui| {
-                ui.label(egui::RichText::new("Branch, tag or commit to compare the current checkout with").color(style::MUTED));
-                let edit = ui.add(egui::TextEdit::singleline(text).hint_text("main, origin/develop, a1b2c3d…").desired_width(320.0));
-                edit.request_focus();
-                if (ui.button("Compare").clicked() || ui.input(|i| i.key_pressed(Key::Enter))) && !text.trim().is_empty() {
-                    go = Some(text.trim().to_string());
-                }
-            });
-            if let Some(rev) = go {
-                self.review_dialog = None;
-                self.start_review(Some(rev));
-            } else if !open {
-                self.review_dialog = None;
-            }
-        }
         let (jump, open, settings) = ui.input_mut(|i| (i.consume_shortcut(&JUMP), i.consume_shortcut(&OPEN), i.consume_shortcut(&SETTINGS)));
         self.search_open |= jump;
         self.settings_open |= settings;
@@ -977,11 +1198,19 @@ impl Project {
                 });
             });
         }
+        if self.review_bar.is_some() {
+            egui::Panel::top("review_bar").frame(egui::Frame::side_top_panel(ui.style()).fill(style::tint(style::BAR, style::ACCENT, 0.22))).show(ui, |ui| self.review_bar(ui));
+        }
         egui::Panel::top("breadcrumb").show(ui, |ui| ui.horizontal(|ui| self.breadcrumb(ui)));
         egui::Panel::bottom("status").show(ui, |ui| self.status_bar(ui));
         egui::Panel::left("entries").resizable(true).default_size(270.0).show(ui, |ui| self.entries_panel(ui));
         egui::Panel::right("inspector").resizable(true).default_size(290.0).show(ui, |ui| self.inspector(ui));
-        egui::CentralPanel::default().frame(egui::Frame::NONE.fill(style::BG)).show(ui, |ui| self.canvas(ui));
+        egui::CentralPanel::default().frame(egui::Frame::NONE.fill(style::BG)).show(ui, |ui| {
+            self.canvas(ui);
+            if self.review_bar.is_some() {
+                ui.painter().rect_stroke(ui.max_rect(), 0.0, Stroke::new(3.0, style::ACCENT), StrokeKind::Inside);
+            }
+        });
         if self.search_open {
             self.search_window(ui.ctx());
         }
@@ -1004,11 +1233,15 @@ impl Project {
         let g = self.file.graph();
         let deepest = self.scene.deepest_open_at(self.view.center()).unwrap_or(g.root());
         let mut fly = None;
+        let root = match (&self.home, &self.version) {
+            (Some((dir, _)), Some(v)) => format!("{} @ {v}", dir.file_name().map_or(String::new(), |n| n.to_string_lossy().into_owned())),
+            _ => g.name(g.root()).to_string(),
+        };
         for (i, n) in g.path(deepest).into_iter().enumerate() {
             if i > 0 {
                 ui.label(egui::RichText::new("/").color(style::MUTED));
             }
-            if ui.link(g.name(n)).clicked() {
+            if ui.link(if i == 0 { root.as_str() } else { g.name(n) }).clicked() {
                 fly = Some(n);
             }
         }
@@ -1038,16 +1271,11 @@ impl Project {
                 ui.colored_label(style::EDGE_UP, format!("Review failed: {e}"));
                 ui.separator();
             }
-            let mut exit = false;
             if let Some(rv) = &self.review {
                 let t = rv.review.totals();
                 let removed = if t.removed > 0 { format!(" · {} removed", t.removed) } else { String::new() };
-                ui.label(egui::RichText::new(format!("REVIEW vs {} · {} new · {} changed{removed} · {} / {} reviewed", rv.label, t.new, t.changed, rv.reviewed(), rv.items.len())).strong().color(style::ACCENT));
-                exit = ui.link("exit").clicked();
+                ui.label(egui::RichText::new(format!("{} · {} new · {} changed{removed} · {} / {} reviewed", rv.label, t.new, t.changed, rv.reviewed(), rv.items.len())).strong().color(style::ACCENT));
                 ui.separator();
-            }
-            if exit {
-                self.review = None;
             }
             ui.label(egui::RichText::new(format!("zoom {:.0}% · inside {level}", self.cam.zoom * 100.0)).color(style::MUTED));
             ui.separator();

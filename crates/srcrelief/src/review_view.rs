@@ -205,3 +205,25 @@ pub fn step(len: usize, current: Option<usize>, forward: bool) -> Option<usize> 
         (Some(i), false) => (i + len - 1) % len,
     })
 }
+
+#[derive(Clone, Debug, PartialEq)]
+pub enum CommitStep {
+    Commit(srcrelief_index::review::Commit),
+    Uncommitted,
+}
+
+impl CommitStep {
+    pub fn range(&self) -> (Option<String>, Option<String>) {
+        match self {
+            CommitStep::Commit(c) => (Some(format!("{}^", c.sha)), Some(c.sha.clone())),
+            CommitStep::Uncommitted => (Some("HEAD".into()), None),
+        }
+    }
+
+    pub fn label(&self) -> &str {
+        match self {
+            CommitStep::Commit(c) => &c.subject,
+            CommitStep::Uncommitted => "Uncommitted changes",
+        }
+    }
+}

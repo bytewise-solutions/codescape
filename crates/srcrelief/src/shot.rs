@@ -13,6 +13,8 @@ pub struct ShotPlan {
     pub zoom: Option<f64>,
     pub shortcuts: bool,
     pub review: Option<String>,
+    pub review_target: Option<String>,
+    pub review_by_commit: bool,
 }
 
 pub struct Shot {

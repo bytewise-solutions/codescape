@@ -91,9 +91,10 @@ pub const CHEATSHEET: &[(&str, &[(&str, &str)])] = &[
     (
         "Review",
         &[
-            ("Review ▸ Compare with main", "see what this checkout changed since it left main"),
+            ("Review (top right)", "compare two versions: pick base and target in the review bar"),
             ("N / P", "next / previous change"),
             ("R", "mark the current change reviewed (again: unmark)"),
+            ("[ ]", "previous / next commit, commit by commit"),
         ],
     ),
     (
