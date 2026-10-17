@@ -1,3 +1,4 @@
+mod analysis;
 mod pipeline;
 mod review;
 mod settings;

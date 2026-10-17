@@ -1,6 +1,7 @@
 use anyhow::Result;
 use clap::Parser;
-use srcrelief_format::ReliefFile;
+use srcrelief_format::{ArchivedGraph, NodeId, ReliefFile};
+use srcrelief_index::analysis::analyse;
 use srcrelief_index::{SettingsPaths, SettingsStore, Summary, index_path, index_project, needs_reindex, project_packs};
 use std::path::PathBuf;
 
@@ -14,6 +15,8 @@ struct Args {
     out: Option<PathBuf>,
     #[arg(long)]
     force: bool,
+    #[arg(long, help = "List blocks nothing uses")]
+    unused: bool,
 }
 
 fn main() -> Result<()> {
@@ -28,10 +31,27 @@ fn main() -> Result<()> {
         let file = ReliefFile::open(&path)?;
         println!("{}", Summary::from_graph(file.graph(), &packs.visual(), file.byte_len() as u64, Default::default()));
         println!("Up to date: {} (use --force to rebuild)", path.display());
-        return Ok(());
+    } else {
+        let out = index_project(&args.dir, &cfg, &|p| eprintln!("{p:?}…"))?;
+        println!("{}", out.summary);
+        println!("Written to {}", out.path.display());
     }
-    let out = index_project(&args.dir, &cfg, &|p| eprintln!("{p:?}…"))?;
-    println!("{}", out.summary);
-    println!("Written to {}", out.path.display());
+    if args.unused {
+        print_unused(ReliefFile::open(&path)?.graph(), &args.dir);
+    }
     Ok(())
+}
+
+fn print_unused(g: &ArchivedGraph, root: &std::path::Path) {
+    let a = analyse(g, root);
+    let mut rows: Vec<(&str, String)> = (0..g.node_count() as NodeId)
+        .filter_map(|n| a.usage[n as usize].label().map(|l| (l, g.path(n).iter().skip(1).map(|&p| g.name(p)).collect::<Vec<_>>().join("/"))))
+        .collect();
+    rows.sort();
+    for (label, path) in &rows {
+        println!("{label:<26} {path}");
+    }
+    for label in ["unused", "only tests use it", "no caller in the project"] {
+        println!("{label}: {}", rows.iter().filter(|r| r.0 == label).count());
+    }
 }

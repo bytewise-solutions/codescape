@@ -1,6 +1,7 @@
 mod cache;
 mod config;
 mod pipeline;
+pub mod analysis;
 pub mod review;
 mod settings;
 mod summary;
