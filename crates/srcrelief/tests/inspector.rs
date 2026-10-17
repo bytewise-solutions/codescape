@@ -45,7 +45,7 @@ fn header_says_what_and_where() {
     assert_eq!(h.name, "processJobBatch");
     let owners: Vec<&str> = h.owners.iter().map(|(_, s)| s.as_str()).collect();
     assert_eq!(owners, ["jobProducer", "internal/jobs/producer"]);
-    assert_eq!(h.location.as_deref(), Some("job_producer.go:187-259 · 73 lines"));
+    assert_eq!(h.location.as_deref(), Some("job_producer.go:187-259 · 73 lines · complexity 1"));
     let pkg = header(g, named(g, "messaging"));
     assert_eq!((pkg.kind.as_str(), pkg.location), ("PACKAGE · Go", None));
     assert_eq!(pkg.owners.iter().map(|(_, s)| s.as_str()).collect::<Vec<_>>(), ["job-engine"]);

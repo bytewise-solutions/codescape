@@ -252,6 +252,13 @@ pub struct Graph {
     pub stats: GraphStats,
     pub provenance: Vec<PackStamp>,
     pub fields: Vec<FieldRec>,
+    pub complexity: Vec<Metric>,
+}
+
+#[derive(Archive, Serialize, Deserialize, Debug, Clone, Copy)]
+pub struct Metric {
+    pub node: u32,
+    pub value: u16,
 }
 
 #[derive(Archive, Serialize, Deserialize, Debug, Clone, Copy)]

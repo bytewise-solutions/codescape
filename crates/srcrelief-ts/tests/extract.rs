@@ -241,3 +241,24 @@ fn class_and_interface_fields_become_members() {
     let cfg = at(&b, &["fld", "src", "Config"]);
     assert_eq!(fields(cfg), [("url".to_string(), Some("string".to_string()), Visibility::Public), ("retries".to_string(), Some("number".to_string()), Visibility::Public)]);
 }
+
+#[test]
+fn functions_and_methods_carry_their_cyclomatic_complexity() {
+    let tmp = tempfile::tempdir().unwrap();
+    let r = tmp.path();
+    std::fs::write(r.join("package.json"), "{\"name\": \"cx\"}").unwrap();
+    std::fs::write(r.join("tsconfig.json"), "{}").unwrap();
+    std::fs::create_dir_all(r.join("src")).unwrap();
+    std::fs::write(
+        r.join("src/c.ts"),
+        "export function easy() { return 1; }\nexport class C {\n  hard(x: number, a: boolean, b: boolean) {\n    if (x > 0 && a) { return 1; }\n    for (let i = 0; i < x; i++) { if (b || a) x--; }\n    switch (x) { case 1: return 2; case 2: return 3; default: return a ? 4 : (x ?? 5); }\n  }\n}\n",
+    )
+    .unwrap();
+    let d = discover(r, &default_excludes()).unwrap();
+    let mut b = GraphBuilder::new("cx");
+    let module_nodes: Vec<NodeId> = d.modules.iter().map(|m| b.add_node(b.root(), NodeKind::Module, SubKind::None, &m.name, m.lang)).collect();
+    let mut facts = ProjectFacts::default();
+    extract_ts(&d, &module_nodes, &default_excludes(), &mut b, &mut facts);
+    assert_eq!(b.complexity(at(&b, &["cx", "src", "easy"])), 1);
+    assert_eq!(b.complexity(at(&b, &["cx", "src", "C", "hard"])), 10, "if && for if || case case ?: ??");
+}

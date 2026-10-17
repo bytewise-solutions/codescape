@@ -218,3 +218,24 @@ fn fields_become_members_with_their_declared_type() {
     let counts = b.children(t).iter().copied().find(|&c| b.name(c) == "counts").unwrap();
     assert_eq!(b.detail(counts), Some("Map<String, Integer>"));
 }
+
+#[test]
+fn methods_carry_their_cyclomatic_complexity() {
+    let tmp = tempfile::tempdir().unwrap();
+    let r = tmp.path();
+    std::fs::write(r.join("settings.gradle"), "include 'app'\n").unwrap();
+    let src = r.join("app/src/main/java/v");
+    std::fs::create_dir_all(&src).unwrap();
+    std::fs::write(
+        src.join("C.java"),
+        "package v;\nclass C {\n  int easy() { return 1; }\n  int hard(int x, boolean a, boolean b) {\n    if (x > 0 && a) { return 1; }\n    for (int i = 0; i < x; i++) { if (b || a) x--; }\n    switch (x) { case 1: return 2; case 2: return 3; default: return a ? 4 : 5; }\n  }\n}\n",
+    )
+    .unwrap();
+    let d = discover(r, &default_excludes()).unwrap();
+    let mut b = GraphBuilder::new("c");
+    let module_nodes: Vec<NodeId> = d.modules.iter().map(|m| b.add_node(b.root(), NodeKind::Module, SubKind::None, &m.name, Lang::Java)).collect();
+    let mut facts = ProjectFacts::default();
+    extract_java(&d, &module_nodes, &default_excludes(), &mut b, &mut facts);
+    assert_eq!(b.complexity(at(&b, &["app", "v", "C", "easy"])), 1);
+    assert_eq!(b.complexity(at(&b, &["app", "v", "C", "hard"])), 9, "if && for if || case case ?:");
+}

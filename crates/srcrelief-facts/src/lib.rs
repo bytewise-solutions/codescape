@@ -96,3 +96,35 @@ pub struct FieldDecl {
     pub visibility: srcrelief_format::Visibility,
     pub line: u32,
 }
+
+pub struct Decisions {
+    pub branches: &'static [&'static str],
+    pub operators: &'static [&'static str],
+    pub not_branch: &'static [(&'static str, &'static str)],
+    pub arm: Option<(&'static str, &'static str)>,
+}
+
+pub fn cyclomatic(node: tree_sitter::Node, src: &[u8], d: &Decisions) -> u16 {
+    let mut count: i64 = 1;
+    let mut cursor = node.walk();
+    let mut stack = vec![node];
+    while let Some(n) = stack.pop() {
+        let kind = n.kind();
+        let text = || n.utf8_text(src).unwrap_or("");
+        if d.branches.contains(&kind) && !d.not_branch.iter().any(|(k, prefix)| *k == kind && text().trim_start().starts_with(prefix)) {
+            count += 1;
+        }
+        if kind == "binary_expression" && n.child_by_field_name("operator").is_some_and(|o| d.operators.contains(&o.utf8_text(src).unwrap_or(""))) {
+            count += 1;
+        }
+        if let Some((arm, parent)) = d.arm {
+            if kind == arm {
+                count += 1;
+            } else if kind == parent {
+                count -= 1;
+            }
+        }
+        stack.extend(n.named_children(&mut cursor));
+    }
+    count.clamp(1, u16::MAX as i64) as u16
+}

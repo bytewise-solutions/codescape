@@ -6,7 +6,7 @@ use std::ops::Range;
 use std::path::Path;
 
 pub const MAGIC: &[u8; 8] = b"SRCRLF01";
-pub const FORMAT_VERSION: u32 = 13;
+pub const FORMAT_VERSION: u32 = 14;
 const HEADER: usize = 48;
 
 #[derive(Debug, thiserror::Error)]
@@ -104,6 +104,15 @@ impl ArchivedGraph {
 
     pub fn sub_kind(&self, id: NodeId) -> SubKind {
         SubKind::from_u8(self.node(id).sub)
+    }
+
+    pub fn complexity(&self, id: NodeId) -> Option<u16> {
+        if self.kind(id) != NodeKind::Member || !matches!(self.sub_kind(id), SubKind::Method | SubKind::Function | SubKind::Constructor) {
+            return None;
+        }
+        let all = &self.complexity;
+        let i = all.partition_point(|m| m.node.to_native() < id);
+        Some(all.get(i).filter(|m| m.node.to_native() == id).map_or(1, |m| m.value.to_native()))
     }
 
     pub fn fields(&self, owner: NodeId) -> impl Iterator<Item = FieldView<'_>> {

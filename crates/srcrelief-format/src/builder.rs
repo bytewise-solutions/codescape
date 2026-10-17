@@ -20,6 +20,7 @@ struct BNode {
     flags: NodeFlags,
     vis: Visibility,
     detail: u32,
+    complexity: u16,
     lines: u32,
     file: u32,
     start_line: u32,
@@ -84,6 +85,7 @@ impl GraphBuilder {
             flags: NodeFlags::NONE,
             vis: Visibility::Unknown,
             detail: NONE,
+            complexity: 1,
             lines: 0,
             file: NONE,
             start_line: 0,
@@ -142,6 +144,14 @@ impl GraphBuilder {
 
     pub fn set_visibility(&mut self, node: NodeId, vis: Visibility) {
         self.nodes[node as usize].vis = vis;
+    }
+
+    pub fn set_complexity(&mut self, node: NodeId, value: u16) {
+        self.nodes[node as usize].complexity = value.max(1);
+    }
+
+    pub fn complexity(&self, node: NodeId) -> u16 {
+        self.nodes[node as usize].complexity
     }
 
     pub fn set_detail(&mut self, node: NodeId, detail: &str) {
@@ -264,6 +274,12 @@ impl GraphBuilder {
                 fields.push(FieldRec { owner: new as u32, name: f.name, ty: f.detail, line: f.start_line, vis: f.vis as u8 });
             }
         }
+        let complexity: Vec<Metric> = order
+            .iter()
+            .enumerate()
+            .filter(|(_, old)| self.nodes[**old as usize].complexity > 1)
+            .map(|(new, &old)| Metric { node: new as u32, value: self.nodes[old as usize].complexity })
+            .collect();
         let n = order.len();
         child_offsets.truncate(n + 1);
         child_offsets[n] = n as u32;
@@ -489,6 +505,6 @@ impl GraphBuilder {
         }
         str_offsets.push(strings.len() as u32);
 
-        Graph { strings, str_offsets, nodes, child_offsets, edges, edge_index, aggs, agg_offsets, tags, tag_offsets, entries, stats, provenance, fields }
+        Graph { strings, str_offsets, nodes, child_offsets, edges, edge_index, aggs, agg_offsets, tags, tag_offsets, entries, stats, provenance, fields, complexity }
     }
 }

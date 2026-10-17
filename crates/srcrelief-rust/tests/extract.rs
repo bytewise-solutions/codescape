@@ -560,3 +560,22 @@ fn struct_fields_become_members_after_methods() {
     let pair = at(&b, &["fld", "(lib)", "Pair"]);
     assert_eq!(fields(pair), [("0".to_string(), Some("u8".to_string()), Visibility::Public), ("1".to_string(), Some("String".to_string()), Visibility::Private)]);
 }
+
+#[test]
+fn functions_carry_their_cyclomatic_complexity() {
+    let tmp = tempfile::tempdir().unwrap();
+    let r = tmp.path();
+    write(r, "Cargo.toml", "[package]\nname = \"cx\"\n");
+    write(
+        r,
+        "src/lib.rs",
+        "pub fn easy() -> u8 { 1 }\npub fn hard(x: u8, a: bool, b: bool) -> u8 {\n    if x > 0 && a { return 1; }\n    for _ in 0..x { if b || a { continue; } }\n    match x { 1 => 2, 2 => 3, _ => 4 }\n}\n",
+    );
+    let d = discover(r, &default_excludes()).unwrap();
+    let mut b = GraphBuilder::new("cx");
+    let module_nodes: Vec<NodeId> = d.modules.iter().map(|m| b.add_node(b.root(), NodeKind::Module, SubKind::None, &m.name, m.lang)).collect();
+    let mut facts = ProjectFacts::default();
+    extract_rust(&d, &module_nodes, &default_excludes(), &mut b, &mut facts);
+    assert_eq!(b.complexity(at(&b, &["cx", "(lib)", "easy"])), 1);
+    assert_eq!(b.complexity(at(&b, &["cx", "(lib)", "hard"])), 8, "if && for if || and two extra match arms");
+}

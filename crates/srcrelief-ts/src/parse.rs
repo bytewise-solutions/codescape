@@ -1,4 +1,11 @@
-use srcrelief_facts::{Annotation, FieldDecl};
+use srcrelief_facts::{Annotation, Decisions, FieldDecl, cyclomatic};
+
+const DECISIONS: Decisions = Decisions {
+    branches: &["if_statement", "for_statement", "for_in_statement", "while_statement", "do_statement", "catch_clause", "ternary_expression", "switch_case"],
+    operators: &["&&", "||", "??"],
+    not_branch: &[],
+    arm: None,
+};
 use srcrelief_format::{SubKind, Visibility};
 use tree_sitter::{Node, Parser};
 
@@ -76,6 +83,7 @@ pub struct TsFunc {
     pub name: String,
     pub sub: SubKind,
     pub visibility: Visibility,
+    pub complexity: u16,
     pub param_fields: Vec<FieldDecl>,
     pub params: Vec<(String, String)>,
     pub returns: Option<String>,
@@ -92,6 +100,7 @@ impl Default for TsFunc {
             name: String::new(),
             sub: SubKind::Function,
             visibility: Visibility::Unknown,
+            complexity: 1,
             param_fields: Vec::new(),
             params: Vec::new(),
             returns: None,
@@ -307,7 +316,7 @@ impl<'s> Ctx<'s> {
     }
 
     fn function(&self, name: &str, sub: SubKind, n: Node, fields: Option<&mut Vec<(String, TypeExpr)>>) -> TsFunc {
-        let mut f = TsFunc { name: name.to_string(), sub, start_line: line(n), end_line: end_line(n), ..Default::default() };
+        let mut f = TsFunc { name: name.to_string(), sub, complexity: cyclomatic(n, self.src, &DECISIONS), start_line: line(n), end_line: end_line(n), ..Default::default() };
         match n.child_by_field_name("parameters") {
             Some(list) => self.params(Some(list), &mut f, fields),
             None => {

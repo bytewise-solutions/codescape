@@ -1,4 +1,11 @@
-use srcrelief_facts::{Annotation, FieldDecl, Import};
+use srcrelief_facts::{Annotation, Decisions, FieldDecl, Import, cyclomatic};
+
+const DECISIONS: Decisions = Decisions {
+    branches: &["if_statement", "for_statement", "enhanced_for_statement", "while_statement", "do_statement", "catch_clause", "ternary_expression", "switch_label"],
+    operators: &["&&", "||"],
+    not_branch: &[("switch_label", "default")],
+    arm: None,
+};
 use srcrelief_format::{SubKind, Visibility};
 use tree_sitter::{Node, Parser};
 
@@ -34,6 +41,7 @@ pub struct JMethod {
     pub is_static: bool,
     pub is_public: bool,
     pub visibility: Visibility,
+    pub complexity: u16,
     pub annotations: Vec<Annotation>,
     pub locals: Vec<(String, String)>,
     pub calls: Vec<JCall>,
@@ -306,6 +314,7 @@ impl<'s> Ctx<'s> {
             is_static: self.has_modifier(m, "static"),
             is_public: self.has_modifier(m, "public"),
             visibility: self.visibility(m),
+            complexity: cyclomatic(m, self.src, &DECISIONS),
             annotations: self.annotations(Self::modifiers(m)),
             start_line: line(m),
             end_line: end_line(m),

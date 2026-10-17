@@ -251,3 +251,22 @@ fn struct_fields_become_members() {
         b.children(store).iter().filter(|&&c| b.sub_kind(c) == SubKind::Field).map(|&c| (b.name(c), b.detail(c), b.visibility(c))).collect();
     assert_eq!(fields, [("DB", Some("*sql.DB"), Visibility::Public), ("cache", Some("map[string]int"), Visibility::Package), ("Mutex", Some("sync.Mutex"), Visibility::Public)]);
 }
+
+#[test]
+fn functions_carry_their_cyclomatic_complexity() {
+    let tmp = tempfile::tempdir().unwrap();
+    std::fs::write(tmp.path().join("go.mod"), "module example.com/c\n\ngo 1.22\n").unwrap();
+    std::fs::write(
+        tmp.path().join("c.go"),
+        "package c\n\nfunc Easy() int { return 1 }\n\nfunc Hard(x int, a, b bool) int {\n\tif x > 0 && a {\n\t\treturn 1\n\t}\n\tfor i := 0; i < x; i++ {\n\t\tif b || a {\n\t\t\tx--\n\t\t}\n\t}\n\tswitch x {\n\tcase 1:\n\t\treturn 2\n\tcase 2:\n\t\treturn 3\n\tdefault:\n\t\treturn 4\n\t}\n}\n",
+    )
+    .unwrap();
+    let d = discover(tmp.path(), &default_excludes()).unwrap();
+    let mut b = GraphBuilder::new("c");
+    let nodes: Vec<NodeId> = d.modules.iter().map(|m| b.add_node(b.root(), NodeKind::Module, SubKind::None, &m.name, Lang::Go)).collect();
+    let mut facts = ProjectFacts::default();
+    extract_go(&d, &nodes, &default_excludes(), &mut b, &mut facts);
+    let pkg = b.children(nodes[0])[0];
+    assert_eq!(b.complexity(b.child(pkg, "Easy").unwrap()), 1);
+    assert_eq!(b.complexity(b.child(pkg, "Hard").unwrap()), 8, "if && for if || case case");
+}

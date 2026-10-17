@@ -92,6 +92,10 @@ enough to read.
   marks methods used from outside the type or that are entry points. Arrows join cards, not methods. Hover a row to
   see it, click it to select the method (its uses light up), double-click to open the file at that method. Functions
   that live directly in a package (Go, TypeScript, Rust) stay boxes.
+- **Complexity hints.** Every function's cyclomatic complexity is counted while indexing (1 + each `if`, loop,
+  non-default `case` or extra `match` arm, `catch`, ternary, `&&`, `||`, `??`). From 10 a method row or function box
+  carries an amber number, red from 20; a card's header shows its highest. The right panel gives the exact value.
+  **View ▸ Complexity hints** turns them off.
 - **Constructors live inside their type.** A Go `func NewX(...) *X` is a row of `X`'s card, not a box of its own.
 - **Dependency injection is set aside.** Code recognised as wiring (Google Wire's generated injectors and provider
   sets, Dagger components/modules) is hidden with its arrows, so it never changes the layering. Tick **View ▸ Wiring**

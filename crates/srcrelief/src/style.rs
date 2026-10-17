@@ -154,3 +154,14 @@ pub fn stereotype(sub: srcrelief_format::SubKind, lang: srcrelief_format::Lang) 
         _ => None,
     }
 }
+
+pub const COMPLEXITY_HINT: u16 = 10;
+pub const COMPLEXITY_HIGH: u16 = 20;
+
+pub fn complexity_hint(value: u16) -> Option<Color32> {
+    match value {
+        v if v >= COMPLEXITY_HIGH => Some(EDGE_UP),
+        v if v >= COMPLEXITY_HINT => Some(EDGE_SIDEWAYS),
+        _ => None,
+    }
+}

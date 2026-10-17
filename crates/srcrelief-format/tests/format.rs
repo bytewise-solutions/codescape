@@ -454,3 +454,18 @@ fn fields_are_stored_apart_from_the_graph() {
     assert_eq!(g.fields(find(g, t, "run")).count(), 0);
     assert!(g.out_edges(find(g, t, "run")).is_empty(), "edges to fields are dropped");
 }
+
+#[test]
+fn complexity_is_kept_for_functions_and_defaults_to_one() {
+    let mut b = GraphBuilder::new("proj");
+    let t = b.add_node(b.root(), NodeKind::Type, SubKind::Class, "T", Lang::Java);
+    let hard = b.add_node(t, NodeKind::Member, SubKind::Method, "hard", Lang::Java);
+    b.add_node(t, NodeKind::Member, SubKind::Method, "easy", Lang::Java);
+    b.set_complexity(hard, 17);
+    let (_d, file) = roundtrip(b);
+    let g = file.graph();
+    let t = find(g, g.root(), "T");
+    assert_eq!(g.complexity(find(g, t, "hard")), Some(17));
+    assert_eq!(g.complexity(find(g, t, "easy")), Some(1));
+    assert_eq!(g.complexity(t), None, "only functions have a complexity");
+}

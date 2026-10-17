@@ -1,4 +1,11 @@
-use srcrelief_facts::{FieldDecl, Import};
+use srcrelief_facts::{Decisions, FieldDecl, Import, cyclomatic};
+
+const DECISIONS: Decisions = Decisions {
+    branches: &["if_statement", "for_statement", "expression_case", "type_case", "communication_case"],
+    operators: &["&&", "||"],
+    not_branch: &[],
+    arm: None,
+};
 use srcrelief_format::SubKind;
 use tree_sitter::{Node, Parser};
 
@@ -28,6 +35,7 @@ pub struct GoType {
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct GoFunc {
     pub name: String,
+    pub complexity: u16,
     pub receiver: Option<String>,
     pub params: Vec<(String, String)>,
     pub results: Vec<String>,
@@ -225,6 +233,7 @@ impl<'s> Ctx<'s> {
     fn func(&self, n: Node) -> GoFunc {
         let mut f = GoFunc {
             name: n.child_by_field_name("name").map(|x| self.text(x).to_string()).unwrap_or_default(),
+            complexity: cyclomatic(n, self.src, &DECISIONS),
             start_line: line(n),
             end_line: end_line(n),
             ..Default::default()

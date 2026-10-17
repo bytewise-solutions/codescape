@@ -42,9 +42,10 @@ fn view_menu_lists_built_in_toggles_then_filters_then_arrows_and_legend() {
     let (_t, s) = store(FILTERS);
     let items = view_items(s.settings());
     let labels: Vec<&str> = items.iter().map(|i| i.label.as_str()).collect();
-    assert_eq!(labels, ["Tests", "Test dependencies", "Details", "Errors", "Wiring", "migrations", "generated", "Quiet arrows", "Legend"]);
-    assert_eq!(items[5], ViewItem { key: Key::FilterShown("migrations".into()), label: "migrations".into(), checked: false });
-    assert_eq!(items[6].checked, true);
-    assert_eq!(items[7], ViewItem { key: Key::View(View::QuietArrows), label: "Quiet arrows".into(), checked: true });
-    assert_eq!(items[8], ViewItem { key: Key::View(View::Legend), label: "Legend".into(), checked: true });
+    assert_eq!(labels, ["Tests", "Test dependencies", "Details", "Errors", "Wiring", "Complexity hints", "migrations", "generated", "Quiet arrows", "Legend"]);
+    assert_eq!(items[5], ViewItem { key: Key::View(View::Complexity), label: "Complexity hints".into(), checked: true });
+    assert_eq!(items[6], ViewItem { key: Key::FilterShown("migrations".into()), label: "migrations".into(), checked: false });
+    assert_eq!(items[7].checked, true);
+    assert_eq!(items[8], ViewItem { key: Key::View(View::QuietArrows), label: "Quiet arrows".into(), checked: true });
+    assert_eq!(items[9], ViewItem { key: Key::View(View::Legend), label: "Legend".into(), checked: true });
 }

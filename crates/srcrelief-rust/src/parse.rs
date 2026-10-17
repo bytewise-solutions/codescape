@@ -1,4 +1,11 @@
-use srcrelief_facts::{Annotation, FieldDecl};
+use srcrelief_facts::{Annotation, Decisions, FieldDecl, cyclomatic};
+
+const DECISIONS: Decisions = Decisions {
+    branches: &["if_expression", "while_expression", "for_expression"],
+    operators: &["&&", "||"],
+    not_branch: &[],
+    arm: Some(("match_arm", "match_expression")),
+};
 use srcrelief_format::{SubKind, Visibility};
 use tree_sitter::{Node, Parser};
 
@@ -62,6 +69,7 @@ pub struct RsFn {
     pub params: Vec<(String, String)>,
     pub has_self: bool,
     pub visibility: Visibility,
+    pub complexity: u16,
     pub ret: Option<String>,
     pub generics: Vec<(String, String)>,
     pub locals: Vec<(String, Expr)>,
@@ -409,6 +417,7 @@ impl<'s> Ctx<'s> {
             name: n.child_by_field_name("name").map(|x| self.text(x).to_string()).unwrap_or_default(),
             attrs,
             visibility: self.visibility(n),
+            complexity: cyclomatic(n, self.src, &DECISIONS),
             ret: n.child_by_field_name("return_type").map(|t| self.type_name(t, RESULTS)).filter(|s| !s.is_empty()),
             generics,
             start_line: line(n),

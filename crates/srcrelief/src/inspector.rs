@@ -80,6 +80,10 @@ pub fn header(g: &ArchivedGraph, n: NodeId) -> Header {
         let lines = end - start + 1;
         format!("{base}:{start}-{end} · {lines} line{}", if lines == 1 { "" } else { "s" })
     });
+    let location = match g.complexity(n) {
+        Some(c) => Some(format!("{} · complexity {c}", location.unwrap_or_default()).trim_start_matches(" · ").to_string()),
+        None => location,
+    };
     Header { kind, name: g.name(n).to_string(), owners, location }
 }
 

@@ -189,6 +189,7 @@ impl<'a> Resolver<'a> {
                 self.b.set_span(id, &f.rel, m.start_line, m.end_line);
                 self.b.set_lines(id, m.end_line - m.start_line + 1);
                 self.b.set_visibility(id, if public_members && m.visibility == Visibility::Package { Visibility::Public } else { m.visibility });
+                self.b.set_complexity(id, m.complexity);
                 if f.is_test {
                     self.b.add_flags(id, NodeFlags::TEST);
                 }

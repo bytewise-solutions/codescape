@@ -50,3 +50,12 @@ fn uml_stereotypes_name_the_kind_of_type() {
     assert_eq!(stereotype(SubKind::Struct, Lang::Go), Some("«struct»"));
     assert_eq!(stereotype(SubKind::Class, Lang::Java), None, "a plain class has no stereotype in UML");
 }
+
+#[test]
+fn complexity_hints_appear_from_ten_and_turn_red_from_twenty() {
+    use srcrelief::style::{EDGE_UP, EDGE_SIDEWAYS, complexity_hint};
+    assert_eq!(complexity_hint(9), None);
+    assert_eq!(complexity_hint(10), Some(EDGE_SIDEWAYS));
+    assert_eq!(complexity_hint(19), Some(EDGE_SIDEWAYS));
+    assert_eq!(complexity_hint(20), Some(EDGE_UP));
+}

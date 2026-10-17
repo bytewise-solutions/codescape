@@ -1283,6 +1283,10 @@ impl Project {
             painter.rect_stroke(chip, 8.0, Stroke::new(1.0, style::FRAME), StrokeKind::Inside);
             painter.text(chip.center(), Align2::CENTER_CENTER, if b.hidden_details > 0 { format!("+ {} details", b.hidden_details) } else { format!("hide {} details", b.shown_details) }, FontId::proportional(10.5), style::MUTED);
         }
+        if b.kind == NodeKind::Member && !b.source && b.rect.w > 48.0 {
+            let size = (b.rect.h * 0.18).clamp(8.0, 12.0);
+            self.complexity_pill(painter, Pos2::new(b.rect.right() - 6.0, b.rect.y + size), self.file.graph().complexity(b.node), size);
+        }
         if self.app_counts.contains_key(&b.node) && b.rect.w > 24.0 {
             painter.circle_filled(Pos2::new(b.rect.right() - 9.0, b.rect.y + 9.0), 4.0, style::ENTRY);
         }
@@ -1551,6 +1555,8 @@ impl Project {
         if let Some(st) = stereo {
             clip.text(Pos2::new(header.center().x, name_y - title * 1.05), Align2::CENTER_CENTER, st, FontId::proportional(title * 0.75), dim(style::MUTED));
         }
+        let highest = b.rows.iter().filter_map(|r| g.complexity(r.node)).max();
+        self.complexity_pill(&clip, Pos2::new(header.right() - 6.0, header.top() + title * 0.9), highest, (title * 0.8).max(7.0));
         let name = fit_label(g.name(b.node), header.width() - 12.0, title);
         let title_color = if self.selected == Some(b.node) { style::ACCENT } else { dim(style::BOX_TITLE) };
         clip.text(Pos2::new(header.center().x, name_y), Align2::CENTER_CENTER, name, FontId::proportional(title), title_color);
@@ -1600,13 +1606,26 @@ impl Project {
             let base = if g.name(row.node) == "<init>" { g.parent(row.node).map_or("<init>", |t| g.name(t)) } else { g.name(row.node) };
             let vis = g.visibility(row.node).uml();
             let shown = if vis.is_empty() { format!("{base}()") } else { format!("{vis} {base}()") };
-            let text = fit_label(&shown, row.rect.w - size * 1.4, size);
+            let pill = self.complexity_pill(&clip, Pos2::new(row.rect.right(), r.center().y), g.complexity(row.node), size);
+            let text = fit_label(&shown, row.rect.w - size * 1.4 - pill, size);
             clip.text(Pos2::new(row.rect.x + size * 1.1, r.center().y), Align2::LEFT_CENTER, text, font.clone(), color);
         }
         if b.more_rows > 0 {
             let last = erect(b.rows[b.rows.len() - 1].rect);
             clip.text(Pos2::new(last.left() + size * 1.1, last.bottom() + last.height() / 2.0), Align2::LEFT_CENTER, format!("… {} more", b.more_rows), font, style::MUTED);
         }
+    }
+
+    fn complexity_pill(&self, painter: &egui::Painter, right_center: Pos2, value: Option<u16>, size: f32) -> f32 {
+        let Some((v, color)) = value.filter(|_| self.settings.settings().view(View::Complexity).value).and_then(|v| style::complexity_hint(v).map(|c| (v, c))) else {
+            return 0.0;
+        };
+        let galley = painter.layout_no_wrap(v.to_string(), FontId::proportional(size * 0.85), style::BG);
+        let w = galley.size().x + size * 0.7;
+        let r = egui::Rect::from_center_size(right_center - egui::vec2(w / 2.0, 0.0), egui::vec2(w, size * 1.15));
+        painter.rect_filled(r, size * 0.55, color);
+        painter.galley(r.center() - galley.size() / 2.0, galley, style::BG);
+        w + size * 0.3
     }
 
     fn paint_label(&self, painter: &egui::Painter, l: &crate::canvas::SceneLabel) {
