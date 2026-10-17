@@ -23,6 +23,7 @@ pub struct SceneBox {
     pub dimmed: bool,
     pub tag_color: Option<[u8; 3]>,
     pub hidden_details: usize,
+    pub shown_details: usize,
     pub source: bool,
 }
 
@@ -247,7 +248,7 @@ impl Builder<'_> {
         let source = file_level && g.file(node).is_some() && file_font(rect.w).is_some();
         let open = !source && has_children && rect.w >= OPEN_THRESHOLD_PX;
         let tag_color = g.tags(node).find_map(|t| self.vis.style_for(t).map(|s| s.color));
-        self.scene.boxes.push(SceneBox { node, rect, open, depth, kind: g.kind(node), sub: g.sub_kind(node), flags: g.flags(node), mark: self.mark(node), dimmed: self.marks.is_some() && self.mark(node) == Mark::None, tag_color, hidden_details: 0, source });
+        self.scene.boxes.push(SceneBox { node, rect, open, depth, kind: g.kind(node), sub: g.sub_kind(node), flags: g.flags(node), mark: self.mark(node), dimmed: self.marks.is_some() && self.mark(node) == Mark::None, tag_color, hidden_details: 0, shown_details: 0, source });
         self.scene.stats.drawn += 1;
         if !source && rect.h >= MIN_LABEL_PX * 1.6 {
             let size = if open { 13.0 } else { (rect.h * 0.2).clamp(MIN_LABEL_PX, 16.0) };
@@ -262,7 +263,9 @@ impl Builder<'_> {
         }
         if open {
             let idx = self.scene.boxes.len() - 1;
-            self.scene.boxes[idx].hidden_details = self.cache.shared(g, node).hidden_details;
+            let layout = self.cache.shared(g, node);
+            self.scene.boxes[idx].hidden_details = layout.hidden_details;
+            self.scene.boxes[idx].shown_details = layout.shown_details;
             self.open_container(node, world, depth);
         }
     }

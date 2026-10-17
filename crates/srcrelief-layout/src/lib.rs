@@ -76,6 +76,7 @@ pub struct LayoutOptions {
     pub show_wiring: bool,
     pub show_noise: bool,
     pub show_details: bool,
+    pub details_in: Vec<NodeId>,
 }
 
 impl Default for LayoutOptions {
@@ -88,6 +89,7 @@ impl Default for LayoutOptions {
             show_wiring: false,
             show_noise: false,
             show_details: false,
+            details_in: Vec::new(),
         }
     }
 }
@@ -115,7 +117,15 @@ impl LayoutOptions {
     }
 
     pub fn hides(&self, g: &ArchivedGraph, node: NodeId) -> bool {
-        g.flags(node).intersects(self.effective_hidden()) || self.tag_hidden(g, node)
+        let mut hidden = self.effective_hidden();
+        if g.parent(node).is_some_and(|p| self.details_in.contains(&p)) {
+            hidden.0 &= !NodeFlags::DETAIL.0;
+        }
+        g.flags(node).intersects(hidden) || self.tag_hidden(g, node)
+    }
+
+    pub fn details_shown_in(&self, container: NodeId) -> bool {
+        self.show_details || self.details_in.contains(&container)
     }
 }
 
@@ -156,6 +166,7 @@ pub struct ContainerLayout {
     pub edges: Vec<LaidEdge>,
     pub frames: Vec<FrameBox>,
     pub hidden_details: usize,
+    pub shown_details: usize,
 }
 
 impl ContainerLayout {

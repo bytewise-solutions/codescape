@@ -46,15 +46,14 @@ fn entry_owners(g: &ArchivedGraph) -> HashSet<NodeId> {
 }
 
 pub fn layout_container(g: &ArchivedGraph, node: NodeId, frames: &[FrameRule], opts: &LayoutOptions) -> ContainerLayout {
-    let mut base = layout_structure(g, node, frames, &LayoutOptions { show_wiring: false, show_noise: false, show_details: false, ..opts.clone() });
+    let mut base = layout_structure(g, node, frames, &LayoutOptions { show_wiring: false, show_noise: false, show_details: false, details_in: Vec::new(), ..opts.clone() });
     let tests = if opts.show_tests { NodeFlags::TEST.0 | NodeFlags::MOCK.0 } else { 0 };
     let other = NodeFlags(opts.hidden.0 & !NodeFlags::DETAIL.0 & !tests);
-    base.hidden_details = if opts.show_details {
-        0
-    } else {
-        display_children(g, node).into_iter().filter(|&c| g.flags(c).contains(NodeFlags::DETAIL) && !g.flags(c).intersects(other) && !opts.tag_hidden(g, c)).count()
-    };
-    if !opts.show_wiring && !opts.show_noise && !opts.show_details {
+    let details = display_children(g, node).into_iter().filter(|&c| g.flags(c).contains(NodeFlags::DETAIL) && !g.flags(c).intersects(other) && !opts.tag_hidden(g, c)).count();
+    let shown = opts.details_shown_in(node);
+    base.hidden_details = if shown { 0 } else { details };
+    base.shown_details = if shown && !opts.show_details { details } else { 0 };
+    if !opts.show_wiring && !opts.show_noise && !shown {
         return base;
     }
     add_wiring(g, node, base, opts)
@@ -333,6 +332,7 @@ fn layout_structure(g: &ArchivedGraph, node: NodeId, frames: &[FrameRule], opts:
         edges: laid_edges,
         frames: frame_boxes,
         hidden_details: 0,
+        shown_details: 0,
     }
 }
 

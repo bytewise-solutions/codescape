@@ -85,7 +85,8 @@ enough to read.
   interfaces, entry-point owners, what the DI framework assembles (Wire/Dagger, Spring `@Component`/`@Service`,
   `@Inject` constructors) and types used from two or more other packages. Data types (structs without methods,
   records, enums, getter/setter classes, `*Request`/`*Response`/models), nested types and helpers in
-  `util`/`common` packages are *details*: an open box shows `+ N details`; click it or tick **View ▸ Details** to show them.
+  `util`/`common` packages are *details*: an open box shows `+ N details`; click it to show that box's details and
+  `hide N details` to put them away again, or tick **View ▸ Details** to show them everywhere.
   The `significance` pack holds these rules.
 - **Implementations live inside their interface.** At first glance you see the interface; open it to see the
   structs or classes that implement it.

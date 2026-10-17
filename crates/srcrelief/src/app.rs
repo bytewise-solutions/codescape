@@ -342,6 +342,7 @@ struct Project {
     source: std::cell::RefCell<SourceCache>,
     file_scroll: HashMap<NodeId, f32>,
     scroll_drag: Option<NodeId>,
+    details_in: Vec<NodeId>,
     pointer: Option<Pos2>,
 }
 
@@ -461,6 +462,7 @@ impl Project {
             source,
             file_scroll: HashMap::new(),
             scroll_drag: None,
+            details_in: Vec::new(),
             pointer: None,
         })
     }
@@ -501,7 +503,9 @@ impl Project {
     }
 
     fn apply_display(&mut self) {
-        self.cache.set_options(layout_options(self.settings.settings(), &self.visual));
+        let mut opts = layout_options(self.settings.settings(), &self.visual);
+        opts.details_in = self.details_in.clone();
+        self.cache.set_options(opts);
         self.form.error = self.settings.save_view().err().map(|e| format!("{e:#}"));
     }
 
@@ -1061,6 +1065,7 @@ impl Project {
         }
         let mut clicked_box = None;
         let mut display = None;
+        let mut details_toggle: Option<(NodeId, bool)> = None;
         if resp.clicked() {
             if let Some(p) = resp.interact_pointer_pos() {
                 let root = self.cache.shared(g, g.root());
@@ -1075,8 +1080,8 @@ impl Project {
                 } else if legend.contains(Pos2::new(p.x, p.y)) {
                 } else if let Some(w) = minimap::world_at(&root, self.view, [p.x, p.y]) {
                     self.target = Some(Camera { center: w, zoom: self.cam.zoom });
-                } else if self.scene.boxes.iter().any(|b| b.hidden_details > 0 && chip_rect(b.rect).contains([p.x, p.y])) {
-                    display = Some((View::Details, true));
+                } else if let Some(b) = self.scene.boxes.iter().rev().find(|b| b.open && b.hidden_details + b.shown_details > 0 && chip_rect(b.rect).contains([p.x, p.y])) {
+                    details_toggle = Some((b.node, b.hidden_details > 0));
                 } else {
                     clicked_box = self.file_page_at(p).or_else(|| self.scene.box_at([p.x, p.y]));
                 }
@@ -1122,6 +1127,15 @@ impl Project {
         }
         if let Some((v, on)) = display {
             self.set_display(&SettingKey::View(v), on);
+        }
+        if let Some((node, show)) = details_toggle {
+            self.details_in.retain(|&n| n != node);
+            if show {
+                self.details_in.push(node);
+            }
+            let mut opts = self.cache.options().clone();
+            opts.details_in = self.details_in.clone();
+            self.cache.set_options(opts);
         }
         if let Some(n) = fly {
             self.set_focus(n, None, true, true);
@@ -1193,11 +1207,11 @@ impl Project {
             stroke = Stroke::new(2.5, style::ACCENT);
         }
         painter.rect_stroke(r, 3.0, stroke, StrokeKind::Inside);
-        if b.open && b.hidden_details > 0 && b.rect.w > 140.0 {
+        if b.open && b.hidden_details + b.shown_details > 0 && b.rect.w > 140.0 {
             let chip = erect(chip_rect(b.rect));
             painter.rect_filled(chip, 8.0, style::BAR);
             painter.rect_stroke(chip, 8.0, Stroke::new(1.0, style::FRAME), StrokeKind::Inside);
-            painter.text(chip.center(), Align2::CENTER_CENTER, format!("+ {} details", b.hidden_details), FontId::proportional(10.5), style::MUTED);
+            painter.text(chip.center(), Align2::CENTER_CENTER, if b.hidden_details > 0 { format!("+ {} details", b.hidden_details) } else { format!("hide {} details", b.shown_details) }, FontId::proportional(10.5), style::MUTED);
         }
         if self.app_counts.contains_key(&b.node) && b.rect.w > 24.0 {
             painter.circle_filled(Pos2::new(b.rect.right() - 9.0, b.rect.y + 9.0), 4.0, style::ENTRY);

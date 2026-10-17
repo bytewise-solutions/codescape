@@ -272,6 +272,11 @@ fn folded_implementations_are_reachable_and_details_counted() {
     let pkg_box = s.boxes.iter().find(|b| b.node == pkg).unwrap();
     assert_eq!(pkg_box.hidden_details, 1);
     assert!(s.boxes.iter().all(|b| b.node != adapter || g.parent(b.node) == Some(pkg)));
+    let mut opened = LayoutCache::new(Vec::new(), LayoutOptions { details_in: vec![pkg], ..Default::default() });
+    let s = scene(g, &mut opened, &cam);
+    let pkg_box = s.boxes.iter().find(|b| b.node == pkg).unwrap();
+    assert_eq!((pkg_box.hidden_details, pkg_box.shown_details), (0, 1), "the chip offers to hide them again");
+    assert!(s.boxes.iter().any(|b| g.name(b.node) == "Price"));
 }
 
 #[test]

@@ -646,3 +646,19 @@ fn hidden_tags_take_boxes_out_and_tests_come_back_when_shown() {
     tests.sort();
     assert_eq!(tests, ["app", "gen", "it"]);
 }
+
+#[test]
+fn details_can_be_opened_for_one_container_and_closed_again() {
+    let g = ports();
+    let gr = g.file.graph();
+    let pkg = gr.children(gr.root()).start;
+    let opts = LayoutOptions { details_in: vec![pkg], ..Default::default() };
+    let open = layout_container(gr, pkg, &[], &opts);
+    assert!(open.child(g.ids["Price"]).is_some());
+    assert_eq!((open.hidden_details, open.shown_details), (0, 1), "the chip can offer to hide one detail");
+    assert!(!opts.hides(gr, g.ids["Price"]));
+    let elsewhere = LayoutOptions { details_in: vec![g.ids["Handler"]], ..Default::default() };
+    assert!(elsewhere.hides(gr, g.ids["Price"]), "opening another box shows nothing here");
+    let global = layout_container(gr, pkg, &[], &LayoutOptions { show_details: true, ..Default::default() });
+    assert_eq!(global.shown_details, 0, "View > Details is not undone from a box");
+}
