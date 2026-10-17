@@ -1,0 +1,12 @@
+[package]
+name = "codescape-facts"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+tree-sitter.workspace = true
+codescape-format.workspace = true
+
+[lints]
+workspace = true

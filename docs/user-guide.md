@@ -1,6 +1,6 @@
-# SrcRelief user guide
+# Codescape user guide
 
-How SrcRelief finds a project, what the map shows, and how to move around it. For settings and rule packs
+How Codescape finds a project, what the map shows, and how to move around it. For settings and rule packs
 see [configuration.md](configuration.md).
 
 ## How a project is read
@@ -20,7 +20,7 @@ Point it at the project folder. Every module under it is discovered and linked b
 - Other build roots found inside (`pom.xml`, `pyproject.toml`, …) are listed in the status bar as not indexed.
 
 Nothing is written into the project. The index lives in the user cache folder
-(`~/.cache/srcrelief/<hash>.relief` on Linux) and is rebuilt when sources, detection rules or index settings
+(`~/.cache/codescape/<hash>.codescape` on Linux) and is rebuilt when sources, detection rules or index settings
 change.
 
 The menu bar sits at the top left: **File** (Open Folder… `Ctrl+O`, Open Recent, Re-index, Project Settings…
@@ -125,7 +125,7 @@ enough to read.
   own lines, and lists them on the left: `unused`, `no caller in the project` (public, so possibly API used by
   others) or `only tests use it`. Entry points, tests, generated code, constructors and methods implementing a
   supertype's are never listed. Code reached by reflection or a framework can still show up, so read it as a hint.
-  `srcrelief-index <dir> --unused` prints the same list.
+  `codescape-index <dir> --unused` prints the same list.
 - **Constructors live inside their type.** A Go `func NewX(...) *X` is a row of `X`'s card, not a box of its own.
 - **Dependency injection is set aside.** Code recognised as wiring (Google Wire's generated injectors and provider
   sets, Dagger components/modules) is hidden with its arrows, so it never changes the layering. Tick **View ▸ Wiring**
@@ -154,7 +154,7 @@ too).
 ## Screenshots without a person at the window
 
 ```sh
-srcrelief <dir> --screenshot out.png [--focus NAME] [--entry LABEL] [--zoom FACTOR] [--settings] [--review REV] [--review-target REV] [--review-by-commit]
+codescape <dir> --screenshot out.png [--focus NAME] [--entry LABEL] [--zoom FACTOR] [--settings] [--review REV] [--review-target REV] [--review-by-commit]
          [--open METHOD] [--sequence METHOD] [--map-only]
 ```
 

@@ -1,0 +1,16 @@
+[package]
+name = "codescape-layout"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+codescape-format.workspace = true
+codescape-rules.workspace = true
+globset.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true
+
+[lints]
+workspace = true

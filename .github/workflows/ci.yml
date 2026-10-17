@@ -2,7 +2,7 @@ name: CI
 
 on:
   push:
-    branches: [main]
+    branches: [master]
   pull_request:
   workflow_dispatch:
 
@@ -54,12 +54,12 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
       - run: sudo apt-get update && sudo apt-get install -y --no-install-recommends xvfb mesa-vulkan-drivers libgl1-mesa-dri libegl1 libxkbcommon-x11-0 libxcursor1 libxi6 libxrandr2
-      - run: cargo build --release --locked -p srcrelief -p srcrelief-index
-      - run: ./target/release/srcrelief-index . --unused
+      - run: cargo build --release --locked -p codescape -p codescape-index
+      - run: ./target/release/codescape-index . --unused
       - name: Map of this repository
-        run: timeout 300 xvfb-run -a -s "-screen 0 1440x900x24" ./target/release/srcrelief . --screenshot map.png
+        run: timeout 300 xvfb-run -a -s "-screen 0 1440x900x24" ./target/release/codescape . --screenshot map.png
       - name: Sequence diagram
-        run: timeout 300 xvfb-run -a -s "-screen 0 1440x900x24" ./target/release/srcrelief . --sequence open_sequence --screenshot sequence.png
+        run: timeout 300 xvfb-run -a -s "-screen 0 1440x900x24" ./target/release/codescape . --sequence open_sequence --screenshot sequence.png
       - run: test -s map.png && test -s sequence.png
       - uses: actions/upload-artifact@v4
         with:
@@ -77,4 +77,4 @@ jobs:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
-      - run: cargo build --release --locked -p srcrelief -p srcrelief-index
+      - run: cargo build --release --locked -p codescape -p codescape-index

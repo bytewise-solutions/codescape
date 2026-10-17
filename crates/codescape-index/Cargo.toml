@@ -1,0 +1,40 @@
+[package]
+name = "codescape-index"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+autotests = false
+
+[[bin]]
+name = "codescape-index"
+path = "src/main.rs"
+
+[dependencies]
+codescape-format.workspace = true
+codescape-facts.workspace = true
+codescape-build.workspace = true
+codescape-java.workspace = true
+codescape-go.workspace = true
+codescape-ts.workspace = true
+codescape-rust.workspace = true
+codescape-rules.workspace = true
+similar.workspace = true
+serde.workspace = true
+toml.workspace = true
+toml_edit.workspace = true
+globset.workspace = true
+regex.workspace = true
+clap.workspace = true
+dirs.workspace = true
+blake3.workspace = true
+anyhow.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true
+
+[[test]]
+name = "all"
+path = "tests/all.rs"
+
+[lints]
+workspace = true

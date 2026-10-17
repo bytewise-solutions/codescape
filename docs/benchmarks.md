@@ -4,8 +4,8 @@ Measured 2026-10-16 on the development laptop (16 threads, 30 GiB RAM, Linux, re
 
 ## Synthetic 1M-line project
 
-`cargo run --release -p srcrelief-synth -- <dir> --lines 1000000` generates 40 Gradle modules, 7,610 Java classes
-(including one 2,000-class package) and 10 mains. `cargo run --release -p srcrelief --bin scene_bench -- <dir>`
+`cargo run --release -p codescape-synth -- <dir> --lines 1000000` generates 40 Gradle modules, 7,610 Java classes
+(including one 2,000-class package) and 10 mains. `cargo run --release -p codescape --bin scene_bench -- <dir>`
 indexes it, opens it, and scripts a 300-step zoom from the whole map down to a single class.
 
 | Measure | Result | Target |

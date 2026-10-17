@@ -1,0 +1,198 @@
+use egui::Color32;
+
+pub const BG: Color32 = Color32::from_rgb(27, 29, 34);
+pub const PANEL: Color32 = Color32::from_rgb(32, 35, 41);
+pub const BAR: Color32 = Color32::from_rgb(36, 39, 46);
+pub const TEXT: Color32 = Color32::from_rgb(216, 219, 226);
+pub const MUTED: Color32 = Color32::from_rgb(125, 133, 148);
+pub const ACCENT: Color32 = Color32::from_rgb(233, 162, 59);
+pub const BOX_FILL: Color32 = Color32::from_rgb(39, 48, 63);
+pub const BOX_OPEN_FILL: Color32 = Color32::from_rgb(35, 42, 54);
+pub const BOX_STROKE: Color32 = Color32::from_rgb(92, 141, 214);
+pub const BOX_TITLE: Color32 = Color32::from_rgb(143, 179, 234);
+pub const EXTERNAL: Color32 = Color32::from_rgb(119, 119, 119);
+pub const EDGE: Color32 = Color32::from_rgb(125, 133, 148);
+pub const EDGE_UP: Color32 = Color32::from_rgb(224, 93, 93);
+pub const EDGE_SIDEWAYS: Color32 = Color32::from_rgb(233, 162, 59);
+pub const ADDED: Color32 = Color32::from_rgb(165, 214, 167);
+pub const USES: Color32 = Color32::from_rgb(222, 120, 200);
+pub const ENTRY: Color32 = Color32::from_rgb(111, 191, 115);
+pub const FRAME: Color32 = Color32::from_rgb(85, 91, 102);
+
+pub fn depth_fill(depth: u32, open: bool) -> Color32 {
+    let base = if open { BOX_OPEN_FILL } else { BOX_FILL };
+    let lift = (depth.saturating_sub(1) * 6).min(30) as u8;
+    Color32::from_rgb(base.r().saturating_add(lift), base.g().saturating_add(lift), base.b().saturating_add(lift))
+}
+
+pub fn visuals() -> egui::Visuals {
+    let mut v = egui::Visuals::dark();
+    v.panel_fill = PANEL;
+    v.window_fill = BAR;
+    v.extreme_bg_color = BG;
+    v.override_text_color = Some(TEXT);
+    v.selection.bg_fill = Color32::from_rgb(46, 125, 50);
+    v
+}
+
+pub const WIRING: Color32 = Color32::from_rgb(150, 120, 88);
+pub const INTERFACE: Color32 = Color32::from_rgb(38, 166, 154);
+pub const ENUM: Color32 = Color32::from_rgb(149, 117, 205);
+pub const ANNOTATION: Color32 = Color32::from_rgb(130, 120, 160);
+pub const FUNCTION: Color32 = Color32::from_rgb(128, 136, 148);
+pub const CONSTRUCTOR: Color32 = Color32::from_rgb(96, 118, 158);
+
+pub fn kind_stroke(sub: codescape_format::SubKind) -> Color32 {
+    use codescape_format::SubKind::*;
+    match sub {
+        Interface => INTERFACE,
+        Enum | Record => ENUM,
+        Annotation => ANNOTATION,
+        Function | Method | Field => FUNCTION,
+        Constructor => CONSTRUCTOR,
+        _ => BOX_STROKE,
+    }
+}
+
+pub fn tint(base: Color32, over: Color32, amount: f32) -> Color32 {
+    let mix = |a: u8, b: u8| (a as f32 + (b as f32 - a as f32) * amount) as u8;
+    Color32::from_rgb(mix(base.r(), over.r()), mix(base.g(), over.g()), mix(base.b(), over.b()))
+}
+
+pub const ERROR_TYPE: Color32 = Color32::from_rgb(200, 120, 120);
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum LegendSample {
+    Box { stroke: Color32 },
+    Outline { stroke: Color32, width: f32 },
+    Dot { color: Color32 },
+    Frame,
+    Arrow { color: Color32, dashed: bool, dotted: bool, hollow_head: bool },
+    Pill { color: Color32, text: &'static str },
+    Text { text: &'static str },
+    Lines,
+}
+
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
+pub struct LegendShown {
+    pub wiring: bool,
+    pub noise: bool,
+    pub complexity: bool,
+    pub unused: bool,
+    pub review: bool,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct LegendItem {
+    pub label: &'static str,
+    pub sample: LegendSample,
+}
+
+const fn item(label: &'static str, sample: LegendSample) -> LegendItem {
+    LegendItem { label, sample }
+}
+
+pub fn legend(shown: LegendShown) -> Vec<LegendItem> {
+    use LegendSample::*;
+    let mut v = vec![
+        item("interface", Box { stroke: INTERFACE }),
+        item("class / struct", Box { stroke: BOX_STROKE }),
+        item("enum / record", Box { stroke: ENUM }),
+        item("function / method", Box { stroke: FUNCTION }),
+        item("constructor", Box { stroke: CONSTRUCTOR }),
+        item("public / protected / package / private", Text { text: "+#~-" }),
+        item("used from outside its type", Dot { color: MUTED }),
+    ];
+    if shown.wiring {
+        v.push(item("wiring (DI)", Box { stroke: WIRING }));
+    }
+    if shown.noise {
+        v.push(item("error type", Box { stroke: ERROR_TYPE }));
+    }
+    if shown.complexity {
+        v.push(item("complexity from 10", Pill { color: EDGE_SIDEWAYS, text: "10" }));
+        v.push(item("complexity from 20", Pill { color: EDGE_UP, text: "20" }));
+    }
+    if shown.unused {
+        v.push(item("unused code", Outline { stroke: EDGE_UP, width: 1.5 }));
+    }
+    if shown.review {
+        v.extend([
+            item("new", Pill { color: ADDED, text: "NEW" }),
+            item("changed", Pill { color: EDGE_SIDEWAYS, text: "+1" }),
+            item("reviewed", Pill { color: MUTED, text: "ok" }),
+            item("arrow the change adds", Arrow { color: ADDED, dashed: false, dotted: false, hollow_head: false }),
+            item("lines added / removed", Lines),
+        ]);
+    }
+    v.extend([
+        item("selected", Outline { stroke: ACCENT, width: 2.5 }),
+        item("the selection uses it", Outline { stroke: USES, width: 2.0 }),
+        item("it uses the selection", Outline { stroke: CALLER, width: 2.0 }),
+        item("has an entry point", Dot { color: ENTRY }),
+        item("group", Frame),
+        item("calls / depends on", Arrow { color: EDGE, dashed: false, dotted: false, hollow_head: false }),
+        item("upward dependency", Arrow { color: EDGE_UP, dashed: true, dotted: false, hollow_head: false }),
+        item("same layer", Arrow { color: EDGE_SIDEWAYS, dashed: false, dotted: false, hollow_head: false }),
+        item("undeclared dependency", Arrow { color: EDGE_SIDEWAYS, dashed: true, dotted: false, hollow_head: false }),
+        item("implements / extends", Arrow { color: EDGE, dashed: true, dotted: false, hollow_head: true }),
+        item("test-only dependency", Arrow { color: EDGE, dashed: true, dotted: false, hollow_head: false }),
+    ]);
+    if shown.wiring {
+        v.push(item("wiring arrow", Arrow { color: WIRING, dashed: false, dotted: true, hollow_head: false }));
+    }
+    v
+}
+
+pub const CODE_KEYWORD: Color32 = Color32::from_rgb(198, 146, 233);
+pub const CODE_STRING: Color32 = Color32::from_rgb(152, 195, 121);
+
+pub const CALLER: Color32 = Color32::from_rgb(110, 165, 255);
+
+pub fn edge_width(links: u32, marked: bool) -> f32 {
+    let w = (0.6 + (links.max(1) as f32).log2() * 0.45).min(3.5);
+    if marked { w.max(2.2) } else { w }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct EdgeLook {
+    pub width: f32,
+    pub alpha: f32,
+}
+
+pub fn edge_look(links: u32, max_links: u32, lit: bool) -> EdgeLook {
+    if lit {
+        return EdgeLook { width: edge_width(links, false).max(1.4), alpha: 1.0 };
+    }
+    let share = if max_links > 1 { (links.max(1) - 1) as f32 / (max_links - 1) as f32 } else { 0.0 };
+    let share = share.clamp(0.0, 1.0);
+    EdgeLook { width: 0.7 + 0.5 * share, alpha: 0.18 + 0.32 * share }
+}
+
+pub fn edge_alpha(links: u32) -> f32 {
+    (0.4 + (links.max(1) as f32).log2() * 0.2).min(1.0)
+}
+
+pub fn stereotype(sub: codescape_format::SubKind, lang: codescape_format::Lang) -> Option<&'static str> {
+    use codescape_format::{Lang, SubKind};
+    match sub {
+        SubKind::Interface if lang == Lang::Rust => Some("«trait»"),
+        SubKind::Interface => Some("«interface»"),
+        SubKind::Enum => Some("«enumeration»"),
+        SubKind::Record => Some("«record»"),
+        SubKind::Struct => Some("«struct»"),
+        SubKind::Annotation => Some("«annotation»"),
+        _ => None,
+    }
+}
+
+pub const COMPLEXITY_HINT: u16 = 10;
+pub const COMPLEXITY_HIGH: u16 = 20;
+
+pub fn complexity_hint(value: u16) -> Option<Color32> {
+    match value {
+        v if v >= COMPLEXITY_HIGH => Some(EDGE_UP),
+        v if v >= COMPLEXITY_HINT => Some(EDGE_SIDEWAYS),
+        _ => None,
+    }
+}

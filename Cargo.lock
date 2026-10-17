@@ -427,6 +427,184 @@ dependencies = [
 ]
 
 [[package]]
+name = "codescape"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "clap",
+ "codescape-format",
+ "codescape-index",
+ "codescape-layout",
+ "codescape-rules",
+ "dirs",
+ "eframe",
+ "egui",
+ "nucleo-matcher",
+ "png",
+ "rfd",
+ "serde",
+ "tempfile",
+ "toml",
+]
+
+[[package]]
+name = "codescape-build"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "codescape-format",
+ "globset",
+ "ignore",
+ "regex",
+ "serde_json",
+ "tempfile",
+ "toml",
+]
+
+[[package]]
+name = "codescape-facts"
+version = "0.1.0"
+dependencies = [
+ "codescape-format",
+ "tree-sitter",
+]
+
+[[package]]
+name = "codescape-format"
+version = "0.1.0"
+dependencies = [
+ "blake3",
+ "memmap2",
+ "rkyv",
+ "tempfile",
+ "thiserror 2.0.21",
+]
+
+[[package]]
+name = "codescape-go"
+version = "0.1.0"
+dependencies = [
+ "codescape-build",
+ "codescape-facts",
+ "codescape-format",
+ "globset",
+ "rayon",
+ "tempfile",
+ "tree-sitter",
+ "tree-sitter-go",
+]
+
+[[package]]
+name = "codescape-index"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "blake3",
+ "clap",
+ "codescape-build",
+ "codescape-facts",
+ "codescape-format",
+ "codescape-go",
+ "codescape-java",
+ "codescape-rules",
+ "codescape-rust",
+ "codescape-ts",
+ "dirs",
+ "globset",
+ "regex",
+ "serde",
+ "similar",
+ "tempfile",
+ "toml",
+ "toml_edit",
+]
+
+[[package]]
+name = "codescape-java"
+version = "0.1.0"
+dependencies = [
+ "codescape-build",
+ "codescape-facts",
+ "codescape-format",
+ "globset",
+ "rayon",
+ "tempfile",
+ "tree-sitter",
+ "tree-sitter-java",
+]
+
+[[package]]
+name = "codescape-layout"
+version = "0.1.0"
+dependencies = [
+ "codescape-format",
+ "codescape-rules",
+ "globset",
+ "tempfile",
+]
+
+[[package]]
+name = "codescape-rules"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "blake3",
+ "codescape-facts",
+ "codescape-format",
+ "dirs",
+ "globset",
+ "regex",
+ "serde",
+ "streaming-iterator",
+ "tempfile",
+ "toml",
+ "tree-sitter",
+ "tree-sitter-go",
+ "tree-sitter-java",
+ "tree-sitter-javascript",
+ "tree-sitter-rust",
+ "tree-sitter-typescript",
+]
+
+[[package]]
+name = "codescape-rust"
+version = "0.1.0"
+dependencies = [
+ "codescape-build",
+ "codescape-facts",
+ "codescape-format",
+ "globset",
+ "rayon",
+ "tempfile",
+ "tree-sitter",
+ "tree-sitter-rust",
+]
+
+[[package]]
+name = "codescape-synth"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "clap",
+]
+
+[[package]]
+name = "codescape-ts"
+version = "0.1.0"
+dependencies = [
+ "codescape-build",
+ "codescape-facts",
+ "codescape-format",
+ "globset",
+ "rayon",
+ "serde_json",
+ "tempfile",
+ "tree-sitter",
+ "tree-sitter-javascript",
+ "tree-sitter-typescript",
+]
+
+[[package]]
 name = "codespan-reporting"
 version = "0.13.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2695,184 +2873,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d9571ea910ebd84c86af4b3ed27f9dbdc6ad06f17c5f96146b2b671e2976744f"
 dependencies = [
  "bitflags 2.13.2",
-]
-
-[[package]]
-name = "srcrelief"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "clap",
- "dirs",
- "eframe",
- "egui",
- "nucleo-matcher",
- "png",
- "rfd",
- "serde",
- "srcrelief-format",
- "srcrelief-index",
- "srcrelief-layout",
- "srcrelief-rules",
- "tempfile",
- "toml",
-]
-
-[[package]]
-name = "srcrelief-build"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "globset",
- "ignore",
- "regex",
- "serde_json",
- "srcrelief-format",
- "tempfile",
- "toml",
-]
-
-[[package]]
-name = "srcrelief-facts"
-version = "0.1.0"
-dependencies = [
- "srcrelief-format",
- "tree-sitter",
-]
-
-[[package]]
-name = "srcrelief-format"
-version = "0.1.0"
-dependencies = [
- "blake3",
- "memmap2",
- "rkyv",
- "tempfile",
- "thiserror 2.0.21",
-]
-
-[[package]]
-name = "srcrelief-go"
-version = "0.1.0"
-dependencies = [
- "globset",
- "rayon",
- "srcrelief-build",
- "srcrelief-facts",
- "srcrelief-format",
- "tempfile",
- "tree-sitter",
- "tree-sitter-go",
-]
-
-[[package]]
-name = "srcrelief-index"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "blake3",
- "clap",
- "dirs",
- "globset",
- "regex",
- "serde",
- "similar",
- "srcrelief-build",
- "srcrelief-facts",
- "srcrelief-format",
- "srcrelief-go",
- "srcrelief-java",
- "srcrelief-rules",
- "srcrelief-rust",
- "srcrelief-ts",
- "tempfile",
- "toml",
- "toml_edit",
-]
-
-[[package]]
-name = "srcrelief-java"
-version = "0.1.0"
-dependencies = [
- "globset",
- "rayon",
- "srcrelief-build",
- "srcrelief-facts",
- "srcrelief-format",
- "tempfile",
- "tree-sitter",
- "tree-sitter-java",
-]
-
-[[package]]
-name = "srcrelief-layout"
-version = "0.1.0"
-dependencies = [
- "globset",
- "srcrelief-format",
- "srcrelief-rules",
- "tempfile",
-]
-
-[[package]]
-name = "srcrelief-rules"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "blake3",
- "dirs",
- "globset",
- "regex",
- "serde",
- "srcrelief-facts",
- "srcrelief-format",
- "streaming-iterator",
- "tempfile",
- "toml",
- "tree-sitter",
- "tree-sitter-go",
- "tree-sitter-java",
- "tree-sitter-javascript",
- "tree-sitter-rust",
- "tree-sitter-typescript",
-]
-
-[[package]]
-name = "srcrelief-rust"
-version = "0.1.0"
-dependencies = [
- "globset",
- "rayon",
- "srcrelief-build",
- "srcrelief-facts",
- "srcrelief-format",
- "tempfile",
- "tree-sitter",
- "tree-sitter-rust",
-]
-
-[[package]]
-name = "srcrelief-synth"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "clap",
-]
-
-[[package]]
-name = "srcrelief-ts"
-version = "0.1.0"
-dependencies = [
- "globset",
- "rayon",
- "serde_json",
- "srcrelief-build",
- "srcrelief-facts",
- "srcrelief-format",
- "tempfile",
- "tree-sitter",
- "tree-sitter-javascript",
- "tree-sitter-typescript",
 ]
 
 [[package]]

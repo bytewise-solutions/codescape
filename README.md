@@ -1,10 +1,10 @@
-# SrcRelief
+# Codescape
 
-[![CI](https://github.com/bytewise-solutions/srcrelief/actions/workflows/ci.yml/badge.svg)](https://github.com/bytewise-solutions/srcrelief/actions/workflows/ci.yml)
+[![CI](https://github.com/bytewise-solutions/codescape/actions/workflows/ci.yml/badge.svg)](https://github.com/bytewise-solutions/codescape/actions/workflows/ci.yml)
 
 **See a whole codebase as one zoomable map, and review what changed on it.**
 
-SrcRelief reads a Java, Go, TypeScript/JavaScript or Rust project and draws it as a layered map: entry points on
+Codescape reads a Java, Go, TypeScript/JavaScript or Rust project and draws it as a layered map: entry points on
 top, modules below them by dependency, then packages, types and methods as you zoom in, down to the source itself.
 Arrows that point upward, a lower layer depending on a higher one, are drawn red, so you see at a glance whether a
 project is layered cleanly.
@@ -42,24 +42,24 @@ method from the entry point that reaches it.
 
 ## Install
 
-SrcRelief is built from source with a recent stable Rust (edition 2024) and a C compiler for the tree-sitter
+Codescape is built from source with a recent stable Rust (edition 2024) and a C compiler for the tree-sitter
 grammars.
 
 ```sh
-git clone git@github.com:bytewise-solutions/srcrelief.git
-cd srcrelief
+git clone git@github.com:bytewise-solutions/codescape.git
+cd codescape
 cargo build --release
 ```
 
-This gives two binaries in `target/release`: `srcrelief`, the viewer, and `srcrelief-index`, the indexer on the
+This gives two binaries in `target/release`: `codescape`, the viewer, and `codescape-index`, the indexer on the
 command line. The viewer draws with wgpu (Vulkan, Metal or DirectX 12), so it needs a GPU driver or a software one
 such as Mesa's lavapipe. On Linux it runs on Wayland or X11. Review mode needs `git` and `tar` on the `PATH`.
 
 ## Quick start
 
 ```sh
-srcrelief ~/path/to/project      # open a project folder
-srcrelief                        # start screen: Open Folder… and recent projects
+codescape ~/path/to/project      # open a project folder
+codescape                        # start screen: Open Folder… and recent projects
 ```
 
 Point it at the project's root folder; every module under it is discovered and linked (Gradle, `go.mod`/`go.work`,
@@ -81,37 +81,37 @@ The [user guide](docs/user-guide.md) describes everything the map shows and ever
 ## Command line
 
 ```sh
-srcrelief-index ~/path/to/project            # index, then print modules, links, entry points and call resolution
-srcrelief-index ~/path/to/project --unused   # also list unused code
-srcrelief-index --help
+codescape-index ~/path/to/project            # index, then print modules, links, entry points and call resolution
+codescape-index ~/path/to/project --unused   # also list unused code
+codescape-index --help
 ```
 
-`srcrelief --screenshot out.png` renders one frame without anyone at the window and exits; with `--focus`,
+`codescape --screenshot out.png` renders one frame without anyone at the window and exits; with `--focus`,
 `--review`, `--sequence` and other flags it scripts a view first (see the [user guide](docs/user-guide.md#screenshots-without-a-person-at-the-window)).
 CI uses it to check that the app renders.
 
 ## Configuration
 
-Nothing is required. A `srcrelief.toml` in the project (shared with the team) or your own settings in
-`~/.config/srcrelief/` can leave folders out, mark test code, define filters and categories, and turn rule packs
+Nothing is required. A `codescape.toml` in the project (shared with the team) or your own settings in
+`~/.config/codescape/` can leave folders out, mark test code, define filters and categories, and turn rule packs
 on or off; **File ▸ Project Settings…** edits them and shows which layer each value comes from. Rule packs teach
-SrcRelief about frameworks. Both are described in [docs/configuration.md](docs/configuration.md).
+Codescape about frameworks. Both are described in [docs/configuration.md](docs/configuration.md).
 
 ## How it works
 
 ```
-crates/srcrelief-build    module discovery (Gradle, go.mod, go.work, package.json, Cargo)
-crates/srcrelief-java     Java extractor            ┐
-crates/srcrelief-go       Go extractor              │ tree-sitter: declarations, calls with their lines,
-crates/srcrelief-ts       TypeScript / JavaScript   │ visibility, fields, complexity
-crates/srcrelief-rust     Rust extractor            ┘
-crates/srcrelief-facts    language-neutral facts handed from extractors to rule packs
-crates/srcrelief-rules    rule pack loader and engine (entry points, routes, wiring, tags)
-crates/srcrelief-format   the .relief index: graph model, builder, memory-mapped reader (rkyv)
-crates/srcrelief-index    indexing pipeline, settings, cache, comparison of versions, unused code, CLI
-crates/srcrelief-layout   layered top-down layout per container
-crates/srcrelief          the viewer (egui on wgpu): map, file view, review, sequence diagrams
-crates/srcrelief-synth    generator of large synthetic projects for benchmarks
+crates/codescape-build    module discovery (Gradle, go.mod, go.work, package.json, Cargo)
+crates/codescape-java     Java extractor            ┐
+crates/codescape-go       Go extractor              │ tree-sitter: declarations, calls with their lines,
+crates/codescape-ts       TypeScript / JavaScript   │ visibility, fields, complexity
+crates/codescape-rust     Rust extractor            ┘
+crates/codescape-facts    language-neutral facts handed from extractors to rule packs
+crates/codescape-rules    rule pack loader and engine (entry points, routes, wiring, tags)
+crates/codescape-format   the .codescape index: graph model, builder, memory-mapped reader (rkyv)
+crates/codescape-index    indexing pipeline, settings, cache, comparison of versions, unused code, CLI
+crates/codescape-layout   layered top-down layout per container
+crates/codescape          the viewer (egui on wgpu): map, file view, review, sequence diagrams
+crates/codescape-synth    generator of large synthetic projects for benchmarks
 rules/                    built-in rule packs
 ```
 
@@ -129,7 +129,7 @@ cargo fmt --all                                 # max width 160, see rustfmt.tom
 cargo clippy --workspace --all-targets -- -D warnings
 ```
 
-[CI](.github/workflows/ci.yml) runs on every pull request and on `main`: formatting, clippy with warnings denied,
+[CI](.github/workflows/ci.yml) runs on every pull request and on `master`: formatting, clippy with warnings denied,
 the test suite, a headless render of this repository's map and of a sequence diagram (kept as artifacts), and
 builds on macOS and Windows.
 

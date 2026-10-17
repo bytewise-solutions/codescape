@@ -8,16 +8,16 @@ edition = "2024"
 license = "MIT"
 
 [workspace.dependencies]
-srcrelief-format = { path = "crates/srcrelief-format" }
-srcrelief-facts = { path = "crates/srcrelief-facts" }
-srcrelief-build = { path = "crates/srcrelief-build" }
-srcrelief-java = { path = "crates/srcrelief-java" }
-srcrelief-go = { path = "crates/srcrelief-go" }
-srcrelief-ts = { path = "crates/srcrelief-ts" }
-srcrelief-rust = { path = "crates/srcrelief-rust" }
-srcrelief-rules = { path = "crates/srcrelief-rules" }
-srcrelief-index = { path = "crates/srcrelief-index" }
-srcrelief-layout = { path = "crates/srcrelief-layout" }
+codescape-format = { path = "crates/codescape-format" }
+codescape-facts = { path = "crates/codescape-facts" }
+codescape-build = { path = "crates/codescape-build" }
+codescape-java = { path = "crates/codescape-java" }
+codescape-go = { path = "crates/codescape-go" }
+codescape-ts = { path = "crates/codescape-ts" }
+codescape-rust = { path = "crates/codescape-rust" }
+codescape-rules = { path = "crates/codescape-rules" }
+codescape-index = { path = "crates/codescape-index" }
+codescape-layout = { path = "crates/codescape-layout" }
 tree-sitter = "0.27.1"
 tree-sitter-java = "0.23.5"
 tree-sitter-go = "0.25.0"

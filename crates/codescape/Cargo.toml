@@ -1,0 +1,39 @@
+[package]
+name = "codescape"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+autotests = false
+
+[lib]
+path = "src/lib.rs"
+
+[[bin]]
+name = "codescape"
+path = "src/main.rs"
+
+[dependencies]
+codescape-format.workspace = true
+codescape-rules.workspace = true
+codescape-index.workspace = true
+codescape-layout.workspace = true
+eframe.workspace = true
+egui.workspace = true
+rfd.workspace = true
+nucleo-matcher.workspace = true
+png.workspace = true
+clap.workspace = true
+dirs.workspace = true
+serde.workspace = true
+toml.workspace = true
+anyhow.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true
+
+[[test]]
+name = "all"
+path = "tests/all.rs"
+
+[lints]
+workspace = true

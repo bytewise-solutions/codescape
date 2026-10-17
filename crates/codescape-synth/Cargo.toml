@@ -1,0 +1,12 @@
+[package]
+name = "codescape-synth"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+clap.workspace = true
+anyhow.workspace = true
+
+[lints]
+workspace = true

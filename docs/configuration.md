@@ -1,22 +1,22 @@
-# Configuring SrcRelief
+# Configuring Codescape
 
-Everything here is optional: SrcRelief works on a project without any file of its own.
+Everything here is optional: Codescape works on a project without any file of its own.
 
 ## Project settings
 
 Settings come from four layers; a later one overrides an earlier one:
 
 1. built-in defaults (tests, test deps, details, errors and wiring hidden; build output, `vendor`, dot folders left out),
-2. your defaults for every project: `~/.config/srcrelief/settings.toml`,
-3. the project's `srcrelief.toml` (or `--config FILE`), shared with the team,
-4. your settings for this project: `~/.config/srcrelief/projects/<hash>.toml`, written by the viewer.
+2. your defaults for every project: `~/.config/codescape/settings.toml`,
+3. the project's `codescape.toml` (or `--config FILE`), shared with the team,
+4. your settings for this project: `~/.config/codescape/projects/<hash>.toml`, written by the viewer.
 
 All four files take the same keys:
 
 ```toml
 name = "Sample"
 exclude = ["**/generated/**"]
-index = "/somewhere/else.relief"
+index = "/somewhere/else.codescape"
 
 [packs]
 disable = ["libgdx"]
@@ -55,18 +55,18 @@ names them (the project folder for the two files under `~/.config`).
 **File ▸ Project Settings…** shows every value with the layer it comes from. Display values apply at once and land
 in your file for this project; index values (left out, test code, packs, categories, filters) wait for **Apply
 and re-index**. For a value of yours, *reset* falls back to the layer below, *use for all projects* moves it to
-your defaults and *save to srcrelief.toml* moves it to the shared file, keeping that file's comments. The viewer
+your defaults and *save to codescape.toml* moves it to the shared file, keeping that file's comments. The viewer
 writes nothing into the project unless you press that last button.
 
 ## Rule packs
 
 Framework knowledge (which methods a framework calls back, what registers an HTTP route, how things are coloured)
-lives in **rule packs**, not in SrcRelief's code. The built-in packs in `rules/` use exactly the format you would
+lives in **rule packs**, not in Codescape's code. The built-in packs in `rules/` use exactly the format you would
 write yourself: `java-core`, `libgdx`, `spring-boot`, `dagger`, `go-core`, `fiber`, `rabbitmq-amqp091`,
 `google-wire`, `ts-core`, `angular`, `express`, `rust-core`, `layers`, `significance`, `default-visuals`.
 
 Packs load in this order, later ones overriding earlier rules with the same `id`:
-built-in → `~/.config/srcrelief/rules/<pack>/` → `<project>/.srcrelief/rules/<pack>/` → `[packs] dirs`.
+built-in → `~/.config/codescape/rules/<pack>/` → `<project>/.codescape/rules/<pack>/` → `[packs] dirs`.
 
 A pack is a folder with a `pack.toml` (and optional tree-sitter `.scm` query files):
 
