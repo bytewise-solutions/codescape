@@ -1,3 +1,27 @@
 name = "rust-core"
 version = "0.1.0"
 languages = ["rust"]
+
+[[rule]]
+id = "rust-core.main"
+main = { category = "application" }
+
+[[rule]]
+id = "rust-core.examples"
+path = { glob = "**/examples/**", category = "dev-tool" }
+
+[[rule]]
+id = "rust-core.benches"
+path = { glob = "**/benches/**", category = "dev-tool" }
+
+[[rule]]
+id = "rust-core.build-script"
+path = { glob = "**/build.rs", category = "dev-tool" }
+
+[[rule]]
+id = "rust-core.test-code"
+test_code = { file_imports = ["mockall", "proptest", "quickcheck", "rstest"], dir_names = ["tests", "test_utils", "testutil", "testutils", "testdata"] }
+
+[[rule]]
+id = "rust-core.errors"
+noise = { name_suffixes = ["Error"], supertype_suffixes = ["error.Error"] }
