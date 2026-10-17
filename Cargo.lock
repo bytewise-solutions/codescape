@@ -2717,6 +2717,7 @@ dependencies = [
  "globset",
  "ignore",
  "regex",
+ "serde_json",
  "srcrelief-format",
  "tempfile",
 ]
@@ -2852,6 +2853,7 @@ version = "0.1.0"
 dependencies = [
  "globset",
  "rayon",
+ "serde_json",
  "srcrelief-build",
  "srcrelief-facts",
  "srcrelief-format",
