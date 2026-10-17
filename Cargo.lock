@@ -2720,6 +2720,7 @@ dependencies = [
  "serde_json",
  "srcrelief-format",
  "tempfile",
+ "toml",
 ]
 
 [[package]]
