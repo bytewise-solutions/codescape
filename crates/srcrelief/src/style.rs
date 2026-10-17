@@ -67,6 +67,18 @@ pub enum LegendSample {
     Dot { color: Color32 },
     Frame,
     Arrow { color: Color32, dashed: bool, dotted: bool, hollow_head: bool },
+    Pill { color: Color32, text: &'static str },
+    Text { text: &'static str },
+    Lines,
+}
+
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
+pub struct LegendShown {
+    pub wiring: bool,
+    pub noise: bool,
+    pub complexity: bool,
+    pub unused: bool,
+    pub review: bool,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -79,7 +91,7 @@ const fn item(label: &'static str, sample: LegendSample) -> LegendItem {
     LegendItem { label, sample }
 }
 
-pub fn legend(show_wiring: bool, show_noise: bool) -> Vec<LegendItem> {
+pub fn legend(shown: LegendShown) -> Vec<LegendItem> {
     use LegendSample::*;
     let mut v = vec![
         item("interface", Box { stroke: INTERFACE }),
@@ -87,12 +99,30 @@ pub fn legend(show_wiring: bool, show_noise: bool) -> Vec<LegendItem> {
         item("enum / record", Box { stroke: ENUM }),
         item("function / method", Box { stroke: FUNCTION }),
         item("constructor", Box { stroke: CONSTRUCTOR }),
+        item("public / protected / package / private", Text { text: "+#~-" }),
+        item("used from outside its type", Dot { color: MUTED }),
     ];
-    if show_wiring {
+    if shown.wiring {
         v.push(item("wiring (DI)", Box { stroke: WIRING }));
     }
-    if show_noise {
+    if shown.noise {
         v.push(item("error type", Box { stroke: ERROR_TYPE }));
+    }
+    if shown.complexity {
+        v.push(item("complexity from 10", Pill { color: EDGE_SIDEWAYS, text: "10" }));
+        v.push(item("complexity from 20", Pill { color: EDGE_UP, text: "20" }));
+    }
+    if shown.unused {
+        v.push(item("unused code", Outline { stroke: EDGE_UP, width: 1.5 }));
+    }
+    if shown.review {
+        v.extend([
+            item("new", Pill { color: REACH, text: "NEW" }),
+            item("changed", Pill { color: EDGE_SIDEWAYS, text: "+1" }),
+            item("reviewed", Pill { color: MUTED, text: "ok" }),
+            item("arrow the change adds", Arrow { color: REACH, dashed: false, dotted: false, hollow_head: false }),
+            item("lines added / removed", Lines),
+        ]);
     }
     v.extend([
         item("selected", Outline { stroke: ACCENT, width: 2.5 }),
@@ -107,7 +137,7 @@ pub fn legend(show_wiring: bool, show_noise: bool) -> Vec<LegendItem> {
         item("implements / extends", Arrow { color: EDGE, dashed: true, dotted: false, hollow_head: true }),
         item("test-only dependency", Arrow { color: EDGE, dashed: true, dotted: false, hollow_head: false }),
     ]);
-    if show_wiring {
+    if shown.wiring {
         v.push(item("wiring arrow", Arrow { color: WIRING, dashed: false, dotted: true, hollow_head: false }));
     }
     v

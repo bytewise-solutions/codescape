@@ -2181,14 +2181,19 @@ impl Project {
         }
     }
 
+    fn legend_shown(&self) -> style::LegendShown {
+        let opts = self.cache.options();
+        let view = |v: View| self.settings.settings().view(v).value;
+        style::LegendShown { wiring: opts.show_wiring, noise: opts.show_noise, complexity: view(View::Complexity), unused: view(View::Unused), review: self.review.is_some() }
+    }
+
     fn legend_rects(&self) -> (egui::Rect, egui::Rect) {
         let corner = Pos2::new(self.view.x + 10.0, self.view.bottom() - 10.0);
         if !self.settings.settings().view(View::Legend).value {
             let chip = egui::Rect::from_min_size(corner - egui::vec2(0.0, 22.0), egui::vec2(78.0, 22.0));
             return (chip, chip);
         }
-        let opts = self.cache.options();
-        let rows = style::legend(opts.show_wiring, opts.show_noise).len().div_ceil(2);
+        let rows = style::legend(self.legend_shown()).len().div_ceil(2);
         let size = egui::vec2(minimap::area(self.view).w * 2.0 + 8.0, rows as f32 * LEGEND_ROW + 10.0);
         let rect = egui::Rect::from_min_size(corner - egui::vec2(0.0, size.y), size);
         (rect, egui::Rect::from_min_size(rect.right_top() - egui::vec2(18.0, 0.0), egui::vec2(18.0, 18.0)))
@@ -2202,8 +2207,7 @@ impl Project {
             chevron(painter, top.right_center() - egui::vec2(14.0, 0.0), true);
             return;
         }
-        let opts = self.cache.options();
-        let items = style::legend(opts.show_wiring, opts.show_noise);
+        let items = style::legend(self.legend_shown());
         let row = LEGEND_ROW;
         let half = items.len().div_ceil(2);
         let width = top.width();
@@ -2245,6 +2249,20 @@ impl Project {
                     } else {
                         painter.add(Shape::convex_polygon(tri, color, Stroke::NONE));
                     }
+                }
+                style::LegendSample::Pill { color, text } => {
+                    let pill = sample.expand2(egui::vec2(2.0, 1.5));
+                    painter.rect_filled(pill, 5.0, color);
+                    painter.text(pill.center(), Align2::CENTER_CENTER, text, FontId::proportional(8.5), style::BG);
+                }
+                style::LegendSample::Text { text } => {
+                    painter.text(sample.left_center(), Align2::LEFT_CENTER, text, FontId::monospace(8.5), style::TEXT);
+                }
+                style::LegendSample::Lines => {
+                    let top = egui::Rect::from_min_size(sample.min, egui::vec2(sample.width(), sample.height() / 2.0));
+                    painter.rect_filled(top, 0.0, style::REACH.gamma_multiply(0.35));
+                    painter.rect_filled(egui::Rect::from_min_size(top.min, egui::vec2(2.0, top.height())), 0.0, style::REACH);
+                    painter.line_segment([sample.left_bottom(), sample.right_bottom()], Stroke::new(2.0, style::EDGE_UP));
                 }
             }
             painter.text(Pos2::new(x + 26.0, y), Align2::LEFT_TOP, it.label, FontId::proportional(10.0), style::MUTED);

@@ -16,14 +16,22 @@ fn arrow_weight_follows_the_number_of_links() {
 
 #[test]
 fn legend_explains_every_style() {
-    use srcrelief::style::{LegendSample, legend};
-    let items = legend(true, true);
+    use srcrelief::style::{LegendShown, LegendSample, legend};
+    let all = LegendShown { wiring: true, noise: true, complexity: true, unused: true, review: true };
+    let items = legend(all);
     let labels: Vec<&str> = items.iter().map(|i| i.label).collect();
-    for needed in ["interface", "class / struct", "enum / record", "function / method", "constructor", "wiring (DI)", "error type", "calls / depends on", "upward dependency", "same layer", "undeclared dependency", "implements / extends", "wiring arrow", "test-only dependency", "selected", "the selection uses it", "it uses the selection", "has an entry point", "group"] {
+    for needed in [
+        "interface", "class / struct", "enum / record", "function / method", "constructor", "wiring (DI)", "error type", "calls / depends on",
+        "upward dependency", "same layer", "undeclared dependency", "implements / extends", "wiring arrow", "test-only dependency", "selected",
+        "the selection uses it", "it uses the selection", "has an entry point", "group", "used from outside its type",
+        "public / protected / package / private", "complexity from 10", "complexity from 20", "unused code", "new", "changed",
+        "reviewed", "arrow the change adds", "lines added / removed",
+    ] {
         assert!(labels.contains(&needed), "legend misses {needed}");
     }
-    let lean = legend(false, false);
+    let lean = legend(LegendShown::default());
     assert!(lean.iter().all(|i| !i.label.starts_with("wiring") && i.label != "error type"));
+    assert!(lean.iter().all(|i| !["complexity from 10", "unused code", "new", "reviewed"].contains(&i.label)), "only what is on the map");
     assert!(items.iter().any(|i| matches!(i.sample, LegendSample::Arrow { dashed: true, hollow_head: true, .. })));
 }
 
