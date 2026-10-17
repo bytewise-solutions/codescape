@@ -2,10 +2,11 @@ use clap::Parser;
 use std::path::PathBuf;
 
 #[derive(Parser)]
-#[command(name = "srcrelief", about = "See a Java or Go codebase as one zoomable map")]
+#[command(name = "srcrelief", about = "See a codebase as one zoomable map, and review what changed on it", version)]
 struct Args {
+    #[arg(help = "Project folder to open (default: the start screen)")]
     dir: Option<PathBuf>,
-    #[arg(long)]
+    #[arg(long, help = "Settings file to use instead of the project's srcrelief.toml")]
     config: Option<PathBuf>,
     #[arg(long, help = "Render one frame to this PNG and exit")]
     screenshot: Option<PathBuf>,

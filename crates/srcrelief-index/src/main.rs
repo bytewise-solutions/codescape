@@ -6,14 +6,15 @@ use srcrelief_index::{SettingsPaths, SettingsStore, Summary, index_path, index_p
 use std::path::PathBuf;
 
 #[derive(Parser)]
-#[command(name = "srcrelief-index", about = "Index a Java or Go project directory into a .relief file")]
+#[command(name = "srcrelief-index", about = "Index a Java, Go, TypeScript/JavaScript or Rust project into a .relief file", version)]
 struct Args {
+    #[arg(help = "The project's root folder")]
     dir: PathBuf,
-    #[arg(long)]
+    #[arg(long, help = "Settings file to use instead of the project's srcrelief.toml")]
     config: Option<PathBuf>,
-    #[arg(long)]
+    #[arg(long, help = "Where to write the index (default: the user cache folder)")]
     out: Option<PathBuf>,
-    #[arg(long)]
+    #[arg(long, help = "Rebuild the index even if it is up to date")]
     force: bool,
     #[arg(long, help = "List blocks nothing uses")]
     unused: bool,
