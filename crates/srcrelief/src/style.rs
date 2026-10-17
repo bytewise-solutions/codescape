@@ -14,7 +14,8 @@ pub const EXTERNAL: Color32 = Color32::from_rgb(119, 119, 119);
 pub const EDGE: Color32 = Color32::from_rgb(125, 133, 148);
 pub const EDGE_UP: Color32 = Color32::from_rgb(224, 93, 93);
 pub const EDGE_SIDEWAYS: Color32 = Color32::from_rgb(233, 162, 59);
-pub const REACH: Color32 = Color32::from_rgb(165, 214, 167);
+pub const ADDED: Color32 = Color32::from_rgb(165, 214, 167);
+pub const USES: Color32 = Color32::from_rgb(222, 120, 200);
 pub const ENTRY: Color32 = Color32::from_rgb(111, 191, 115);
 pub const FRAME: Color32 = Color32::from_rgb(85, 91, 102);
 
@@ -117,16 +118,16 @@ pub fn legend(shown: LegendShown) -> Vec<LegendItem> {
     }
     if shown.review {
         v.extend([
-            item("new", Pill { color: REACH, text: "NEW" }),
+            item("new", Pill { color: ADDED, text: "NEW" }),
             item("changed", Pill { color: EDGE_SIDEWAYS, text: "+1" }),
             item("reviewed", Pill { color: MUTED, text: "ok" }),
-            item("arrow the change adds", Arrow { color: REACH, dashed: false, dotted: false, hollow_head: false }),
+            item("arrow the change adds", Arrow { color: ADDED, dashed: false, dotted: false, hollow_head: false }),
             item("lines added / removed", Lines),
         ]);
     }
     v.extend([
         item("selected", Outline { stroke: ACCENT, width: 2.5 }),
-        item("the selection uses it", Outline { stroke: REACH, width: 2.0 }),
+        item("the selection uses it", Outline { stroke: USES, width: 2.0 }),
         item("it uses the selection", Outline { stroke: CALLER, width: 2.0 }),
         item("has an entry point", Dot { color: ENTRY }),
         item("group", Frame),

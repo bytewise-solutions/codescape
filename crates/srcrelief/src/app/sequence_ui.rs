@@ -56,7 +56,7 @@ impl Project {
     fn message_color(&self, target: NodeId) -> Option<Color32> {
         let c = self.review.as_ref()?.review.change(target);
         match c.status {
-            Status::New => Some(style::REACH),
+            Status::New => Some(style::ADDED),
             Status::Changed => Some(style::EDGE_SIDEWAYS),
             Status::Unchanged => None,
         }

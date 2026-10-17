@@ -46,7 +46,7 @@ tick in View is remembered for each project.
 | Zoom | `Ctrl` + wheel or pinch, around the pointer |
 | Zoom into a box | double-click it |
 | Inspect a box | click it (right panel) |
-| Focus an entry point or a box | click it: what it **uses** turns green, what **uses it** turns blue, the rest dims |
+| Focus an entry point or a box | click it: what it **uses** turns pink, what **uses it** turns blue, the rest dims |
 | Walk the code | click a row under *Uses* or *Used by* in the inspector; `Alt+Left` or **Back** retraces |
 | See everything involved | inspector **Show**: *neighbours*, *everything it reaches*, *everywhere it's used* |
 | Jump to a name | `Ctrl+K`, type, `Enter` |

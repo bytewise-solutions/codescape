@@ -67,3 +67,16 @@ fn complexity_hints_appear_from_ten_and_turn_red_from_twenty() {
     assert_eq!(complexity_hint(19), Some(EDGE_SIDEWAYS));
     assert_eq!(complexity_hint(20), Some(EDGE_UP));
 }
+
+#[test]
+fn what_the_selection_uses_is_not_coloured_like_new_code() {
+    use srcrelief::style::{LegendSample, LegendShown, legend};
+    let items = legend(LegendShown { review: true, ..Default::default() });
+    let color = |label: &str| match items.iter().find(|i| i.label == label).unwrap().sample {
+        LegendSample::Outline { stroke, .. } => stroke,
+        LegendSample::Pill { color, .. } => color,
+        other => panic!("{other:?}"),
+    };
+    assert_ne!(color("the selection uses it"), color("new"));
+    assert_ne!(color("the selection uses it"), color("it uses the selection"));
+}

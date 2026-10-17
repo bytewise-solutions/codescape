@@ -490,11 +490,11 @@ fn review_badge(c: &Change, open: bool) -> Option<(String, Color32)> {
     let i = c.inside;
     if (open || c.status != Status::New) && i != Counts::default() {
         let parts: Vec<String> = [(i.new, "new"), (i.changed, "changed"), (i.removed, "removed")].iter().filter(|(n, _)| *n > 0).map(|(n, w)| format!("{n} {w}")).collect();
-        let color = if i.new > 0 { style::REACH } else { style::EDGE_SIDEWAYS };
+        let color = if i.new > 0 { style::ADDED } else { style::EDGE_SIDEWAYS };
         return Some((parts.join(" · "), color));
     }
     match c.status {
-        Status::New => Some(("NEW".into(), style::REACH)),
+        Status::New => Some(("NEW".into(), style::ADDED)),
         Status::Changed => Some((format!("+{} −{}", c.added, c.removed), style::EDGE_SIDEWAYS)),
         Status::Unchanged => None,
     }
@@ -511,7 +511,7 @@ fn unused_short(u: Usage) -> &'static str {
 
 fn row_delta(c: &Change) -> Option<(String, Color32)> {
     match c.status {
-        Status::New => Some(("new".into(), style::REACH)),
+        Status::New => Some(("new".into(), style::ADDED)),
         Status::Changed => {
             let mut d = format!("+{} −{}", c.added, c.removed);
             if let Some((before, after)) = c.complexity.filter(|(b, a)| a > b) {
@@ -1498,7 +1498,7 @@ impl Project {
                     let state = rv.marks.state(item);
                     let color = match (state, item.kind) {
                         (MarkState::Reviewed, _) => style::MUTED,
-                        (_, ItemKind::New) => style::REACH,
+                        (_, ItemKind::New) => style::ADDED,
                         (_, ItemKind::Changed) => style::EDGE_SIDEWAYS,
                         (_, ItemKind::Removed) => style::EDGE_UP,
                     };
@@ -1549,7 +1549,7 @@ impl Project {
                     ui.label(egui::RichText::new(format!("NEW DEPENDENCIES ({})", rv.review.new_arrows.len())).small().color(style::ACCENT));
                     for &(a, b) in &rv.review.new_arrows {
                         ui.horizontal_wrapped(|ui| {
-                            if ui.selectable_label(false, egui::RichText::new(format!("{} uses {}", g.name(a), g.name(b))).color(style::REACH)).on_hover_text(format!("{} uses {}", full_path(g, a), full_path(g, b))).clicked() {
+                            if ui.selectable_label(false, egui::RichText::new(format!("{} uses {}", g.name(a), g.name(b))).color(style::ADDED)).on_hover_text(format!("{} uses {}", full_path(g, a), full_path(g, b))).clicked() {
                                 fly = Some(a);
                             }
                             if rv.upward.contains(&(a, b)) {
@@ -1719,7 +1719,7 @@ impl Project {
                 }
             }
             if let Some(f) = self.focus.as_ref().filter(|f| f.node == n) {
-                for (title, list, color) in [("USES", &f.calls, style::REACH), ("USED BY", &f.callers, style::CALLER)] {
+                for (title, list, color) in [("USES", &f.calls, style::USES), ("USED BY", &f.callers, style::CALLER)] {
                     ui.add_space(10.0);
                     ui.horizontal(|ui| {
                         ui.label(egui::RichText::new(format!("{title} ({})", list.len())).small().strong().color(color));
@@ -2063,7 +2063,7 @@ impl Project {
             stroke.color = Color32::from_rgb(c[0], c[1], c[2]);
         }
         match b.mark {
-            Mark::Down => stroke = Stroke::new(2.0, style::REACH),
+            Mark::Down => stroke = Stroke::new(2.0, style::USES),
             Mark::Up => stroke = Stroke::new(2.0, style::CALLER),
             Mark::Focus => stroke = Stroke::new(1.5, style::ACCENT),
             Mark::None => {}
@@ -2076,7 +2076,7 @@ impl Project {
         }
         if let Some(c) = change.filter(|_| !reviewed) {
             if c.status == Status::New {
-                stroke = Stroke::new(2.0, style::REACH);
+                stroke = Stroke::new(2.0, style::ADDED);
             } else if c.status == Status::Changed {
                 stroke = Stroke::new(2.0, style::EDGE_SIDEWAYS);
             }
@@ -2139,13 +2139,13 @@ impl Project {
             (style::edge_width(links, marked), if marked { 1.0 } else { style::edge_alpha(links) })
         };
         match e.mark {
-            Mark::Down | Mark::Focus => color = style::REACH,
+            Mark::Down | Mark::Focus => color = style::USES,
             Mark::Up => color = style::CALLER,
             Mark::None => {}
         }
         let introduced = self.review.as_ref().is_some_and(|rv| rv.new_arrows.contains(&(e.a, e.b)));
         let (width, alpha) = if introduced {
-            color = style::REACH;
+            color = style::ADDED;
             (width.max(2.5), 1.0)
         } else {
             (width, alpha)
@@ -2260,8 +2260,8 @@ impl Project {
                 }
                 style::LegendSample::Lines => {
                     let top = egui::Rect::from_min_size(sample.min, egui::vec2(sample.width(), sample.height() / 2.0));
-                    painter.rect_filled(top, 0.0, style::REACH.gamma_multiply(0.35));
-                    painter.rect_filled(egui::Rect::from_min_size(top.min, egui::vec2(2.0, top.height())), 0.0, style::REACH);
+                    painter.rect_filled(top, 0.0, style::ADDED.gamma_multiply(0.35));
+                    painter.rect_filled(egui::Rect::from_min_size(top.min, egui::vec2(2.0, top.height())), 0.0, style::ADDED);
                     painter.line_segment([sample.left_bottom(), sample.right_bottom()], Stroke::new(2.0, style::EDGE_UP));
                 }
             }
@@ -2344,8 +2344,8 @@ impl Project {
         if let Some(d) = diff {
             for &l in d.added.iter().filter(|&&l| (first + 1..=last).contains(&(l as usize))) {
                 let band = full(top + (l - 1) as f32 * line_h, line_h);
-                clip.rect_filled(band, 0.0, style::REACH.gamma_multiply(0.14));
-                clip.rect_filled(egui::Rect::from_min_size(band.min, egui::vec2(3.0, line_h)), 0.0, style::REACH);
+                clip.rect_filled(band, 0.0, style::ADDED.gamma_multiply(0.14));
+                clip.rect_filled(egui::Rect::from_min_size(band.min, egui::vec2(3.0, line_h)), 0.0, style::ADDED);
             }
         }
         let text: Vec<&str> = lines[..last].iter().map(String::as_str).collect();
@@ -2484,7 +2484,7 @@ impl Project {
                 clip.circle_filled(mark, size * 0.18, dim(if self.entry_nodes.contains(&row.node) { style::ENTRY } else { style::MUTED }));
             }
             let color = match row.mark {
-                Mark::Down => style::REACH,
+                Mark::Down => style::USES,
                 Mark::Up => style::CALLER,
                 Mark::Focus => style::ACCENT,
                 Mark::None => dim(style::TEXT),
