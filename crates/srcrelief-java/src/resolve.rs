@@ -628,7 +628,7 @@ impl<'a> Resolver<'a> {
         if call.is_new {
             if let Some(r) = self.resolve_type(&call.method, fi, Some(ti)) {
                 let to = self.ref_node(&r);
-                self.b.add_edge(caller, to, EdgeKind::Instantiates, scope, Confidence::Resolved, EdgeFlags::NONE);
+                self.b.add_edge_at(caller, to, EdgeKind::Instantiates, scope, Confidence::Resolved, EdgeFlags::NONE, call.line);
                 cf.instantiates = Some(self.ref_name(&r));
                 cf.receiver_type = cf.instantiates.clone();
             }
@@ -661,10 +661,10 @@ impl<'a> Resolver<'a> {
         match receiver_type {
             Some(TypeRef::Project(t)) => {
                 if let Some((owner, target)) = self.lookup_method(t, &call.method) {
-                    self.b.add_edge(caller, target, EdgeKind::Calls, scope, Confidence::Resolved, EdgeFlags::NONE);
+                    self.b.add_edge_at(caller, target, EdgeKind::Calls, scope, Confidence::Resolved, EdgeFlags::NONE, call.line);
                     cf.target = Some(target);
                     if let Some(imp) = self.single_impl(owner, &call.method, fi) {
-                        self.b.add_edge(caller, imp, EdgeKind::Calls, scope, Confidence::Resolved, EdgeFlags::NONE);
+                        self.b.add_edge_at(caller, imp, EdgeKind::Calls, scope, Confidence::Resolved, EdgeFlags::NONE, call.line);
                     }
                     self.stats.resolved += 1;
                 } else if self.external_super(t).is_some() {
@@ -689,7 +689,7 @@ impl<'a> Resolver<'a> {
         match candidates.as_slice() {
             [target] => {
                 let target = *target;
-                self.b.add_edge(caller, target, EdgeKind::Calls, scope, Confidence::Guessed, EdgeFlags::NONE);
+                self.b.add_edge_at(caller, target, EdgeKind::Calls, scope, Confidence::Guessed, EdgeFlags::NONE, cf.line);
                 cf.target = Some(target);
                 self.stats.guessed += 1;
             }

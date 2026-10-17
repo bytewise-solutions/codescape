@@ -9,6 +9,7 @@ pub struct RawEdge {
     pub scope: Scope,
     pub confidence: Confidence,
     pub flags: EdgeFlags,
+    pub line: u32,
 }
 
 struct BNode {
@@ -184,7 +185,12 @@ impl GraphBuilder {
     }
 
     pub fn add_edge(&mut self, from: NodeId, to: NodeId, kind: EdgeKind, scope: Scope, confidence: Confidence, flags: EdgeFlags) {
-        self.edges.push(RawEdge { from, to, kind, scope, confidence, flags });
+        self.add_edge_at(from, to, kind, scope, confidence, flags, 0);
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub fn add_edge_at(&mut self, from: NodeId, to: NodeId, kind: EdgeKind, scope: Scope, confidence: Confidence, flags: EdgeFlags, line: u32) {
+        self.edges.push(RawEdge { from, to, kind, scope, confidence, flags, line });
     }
 
     pub fn edges(&self) -> &[RawEdge] {
@@ -320,7 +326,7 @@ impl GraphBuilder {
             }
         }
 
-        let mut merged: HashMap<(u32, u32, u8, u8), (u8, u8, u32)> = HashMap::new();
+        let mut merged: HashMap<(u32, u32, u8, u8), (u8, u8, u16, u16)> = HashMap::new();
         for e in &self.edges {
             let (from, to) = (new_id[e.from as usize], new_id[e.to as usize]);
             if from == to || from == NONE || to == NONE {
@@ -335,14 +341,19 @@ impl GraphBuilder {
             if touching.contains(NodeFlags::NOISE) {
                 flags |= EdgeFlags::NOISE;
             }
-            let slot = merged.entry((from, to, e.kind as u8, scope as u8)).or_insert((e.confidence as u8, 0, 0));
+            let start = self.nodes[e.from as usize].start_line;
+            let offset = if e.line >= start && e.line > 0 { u16::try_from(e.line - start + 1).unwrap_or(0) } else { 0 };
+            let slot = merged.entry((from, to, e.kind as u8, scope as u8)).or_insert((e.confidence as u8, 0, 0, 0));
             slot.0 = slot.0.min(e.confidence as u8);
             slot.1 |= flags.0;
-            slot.2 += 1;
+            slot.2 = slot.2.saturating_add(1);
+            if offset > 0 && (slot.3 == 0 || offset < slot.3) {
+                slot.3 = offset;
+            }
         }
         let mut sorted: Vec<(u32, Edge)> = merged
             .into_iter()
-            .map(|((from, to, kind, scope), (confidence, flags, count))| (from, Edge { to, kind, scope, confidence, flags, count }))
+            .map(|((from, to, kind, scope), (confidence, flags, count, line))| (from, Edge { to, kind, scope, confidence, flags, count, line }))
             .collect();
         sorted.sort_by_key(|(from, e)| (*from, e.to, e.kind, e.scope));
 
@@ -394,7 +405,7 @@ impl GraphBuilder {
             if structural && Scope::from_u8(e.scope) == Scope::Main && linked.insert((container, a, b, carrier[*from as usize], carrier[e.to as usize])) {
                 agg.links = agg.links.saturating_add(1);
             }
-            let add = e.count.min(u16::MAX as u32) as u16;
+            let add = e.count;
             let slot = if EdgeFlags(e.flags).contains(EdgeFlags::WIRING) {
                 &mut agg.wiring
             } else if matches!(kind, EdgeKind::Implements | EdgeKind::Inherits) {

@@ -590,7 +590,7 @@ impl<'a> Resolver<'a> {
                 cf.instantiates = Some(self.type_name(&r));
                 if let TypeRef::Project(t) = r {
                     let to = self.types[t].node;
-                    self.b.add_edge(caller, to, EdgeKind::Instantiates, scope, Confidence::Resolved, EdgeFlags::NONE);
+                    self.b.add_edge_at(caller, to, EdgeKind::Instantiates, scope, Confidence::Resolved, EdgeFlags::NONE, call.line);
                 }
             }
             return cf;
@@ -598,7 +598,7 @@ impl<'a> Resolver<'a> {
         let Some(recv) = call.receiver.as_deref() else {
             let pi = self.file_pkg[fi];
             if let Some(&(target, _, _)) = self.pkgs[pi].funcs.get(&call.method) {
-                self.b.add_edge(caller, target, EdgeKind::Calls, scope, Confidence::Resolved, EdgeFlags::NONE);
+                self.b.add_edge_at(caller, target, EdgeKind::Calls, scope, Confidence::Resolved, EdgeFlags::NONE, call.line);
                 cf.target = Some(target);
                 self.stats.resolved += 1;
             } else if self.pkgs[pi].types.contains_key(&call.method) || BUILTINS.contains(&call.method.as_str()) {
@@ -621,7 +621,7 @@ impl<'a> Resolver<'a> {
                 match self.pkg_by_path.get(&imp.path).copied() {
                     Some(p) if rest.is_empty() => {
                         if let Some(&(target, _, _)) = self.pkgs[p].funcs.get(&call.method) {
-                            self.b.add_edge(caller, target, EdgeKind::Calls, scope, Confidence::Resolved, EdgeFlags::NONE);
+                            self.b.add_edge_at(caller, target, EdgeKind::Calls, scope, Confidence::Resolved, EdgeFlags::NONE, call.line);
                             cf.target = Some(target);
                             self.stats.resolved += 1;
                         } else if !self.pkgs[p].types.contains_key(&call.method) {
@@ -648,12 +648,12 @@ impl<'a> Resolver<'a> {
                 cf.receiver_type = Some(self.type_name(&TypeRef::Project(t)));
                 match self.lookup_method(t, &call.method) {
                     Some((owner, target)) => {
-                        self.b.add_edge(caller, target, EdgeKind::Calls, scope, Confidence::Resolved, EdgeFlags::NONE);
+                        self.b.add_edge_at(caller, target, EdgeKind::Calls, scope, Confidence::Resolved, EdgeFlags::NONE, call.line);
                         cf.target = Some(target);
                         if self.types[owner].kind == SubKind::Interface {
                             if let Some(imp) = self.single_impl(owner, self.files[fi].module) {
                                 if let Some(&m) = self.types[imp].methods.get(&call.method) {
-                                    self.b.add_edge(caller, m, EdgeKind::Calls, scope, Confidence::Resolved, EdgeFlags::NONE);
+                                    self.b.add_edge_at(caller, m, EdgeKind::Calls, scope, Confidence::Resolved, EdgeFlags::NONE, call.line);
                                 }
                             }
                         }
@@ -681,7 +681,7 @@ impl<'a> Resolver<'a> {
         match candidates.as_slice() {
             [target] => {
                 let target = *target;
-                self.b.add_edge(caller, target, EdgeKind::Calls, scope, Confidence::Guessed, EdgeFlags::NONE);
+                self.b.add_edge_at(caller, target, EdgeKind::Calls, scope, Confidence::Guessed, EdgeFlags::NONE, cf.line);
                 cf.target = Some(target);
                 self.stats.guessed += 1;
             }

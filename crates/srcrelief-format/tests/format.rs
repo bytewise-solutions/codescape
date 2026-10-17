@@ -469,3 +469,20 @@ fn complexity_is_kept_for_functions_and_defaults_to_one() {
     assert_eq!(g.complexity(find(g, t, "easy")), Some(1));
     assert_eq!(g.complexity(t), None, "only functions have a complexity");
 }
+
+#[test]
+fn a_call_edge_keeps_the_line_of_its_first_call() {
+    let (mut b, [_, _, _, f, g, h]) = two_module_graph();
+    b.set_span(f, "T.java", 5, 20);
+    b.add_edge_at(f, g, EdgeKind::Calls, Scope::Main, Confidence::Resolved, EdgeFlags::NONE, 12);
+    b.add_edge_at(f, g, EdgeKind::Calls, Scope::Main, Confidence::Resolved, EdgeFlags::NONE, 7);
+    b.add_edge(f, h, EdgeKind::Calls, Scope::Main, Confidence::Resolved, EdgeFlags::NONE);
+    let (_d, file) = roundtrip(b);
+    let gr = file.graph();
+    let at = |path: &[&str]| path.iter().fold(gr.root(), |n, name| find(gr, n, name));
+    let (f, g, h) = (at(&["m1", "p1", "T", "f"]), at(&["m2", "p3", "U", "g"]), at(&["m1", "p2", "V", "h"]));
+    let edge = |to: NodeId| gr.out_edges(f).iter().find(|e| e.to.to_native() == to).unwrap();
+    assert_eq!(gr.call_line(f, edge(g)), Some(7));
+    assert_eq!(edge(g).count.to_native(), 2);
+    assert_eq!(gr.call_line(f, edge(h)), None, "no line recorded");
+}

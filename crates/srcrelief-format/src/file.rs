@@ -6,7 +6,7 @@ use std::ops::Range;
 use std::path::Path;
 
 pub const MAGIC: &[u8; 8] = b"SRCRLF01";
-pub const FORMAT_VERSION: u32 = 14;
+pub const FORMAT_VERSION: u32 = 15;
 const HEADER: usize = 48;
 
 #[derive(Debug, thiserror::Error)]
@@ -207,6 +207,11 @@ impl ArchivedGraph {
         let s = self.edge_index[id as usize].to_native() as usize;
         let e = self.edge_index[id as usize + 1].to_native() as usize;
         &self.edges[s..e]
+    }
+
+    pub fn call_line(&self, from: NodeId, e: &ArchivedEdge) -> Option<u32> {
+        let offset = e.line.to_native();
+        (offset > 0).then(|| self.node(from).start_line.to_native() + u32::from(offset) - 1)
     }
 
     pub fn tags(&self, id: NodeId) -> impl Iterator<Item = &str> {

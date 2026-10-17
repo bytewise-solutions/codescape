@@ -188,7 +188,8 @@ pub struct Edge {
     pub scope: u8,
     pub confidence: u8,
     pub flags: u8,
-    pub count: u32,
+    pub count: u16,
+    pub line: u16,
 }
 
 #[derive(Archive, Serialize, Deserialize, Debug, Clone, Copy)]

@@ -857,13 +857,13 @@ impl<'a> Resolver<'a> {
         self.resolve_path(cx.pkg, segs, 0)
     }
 
-    fn call_edge(&mut self, cx: &FnCtx, target: NodeId, confidence: Confidence) {
-        self.b.add_edge(cx.caller, target, EdgeKind::Calls, cx.scope, confidence, EdgeFlags::NONE);
+    fn call_edge(&mut self, cx: &FnCtx, target: NodeId, confidence: Confidence, line: u32) {
+        self.b.add_edge_at(cx.caller, target, EdgeKind::Calls, cx.scope, confidence, EdgeFlags::NONE, line);
     }
 
     fn resolved_fn(&mut self, cx: &FnCtx, fi: usize, cf: &mut CallFacts) {
         let node = self.fns[fi].node;
-        self.call_edge(cx, node, Confidence::Resolved);
+        self.call_edge(cx, node, Confidence::Resolved, cf.line);
         cf.target = Some(node);
         self.stats.resolved += 1;
         let Some(owner) = self.fns[fi].owner else { return };
@@ -878,7 +878,7 @@ impl<'a> Resolver<'a> {
             .filter_map(|&t| self.types[t].methods.get(name).map(|&m| self.fns[m].node))
             .collect();
         if let [single] = impls[..] {
-            self.call_edge(cx, single, Confidence::Resolved);
+            self.call_edge(cx, single, Confidence::Resolved, cf.line);
         }
     }
 
@@ -887,7 +887,7 @@ impl<'a> Resolver<'a> {
             Some(Item::Type(t) | Item::Variant(t)) => {
                 cf.instantiates = Some(self.types[t].fqn.clone());
                 let to = self.types[t].node;
-                self.b.add_edge(cx.caller, to, EdgeKind::Instantiates, cx.scope, Confidence::Resolved, EdgeFlags::NONE);
+                self.b.add_edge_at(cx.caller, to, EdgeKind::Instantiates, cx.scope, Confidence::Resolved, EdgeFlags::NONE, cf.line);
             }
             Some(Item::Ext(s)) => cf.instantiates = Some(s),
             _ => {}
@@ -900,7 +900,7 @@ impl<'a> Resolver<'a> {
         match (&all[..], &imported[..]) {
             (_, [target]) if guess && !STD_METHODS.contains(&name) => {
                 let target = *target;
-                self.call_edge(cx, target, Confidence::Guessed);
+                self.call_edge(cx, target, Confidence::Guessed, cf.line);
                 cf.target = Some(target);
                 self.stats.guessed += 1;
             }

@@ -996,8 +996,8 @@ impl<'a> Resolver<'a> {
         }
     }
 
-    fn edge(&mut self, from: NodeId, to: NodeId, kind: EdgeKind, scope: Scope) {
-        self.b.add_edge(from, to, kind, scope, Confidence::Resolved, EdgeFlags::NONE);
+    fn edge(&mut self, from: NodeId, to: NodeId, kind: EdgeKind, scope: Scope, line: u32) {
+        self.b.add_edge_at(from, to, kind, scope, Confidence::Resolved, EdgeFlags::NONE, line);
     }
 
     fn resolve_call(&mut self, ctx: Ctx, caller: NodeId, scope: Scope, call: &TsCall) -> CallFacts {
@@ -1022,7 +1022,7 @@ impl<'a> Resolver<'a> {
             match self.resolve_value(ctx, &call.method) {
                 Some(Val::Static(t)) => {
                     let to = self.types[t].node;
-                    self.edge(caller, to, EdgeKind::Instantiates, scope);
+                    self.edge(caller, to, EdgeKind::Instantiates, scope, call.line);
                     cf.instantiates = Some(self.types[t].fqn.clone());
                 }
                 Some(Val::Inst(TypeRef::External(s))) => cf.instantiates = Some(s),
@@ -1037,7 +1037,7 @@ impl<'a> Resolver<'a> {
             }
             match self.resolve_value(ctx, &call.method) {
                 Some(Val::Func(target)) => {
-                    self.edge(caller, target, EdgeKind::Calls, scope);
+                    self.edge(caller, target, EdgeKind::Calls, scope, call.line);
                     cf.target = Some(target);
                     self.stats.resolved += 1;
                 }
@@ -1058,10 +1058,10 @@ impl<'a> Resolver<'a> {
                 cf.receiver_type = Some(self.types[t].fqn.clone());
                 match self.lookup_method(t, &call.method) {
                     Some((owner, target)) => {
-                        self.edge(caller, target, EdgeKind::Calls, scope);
+                        self.edge(caller, target, EdgeKind::Calls, scope, call.line);
                         cf.target = Some(target);
                         if let Some(imp) = self.single_impl(owner, &call.method) {
-                            self.edge(caller, imp, EdgeKind::Calls, scope);
+                            self.edge(caller, imp, EdgeKind::Calls, scope, call.line);
                         }
                         self.stats.resolved += 1;
                     }
@@ -1082,7 +1082,7 @@ impl<'a> Resolver<'a> {
             Some(Val::Ns(f)) => match self.symbol(f, &call.method, 0) {
                 Some(Sym::Func(f, n)) => {
                     let target = self.file_funcs[f][&n].node;
-                    self.edge(caller, target, EdgeKind::Calls, scope);
+                    self.edge(caller, target, EdgeKind::Calls, scope, call.line);
                     cf.target = Some(target);
                     self.stats.resolved += 1;
                 }

@@ -59,3 +59,20 @@ fn files_run_by_tools_are_not_unused() {
     let reported: Vec<&str> = (0..g.node_count() as NodeId).filter(|&n| a.usage[n as usize] != Usage::Used).map(|n| g.name(n)).collect();
     assert_eq!(reported, ["refresh"]);
 }
+
+#[test]
+fn calls_record_the_line_they_are_made_on() {
+    let tmp = tempfile::tempdir().unwrap();
+    let dir = tmp.path().join("proj");
+    std::fs::create_dir_all(dir.join("cart")).unwrap();
+    std::fs::write(dir.join("go.mod"), "module example.com/shop\n\ngo 1.22\n").unwrap();
+    std::fs::write(dir.join("main.go"), MAIN).unwrap();
+    std::fs::write(dir.join("cart/cart.go"), CART).unwrap();
+    let cfg = ProjectConfig { index: Some(tmp.path().join("i.relief")), ..Default::default() };
+    let file = ReliefFile::open(&index_project(&dir, &cfg, &|_| {}).unwrap().path).unwrap();
+    let g = file.graph();
+    let main = (0..g.node_count() as NodeId).find(|&n| g.name(n) == "main" && g.kind(n) == NodeKind::Member).unwrap();
+    let lines: Vec<(&str, Option<u32>)> = g.out_edges(main).iter().filter(|e| EdgeKind::from_u8(e.kind) == EdgeKind::Calls).map(|e| (g.name(e.to.to_native()), g.call_line(main, e))).collect();
+    assert!(lines.contains(&("New", Some(6))), "{lines:?}");
+    assert!(lines.contains(&("Add", Some(7))), "{lines:?}");
+}
