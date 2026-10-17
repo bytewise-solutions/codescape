@@ -30,6 +30,9 @@ const RECENT_LIMIT: usize = 8;
 const OPEN: KeyboardShortcut = KeyboardShortcut::new(Modifiers::COMMAND, Key::O);
 const SETTINGS: KeyboardShortcut = KeyboardShortcut::new(Modifiers::COMMAND, Key::Comma);
 const JUMP: KeyboardShortcut = KeyboardShortcut::new(Modifiers::COMMAND, Key::K);
+const LEFT_PANEL: KeyboardShortcut = KeyboardShortcut::new(Modifiers::COMMAND, Key::B);
+const RIGHT_PANEL: KeyboardShortcut = KeyboardShortcut::new(Modifiers::COMMAND, Key::I);
+const BOTH_PANELS: KeyboardShortcut = KeyboardShortcut::new(Modifiers::NONE, Key::F11);
 
 enum Msg {
     Progress(Progress),
@@ -455,6 +458,8 @@ struct Project {
     context_node: Option<NodeId>,
     pending_sequence: Option<NodeId>,
     pending_open: Option<NodeId>,
+    show_left: bool,
+    show_right: bool,
     review_error: Option<String>,
     details_in: Vec<NodeId>,
     pointer: Option<Pos2>,
@@ -516,6 +521,23 @@ fn row_delta(c: &Change) -> Option<(String, Color32)> {
         }
         Status::Unchanged => None,
     }
+}
+
+fn panel_toggle(ui: &mut egui::Ui, corner: Align2, text: &str, hint: &str) -> bool {
+    let panel = ui.max_rect();
+    let size = egui::vec2(16.0, 18.0);
+    let at = corner.align_size_within_rect(size, panel.shrink2(egui::vec2(0.0, 2.0)));
+    ui.put(at, egui::Button::new(egui::RichText::new(text).small()).small()).on_hover_text(hint).clicked()
+}
+
+fn strip_toggle(ui: &mut egui::Ui, text: &str, hint: &str) -> bool {
+    let strip = ui.max_rect();
+    let resp = ui.interact(strip, ui.scope_id().with("strip"), Sense::click()).on_hover_text(hint);
+    if resp.hovered() {
+        ui.painter().rect_filled(strip, 0.0, style::ACCENT.gamma_multiply(0.15));
+    }
+    ui.painter().text(strip.center(), Align2::CENTER_CENTER, text, FontId::proportional(14.0), if resp.hovered() { style::ACCENT } else { style::MUTED });
+    resp.clicked()
 }
 
 fn chip_rect(r: Rect) -> Rect {
@@ -629,6 +651,8 @@ impl Project {
             context_node: None,
             pending_sequence: None,
             pending_open: None,
+            show_left: true,
+            show_right: true,
             review_bar: None,
             home: None,
             version: None,
@@ -637,6 +661,12 @@ impl Project {
             details_in: Vec::new(),
             pointer: None,
         })
+    }
+
+    fn toggle_both_panels(&mut self) {
+        let show = !(self.show_left || self.show_right);
+        self.show_left = show;
+        self.show_right = show;
     }
 
     fn open_member(&mut self, m: NodeId) {
@@ -688,6 +718,9 @@ impl Project {
             self.selected = Some(m);
             self.open_sequence(m);
         }
+        if plan.map_only {
+            self.toggle_both_panels();
+        }
         self.settings_open |= plan.settings;
         self.shortcuts_open |= plan.shortcuts;
         if plan.review.is_some() || plan.review_target.is_some() || plan.review_by_commit {
@@ -728,6 +761,18 @@ impl Project {
                 if ui.checkbox(&mut on, &item.label).clicked() {
                     changed = Some((item.key.clone(), on));
                 }
+            }
+            ui.separator();
+            let shortcut = |s: &KeyboardShortcut| ui.ctx().format_shortcut(s);
+            let (left, right, both) = (shortcut(&LEFT_PANEL), shortcut(&RIGHT_PANEL), shortcut(&BOTH_PANELS));
+            if ui.add(egui::Button::selectable(self.show_left, "Left panel").shortcut_text(left)).clicked() {
+                self.show_left = !self.show_left;
+            }
+            if ui.add(egui::Button::selectable(self.show_right, "Right panel").shortcut_text(right)).clicked() {
+                self.show_right = !self.show_right;
+            }
+            if ui.add(egui::Button::new("Map only").shortcut_text(both)).clicked() {
+                self.toggle_both_panels();
             }
             ui.separator();
             if ui.add(egui::Button::new("Jump to…").shortcut_text(jump)).clicked() {
@@ -1252,8 +1297,40 @@ impl Project {
         }
         egui::Panel::top("breadcrumb").show(ui, |ui| ui.horizontal(|ui| self.breadcrumb(ui)));
         egui::Panel::bottom("status").show(ui, |ui| self.status_bar(ui));
-        egui::Panel::left("entries").resizable(true).default_size(270.0).min_size(230.0).show(ui, |ui| self.entries_panel(ui));
-        egui::Panel::right("inspector").resizable(true).default_size(290.0).show(ui, |ui| self.inspector(ui));
+        let (left, right, both) = ui.input_mut(|i| (i.consume_shortcut(&LEFT_PANEL), i.consume_shortcut(&RIGHT_PANEL), i.consume_shortcut(&BOTH_PANELS)));
+        self.show_left ^= left;
+        self.show_right ^= right;
+        if both {
+            self.toggle_both_panels();
+        }
+        if self.show_left {
+            egui::Panel::left("entries").resizable(true).default_size(270.0).min_size(230.0).show(ui, |ui| {
+                self.entries_panel(ui);
+                if panel_toggle(ui, Align2::RIGHT_BOTTOM, "<", "Hide this panel (Ctrl+B)") {
+                    self.show_left = false;
+                }
+            });
+        } else {
+            egui::Panel::left("entries_strip").resizable(false).exact_size(18.0).show(ui, |ui| {
+                if strip_toggle(ui, ">", "Show the left panel (Ctrl+B)") {
+                    self.show_left = true;
+                }
+            });
+        }
+        if self.show_right {
+            egui::Panel::right("inspector").resizable(true).default_size(290.0).show(ui, |ui| {
+                self.inspector(ui);
+                if panel_toggle(ui, Align2::LEFT_BOTTOM, ">", "Hide this panel (Ctrl+I)") {
+                    self.show_right = false;
+                }
+            });
+        } else {
+            egui::Panel::right("inspector_strip").resizable(false).exact_size(18.0).show(ui, |ui| {
+                if strip_toggle(ui, "<", "Show the right panel (Ctrl+I)") {
+                    self.show_right = true;
+                }
+            });
+        }
         if let Some(n) = self.pending_sequence.take() {
             self.open_sequence(n);
         }

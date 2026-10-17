@@ -147,6 +147,12 @@ enough to read.
   as `testutil`/`testdata`, globs under `[test] paths`) and test mains are not drawn or listed. Tick **View ▸ Tests**
   to draw them and **View ▸ Test dependencies** to see test-only dependencies.
 
+### Room for the map
+
+`Ctrl+B` hides or shows the left panel, `Ctrl+I` the right one and `F11` both. With the mouse: the small arrow at
+the bottom inner corner of a panel hides it, and the slim strip left at the window edge brings it back (View menu
+too).
+
 ### Index from the command line
 
 ```sh
@@ -159,7 +165,7 @@ Prints modules, their links, entry points grouped as in the viewer, the call-res
 
 ```sh
 srcrelief <dir> --screenshot out.png [--focus NAME] [--entry LABEL] [--zoom FACTOR] [--settings] [--review REV] [--review-target REV] [--review-by-commit]
-         [--open METHOD] [--sequence METHOD]
+         [--open METHOD] [--sequence METHOD] [--map-only]
 ```
 
 Renders one frame after zooming to the first node matching `NAME`, selecting an entry point, opening the settings

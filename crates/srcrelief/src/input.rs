@@ -100,6 +100,13 @@ pub const CHEATSHEET: &[(&str, &[(&str, &str)])] = &[
     ),
     (
         "Windows",
-        &[("Ctrl+O", "open a folder"), ("Ctrl+,", "project settings"), ("? or F1", "this cheatsheet")],
+        &[
+            ("Ctrl+O", "open a folder"),
+            ("Ctrl+,", "project settings"),
+            ("Ctrl+B", "hide / show the left panel"),
+            ("Ctrl+I", "hide / show the right panel"),
+            ("F11", "hide / show both: the whole window for the map"),
+            ("? or F1", "this cheatsheet"),
+        ],
     ),
 ];
