@@ -432,3 +432,32 @@ fn rows_start_at_the_card_left_edge_even_with_boxes_inside() {
     assert!(card.open && !card.rows.is_empty());
     assert!(card.rows[0].rect.x - card.rect.x < card.rect.w * 0.1, "rows hug the left edge: card {:?} row {:?}", card.rect, card.rows[0].rect);
 }
+
+#[test]
+fn cards_list_fields_above_methods() {
+    let mut b = GraphBuilder::new("p");
+    let pkg = b.add_node(b.root(), NodeKind::Package, SubKind::None, "billing", Lang::Java);
+    let t = b.add_node(pkg, NodeKind::Type, SubKind::Class, "Invoice", Lang::Java);
+    b.set_span(t, "I.java", 1, 90);
+    let m = b.add_node(t, NodeKind::Member, SubKind::Method, "total", Lang::Java);
+    b.set_span(m, "I.java", 20, 30);
+    for (name, ty) in [("lines", "List<Line>"), ("currency", "String")] {
+        let f = b.add_node(t, NodeKind::Member, SubKind::Field, name, Lang::Java);
+        b.set_detail(f, ty);
+        b.set_visibility(f, Visibility::Private);
+        b.set_span(f, "I.java", 3, 3);
+    }
+    let dir = tempfile::tempdir().unwrap();
+    write_graph(&b.finish(), &dir.path().join("g")).unwrap();
+    let f = ReliefFile::open(&dir.path().join("g")).unwrap();
+    let g = f.graph();
+    let mut cache = LayoutCache::new(Vec::new(), LayoutOptions { show_details: true, ..Default::default() });
+    let t = g.children(g.children(g.root()).start).start;
+    let cam = Camera::fit(world_rect(g, &mut cache, t).unwrap(), VIEW);
+    let s = build_scene_at(g, &mut cache, &cam, VIEW, &VisualRules::default(), None, [-50.0, -50.0], &[]);
+    let card = s.boxes.iter().find(|b| b.node == t).unwrap();
+    let names: Vec<&str> = card.field_rows.iter().map(|r| r.name.as_str()).collect();
+    assert_eq!(names, ["lines", "currency"]);
+    assert_eq!(card.field_rows[0].ty, "List<Line>");
+    assert!(card.rows[0].rect.y > card.field_rows[1].rect.bottom(), "methods come after the fields compartment");
+}

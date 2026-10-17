@@ -87,7 +87,7 @@ enough to read.
   **View ▸ Quiet arrows** off to draw every arrow by its weight instead.
 - **Implements / inherits** arrows are dotted with a hollow triangle at the interface, like UML.
 - **Types are UML cards.** A header with the stereotype («interface», «trait», «struct», «enumeration», «record»)
-  and the name, then the methods as left-aligned rows with their visibility (`+` public, `#` protected, `~` package,
+  and the name, then the fields (`- cache: Map<String, Integer>`), then the methods as left-aligned rows with their visibility (`+` public, `#` protected, `~` package,
   `-` private), constructors first (◇); a dot
   marks methods used from outside the type or that are entry points. Arrows join cards, not methods. Hover a row to
   see it, click it to select the method (its uses light up), double-click to open the file at that method. Functions
@@ -274,6 +274,6 @@ Scale numbers are in `docs/benchmarks.md`.
 - Calls are resolved from what the source states (imports, declared types, return types); there is no type
   inference, so callback parameters, loop variables and pattern bindings stay unresolved, and nothing inside Rust
   macros is read. The status bar shows the ratio (about 55–85% resolved depending on the language).
-- Overloaded methods share one box; fields are not drawn.
+- Overloaded methods share one row.
 - No tunnel (sequence) view yet; the index already records spans, lifecycles and call edges for it.
 - Maven, Kotlin, Python and other languages are not indexed.

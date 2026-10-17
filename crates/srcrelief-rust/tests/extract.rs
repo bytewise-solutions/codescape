@@ -218,7 +218,8 @@ fn types_and_their_kinds() {
 fn impl_methods_attach_to_their_type_across_files() {
     let r = run();
     let store = at(&r.b, &["core-lib", "store", "Store"]);
-    assert_eq!(children(&r.b, store), ["clear", "get", "new"]);
+    let methods: Vec<&str> = children(&r.b, store).into_iter().filter(|n| r.b.sub_kind(at(&r.b, &["core-lib", "store", "Store", n])) != SubKind::Field).collect();
+    assert_eq!(methods, ["clear", "get", "new"]);
     assert_eq!(r.b.sub_kind(at(&r.b, &["core-lib", "store", "Store", "new"])), SubKind::Constructor);
     assert_eq!(r.b.sub_kind(at(&r.b, &["core-lib", "store", "Store", "get"])), SubKind::Method);
     assert_eq!(r.b.file(at(&r.b, &["core-lib", "store", "Store", "clear"])), Some("core/src/store/mem.rs"));
@@ -534,4 +535,28 @@ fn pub_modifiers_become_visibility() {
     assert_eq!(vis(&["vis", "(lib)", "Port", "run"]), Visibility::Public);
     assert_eq!(vis(&["vis", "(lib)", "open"]), Visibility::Public);
     assert_eq!(vis(&["vis", "(lib)", "helper"]), Visibility::Private);
+}
+
+#[test]
+fn struct_fields_become_members_after_methods() {
+    let tmp = tempfile::tempdir().unwrap();
+    let r = tmp.path();
+    write(r, "Cargo.toml", "[package]\nname = \"fld\"\n");
+    write(r, "src/lib.rs", "pub struct Buf {\n    pub len: usize,\n    pub(crate) data: Vec<u8>,\n    cap: usize,\n}\nimpl Buf { pub fn len(&self) -> usize { self.len } }\npub struct Pair(pub u8, String);\n");
+    let d = discover(r, &default_excludes()).unwrap();
+    let mut b = GraphBuilder::new("fld");
+    let module_nodes: Vec<NodeId> = d.modules.iter().map(|m| b.add_node(b.root(), NodeKind::Module, SubKind::None, &m.name, m.lang)).collect();
+    let mut facts = ProjectFacts::default();
+    extract_rust(&d, &module_nodes, &default_excludes(), &mut b, &mut facts);
+    let fields = |t: NodeId| -> Vec<(String, Option<String>, Visibility)> {
+        b.children(t).iter().filter(|&&c| b.sub_kind(c) == SubKind::Field).map(|&c| (b.name(c).to_string(), b.detail(c).map(String::from), b.visibility(c))).collect()
+    };
+    let buf = at(&b, &["fld", "(lib)", "Buf"]);
+    assert_eq!(
+        fields(buf),
+        [("len".to_string(), Some("usize".to_string()), Visibility::Public), ("data".to_string(), Some("Vec<u8>".to_string()), Visibility::Package), ("cap".to_string(), Some("usize".to_string()), Visibility::Private)]
+    );
+    assert_eq!(b.sub_kind(b.child(buf, "len").unwrap()), SubKind::Method, "the method keeps the name lookup");
+    let pair = at(&b, &["fld", "(lib)", "Pair"]);
+    assert_eq!(fields(pair), [("0".to_string(), Some("u8".to_string()), Visibility::Public), ("1".to_string(), Some("String".to_string()), Visibility::Private)]);
 }

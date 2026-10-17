@@ -235,3 +235,19 @@ fn exported_names_are_public_and_the_rest_package() {
         assert_eq!(b.visibility(n), v, "{}", b.name(n));
     }
 }
+
+#[test]
+fn struct_fields_become_members() {
+    let tmp = tempfile::tempdir().unwrap();
+    std::fs::write(tmp.path().join("go.mod"), "module example.com/f\n\ngo 1.22\n").unwrap();
+    std::fs::write(tmp.path().join("f.go"), "package f\n\ntype Store struct {\n\tDB    *sql.DB\n\tcache map[string]int\n\tsync.Mutex\n}\n").unwrap();
+    let d = discover(tmp.path(), &default_excludes()).unwrap();
+    let mut b = GraphBuilder::new("f");
+    let nodes: Vec<NodeId> = d.modules.iter().map(|m| b.add_node(b.root(), NodeKind::Module, SubKind::None, &m.name, Lang::Go)).collect();
+    let mut facts = ProjectFacts::default();
+    extract_go(&d, &nodes, &default_excludes(), &mut b, &mut facts);
+    let store = b.child(b.children(nodes[0])[0], "Store").unwrap();
+    let fields: Vec<(&str, Option<&str>, Visibility)> =
+        b.children(store).iter().filter(|&&c| b.sub_kind(c) == SubKind::Field).map(|&c| (b.name(c), b.detail(c), b.visibility(c))).collect();
+    assert_eq!(fields, [("DB", Some("*sql.DB"), Visibility::Public), ("cache", Some("map[string]int"), Visibility::Package), ("Mutex", Some("sync.Mutex"), Visibility::Public)]);
+}

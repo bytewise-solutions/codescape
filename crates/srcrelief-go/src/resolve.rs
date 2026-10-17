@@ -215,6 +215,12 @@ impl<'a> Resolver<'a> {
                     self.flag(id, f);
                     methods.insert(m.clone(), id);
                 }
+                for fd in &t.field_decls {
+                    let id = self.b.add_node(node, NodeKind::Member, SubKind::Field, &fd.name, Lang::Go);
+                    self.b.set_detail(id, &fd.ty);
+                    self.b.set_span(id, &f.rel, fd.line, fd.line);
+                    self.flag(id, f);
+                }
                 let ti = self.types.len();
                 self.types.push(TypeInfo {
                     node,

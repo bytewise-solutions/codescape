@@ -197,3 +197,24 @@ fn members_and_types_carry_their_visibility() {
     }
     assert_eq!(vis(&["app", "v", "Port", "run"]), Visibility::Public, "interface methods are public");
 }
+
+#[test]
+fn fields_become_members_with_their_declared_type() {
+    let tmp = tempfile::tempdir().unwrap();
+    let r = tmp.path();
+    std::fs::write(r.join("settings.gradle"), "include 'app'\n").unwrap();
+    let src = r.join("app/src/main/java/v");
+    std::fs::create_dir_all(&src).unwrap();
+    std::fs::write(src.join("Box.java"), "package v;\nimport java.util.Map;\npublic class Box {\n  private Map<String, Integer> counts;\n  protected int size, cap;\n  public int size() { return size; }\n}\n").unwrap();
+    let d = discover(r, &default_excludes()).unwrap();
+    let mut b = GraphBuilder::new("f");
+    let module_nodes: Vec<NodeId> = d.modules.iter().map(|m| b.add_node(b.root(), NodeKind::Module, SubKind::None, &m.name, Lang::Java)).collect();
+    let mut facts = ProjectFacts::default();
+    extract_java(&d, &module_nodes, &default_excludes(), &mut b, &mut facts);
+    let t = at(&b, &["app", "v", "Box"]);
+    let fields: Vec<(String, Visibility)> = b.children(t).iter().filter(|&&c| b.sub_kind(c) == SubKind::Field).map(|&c| (b.name(c).to_string(), b.visibility(c))).collect();
+    assert_eq!(fields, [("counts".to_string(), Visibility::Private), ("size".to_string(), Visibility::Protected), ("cap".to_string(), Visibility::Protected)]);
+    assert_eq!(b.sub_kind(b.child(t, "size").unwrap()), SubKind::Method, "a method sharing a field's name is still found by name");
+    let counts = b.children(t).iter().copied().find(|&c| b.name(c) == "counts").unwrap();
+    assert_eq!(b.detail(counts), Some("Map<String, Integer>"));
+}

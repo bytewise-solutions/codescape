@@ -173,9 +173,8 @@ pub struct Node {
     pub parent: u32,
     pub kind: u8,
     pub sub: u8,
-    pub lang: u8,
+    pub lang_vis: u8,
     pub flags: u8,
-    pub vis: u8,
     pub subtree_lines: u32,
     pub file: u32,
     pub start_line: u32,
@@ -252,4 +251,14 @@ pub struct Graph {
     pub entries: Vec<EntryPoint>,
     pub stats: GraphStats,
     pub provenance: Vec<PackStamp>,
+    pub fields: Vec<FieldRec>,
+}
+
+#[derive(Archive, Serialize, Deserialize, Debug, Clone, Copy)]
+pub struct FieldRec {
+    pub owner: u32,
+    pub name: u32,
+    pub ty: u32,
+    pub line: u32,
+    pub vis: u8,
 }

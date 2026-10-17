@@ -198,6 +198,15 @@ impl<'a> Resolver<'a> {
                 self.method_names.entry(m.name.clone()).or_default().push((id, f.module));
             }
         }
+        for fd in &t.field_decls {
+            let id = self.b.add_node(node, NodeKind::Member, SubKind::Field, &fd.name, Lang::Java);
+            self.b.set_detail(id, &fd.ty);
+            self.b.set_visibility(id, if public_members && fd.visibility == Visibility::Package { Visibility::Public } else { fd.visibility });
+            self.b.set_span(id, &f.rel, fd.line, fd.line);
+            if f.is_test {
+                self.b.add_flags(id, NodeFlags::TEST);
+            }
+        }
         let idx = self.types.len();
         let raw_supers =
             t.extends.iter().map(|s| (s.clone(), false)).chain(t.implements.iter().map(|s| (s.clone(), true))).collect();

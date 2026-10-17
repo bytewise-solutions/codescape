@@ -1,4 +1,4 @@
-use srcrelief_facts::Import;
+use srcrelief_facts::{FieldDecl, Import};
 use srcrelief_format::SubKind;
 use tree_sitter::{Node, Parser};
 
@@ -17,6 +17,7 @@ pub struct GoType {
     pub name: String,
     pub kind: SubKind,
     pub fields: Vec<(String, String)>,
+    pub field_decls: Vec<FieldDecl>,
     pub methods: Vec<String>,
     pub arity: Vec<usize>,
     pub embeds: Vec<String>,
@@ -143,6 +144,7 @@ impl<'s> Ctx<'s> {
                 name: self.text(name).to_string(),
                 kind: SubKind::NamedType,
                 fields: Vec::new(),
+                field_decls: Vec::new(),
                 methods: Vec::new(),
                 arity: Vec::new(),
                 embeds: Vec::new(),
@@ -160,12 +162,16 @@ impl<'s> Ctx<'s> {
                             }
                             let Some(fty) = fd.child_by_field_name("type") else { continue };
                             let fty_name = self.type_name(fty);
+                            let declared = self.text(fty).to_string();
                             let mut nc = fd.walk();
                             let names: Vec<String> = fd.children_by_field_name("name", &mut nc).map(|x| self.text(x).to_string()).collect();
                             if names.is_empty() {
+                                let shown = declared.trim_start_matches('*').rsplit('.').next().unwrap_or(&declared).to_string();
+                                t.field_decls.push(FieldDecl { name: shown, ty: declared.clone(), line: line(fd), ..Default::default() });
                                 t.embeds.push(fty_name);
                             } else {
                                 for nm in names {
+                                    t.field_decls.push(FieldDecl { name: nm.clone(), ty: declared.clone(), line: line(fd), ..Default::default() });
                                     t.fields.push((nm, fty_name.clone()));
                                 }
                             }

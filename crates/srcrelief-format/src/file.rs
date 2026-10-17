@@ -6,7 +6,7 @@ use std::ops::Range;
 use std::path::Path;
 
 pub const MAGIC: &[u8; 8] = b"SRCRLF01";
-pub const FORMAT_VERSION: u32 = 11;
+pub const FORMAT_VERSION: u32 = 13;
 const HEADER: usize = 48;
 
 #[derive(Debug, thiserror::Error)]
@@ -106,12 +106,23 @@ impl ArchivedGraph {
         SubKind::from_u8(self.node(id).sub)
     }
 
+    pub fn fields(&self, owner: NodeId) -> impl Iterator<Item = FieldView<'_>> {
+        let all = &self.fields;
+        let start = all.partition_point(|f| f.owner.to_native() < owner);
+        all[start..].iter().take_while(move |f| f.owner.to_native() == owner).map(move |f| FieldView {
+            name: self.str(f.name.to_native()),
+            ty: if f.ty.to_native() == NONE { "" } else { self.str(f.ty.to_native()) },
+            visibility: Visibility::from_u8(f.vis),
+            line: f.line.to_native(),
+        })
+    }
+
     pub fn visibility(&self, id: NodeId) -> Visibility {
-        Visibility::from_u8(self.node(id).vis)
+        Visibility::from_u8(self.node(id).lang_vis >> 4)
     }
 
     pub fn lang(&self, id: NodeId) -> Lang {
-        Lang::from_u8(self.node(id).lang)
+        Lang::from_u8(self.node(id).lang_vis & 0x0f)
     }
 
     pub fn flags(&self, id: NodeId) -> NodeFlags {
@@ -269,4 +280,12 @@ impl From<&rkyv::rend::u32_le> for StrRef {
     fn from(v: &rkyv::rend::u32_le) -> Self {
         StrRef(v.to_native())
     }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct FieldView<'a> {
+    pub name: &'a str,
+    pub ty: &'a str,
+    pub visibility: Visibility,
+    pub line: u32,
 }

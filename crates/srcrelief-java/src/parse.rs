@@ -1,4 +1,4 @@
-use srcrelief_facts::{Annotation, Import};
+use srcrelief_facts::{Annotation, FieldDecl, Import};
 use srcrelief_format::{SubKind, Visibility};
 use tree_sitter::{Node, Parser};
 
@@ -15,6 +15,7 @@ pub struct JType {
     pub name: String,
     pub kind: SubKind,
     pub visibility: Visibility,
+    pub field_decls: Vec<FieldDecl>,
     pub extends: Vec<String>,
     pub implements: Vec<String>,
     pub annotations: Vec<Annotation>,
@@ -238,6 +239,7 @@ impl<'s> Ctx<'s> {
             name,
             kind,
             visibility: self.visibility(n),
+            field_decls: Vec::new(),
             extends: Vec::new(),
             implements: Vec::new(),
             annotations: self.annotations(Self::modifiers(n)),
@@ -268,10 +270,13 @@ impl<'s> Ctx<'s> {
                 "enum_body_declarations" => self.type_body(m, t),
                 "field_declaration" | "constant_declaration" => {
                     let ty = m.child_by_field_name("type").map(|x| self.type_name(x)).unwrap_or_default();
+                    let declared = m.child_by_field_name("type").map(|x| self.text(x).to_string()).unwrap_or_default();
+                    let vis = self.visibility(m);
                     let mut dc = m.walk();
                     for d in m.children_by_field_name("declarator", &mut dc) {
                         if let Some(name) = d.child_by_field_name("name") {
                             t.fields.push((self.text(name).to_string(), ty.clone()));
+                            t.field_decls.push(FieldDecl { name: self.text(name).to_string(), ty: declared.clone(), visibility: vis, line: line(d) });
                         }
                     }
                 }

@@ -978,6 +978,18 @@ impl Project {
                     }
                 }
             }
+            let fields: Vec<_> = g.fields(n).collect();
+            if !fields.is_empty() {
+                ui.add_space(10.0);
+                ui.label(egui::RichText::new(format!("FIELDS ({})", fields.len())).small().strong().color(style::MUTED));
+                egui::CollapsingHeader::new(egui::RichText::new("list").small().color(style::MUTED)).id_salt(("fields", n)).default_open(fields.len() <= 12).show(ui, |ui| {
+                    for f in fields.iter().take(LIST_LIMIT) {
+                        let vis = f.visibility.uml();
+                        let ty = if f.ty.is_empty() { String::new() } else { format!(": {}", f.ty) };
+                        ui.label(egui::RichText::new(format!("{vis} {}{ty}", f.name).trim().to_string()).small());
+                    }
+                });
+            }
             let opts = self.cache.options().clone();
             let (summary, kids) = inspector::inside(g, n, &|c| opts.hides(g, c));
             if !kids.is_empty() && g.kind(n) != NodeKind::Member {
@@ -1223,7 +1235,7 @@ impl Project {
             for l in self.scene.labels.iter().filter(|l| l.depth == depth) {
                 self.paint_label(&painter, l);
             }
-            for b in self.scene.boxes.iter().filter(|b| b.depth == depth && !b.rows.is_empty()) {
+            for b in self.scene.boxes.iter().filter(|b| b.depth == depth && !(b.rows.is_empty() && b.field_rows.is_empty())) {
                 self.paint_rows(&painter, b);
             }
         }
@@ -1525,11 +1537,12 @@ impl Project {
         let g = self.file.graph();
         let card = erect(b.rect);
         let clip = painter.with_clip_rect(card.shrink(1.0).intersect(erect(self.view)));
-        let row_h = b.rows[0].rect.h;
+        let first = b.field_rows.first().map(|f| f.rect).or(b.rows.first().map(|r| r.rect)).unwrap();
+        let row_h = first.h;
         let size = (row_h * 0.72).min(13.0);
         let font = FontId::proportional(size);
         let dim = |c: Color32| if b.dimmed { c.gamma_multiply(0.35) } else { c };
-        let header = egui::Rect::from_min_max(card.min, Pos2::new(card.max.x, b.rows[0].rect.y - row_h * 0.3));
+        let header = egui::Rect::from_min_max(card.min, Pos2::new(card.max.x, first.y - row_h * 0.3));
         clip.rect_filled(header, egui::CornerRadius { nw: 3, ne: 3, sw: 0, se: 0 }, dim(style::tint(style::BAR, style::kind_stroke(b.sub), 0.18)));
         clip.line_segment([header.left_bottom(), header.right_bottom()], Stroke::new(1.0, dim(style::kind_stroke(b.sub).gamma_multiply(0.7))));
         let title = (header.height() * 0.34).clamp(7.0, 15.0);
@@ -1541,6 +1554,27 @@ impl Project {
         let name = fit_label(g.name(b.node), header.width() - 12.0, title);
         let title_color = if self.selected == Some(b.node) { style::ACCENT } else { dim(style::BOX_TITLE) };
         clip.text(Pos2::new(header.center().x, name_y), Align2::CENTER_CENTER, name, FontId::proportional(title), title_color);
+        for f in &b.field_rows {
+            let r = erect(f.rect);
+            let vis = f.visibility.uml();
+            let name = if vis.is_empty() { f.name.clone() } else { format!("{vis} {}", f.name) };
+            let galley = clip.layout_no_wrap(name, font.clone(), dim(style::TEXT));
+            let at = Pos2::new(f.rect.x + size * 1.1, r.center().y - galley.size().y / 2.0);
+            let width = galley.size().x;
+            clip.galley(at, galley, dim(style::TEXT));
+            if !f.ty.is_empty() {
+                let ty = fit_label(&format!(": {}", f.ty), (f.rect.w - size * 1.4 - width).max(0.0), size);
+                clip.text(Pos2::new(at.x + width, r.center().y), Align2::LEFT_CENTER, ty, font.clone(), dim(style::MUTED));
+            }
+        }
+        if b.more_fields > 0 {
+            let last = erect(b.field_rows[b.field_rows.len() - 1].rect);
+            clip.text(Pos2::new(last.left() + size * 1.1, last.bottom() + last.height() / 2.0), Align2::LEFT_CENTER, format!("… {} more", b.more_fields), font.clone(), style::MUTED);
+        }
+        if let (Some(_), Some(m)) = (b.field_rows.first(), b.rows.first()) {
+            let y = m.rect.y - row_h * 0.25;
+            clip.line_segment([Pos2::new(card.left(), y), Pos2::new(card.right(), y)], Stroke::new(1.0, dim(style::kind_stroke(b.sub).gamma_multiply(0.5))));
+        }
         for (i, row) in b.rows.iter().enumerate() {
             let r = erect(row.rect).expand2(egui::vec2(6.0, 0.0));
             if i % 2 == 1 {

@@ -207,3 +207,37 @@ fn class_members_and_exports_carry_their_visibility() {
     assert_eq!(vis(&["vis", "src", "open"]), Visibility::Public);
     assert_eq!(vis(&["vis", "src", "helper"]), Visibility::Package);
 }
+
+#[test]
+fn class_and_interface_fields_become_members() {
+    let tmp = tempfile::tempdir().unwrap();
+    let r = tmp.path();
+    std::fs::write(r.join("package.json"), "{\"name\": \"fld\"}").unwrap();
+    std::fs::write(r.join("tsconfig.json"), "{}").unwrap();
+    std::fs::create_dir_all(r.join("src")).unwrap();
+    std::fs::write(
+        r.join("src/store.ts"),
+        "export class Store {\n  private cache: Map<string, number> = new Map();\n  readonly name = 'x';\n  constructor(private db: Db, public log: Logger) {}\n}\nexport interface Config {\n  url: string;\n  retries?: number;\n}\n",
+    )
+    .unwrap();
+    let d = discover(r, &default_excludes()).unwrap();
+    let mut b = GraphBuilder::new("fld");
+    let module_nodes: Vec<NodeId> = d.modules.iter().map(|m| b.add_node(b.root(), NodeKind::Module, SubKind::None, &m.name, m.lang)).collect();
+    let mut facts = ProjectFacts::default();
+    extract_ts(&d, &module_nodes, &default_excludes(), &mut b, &mut facts);
+    let fields = |t: NodeId| -> Vec<(String, Option<String>, Visibility)> {
+        b.children(t).iter().filter(|&&c| b.sub_kind(c) == SubKind::Field).map(|&c| (b.name(c).to_string(), b.detail(c).map(String::from), b.visibility(c))).collect()
+    };
+    let store = at(&b, &["fld", "src", "Store"]);
+    assert_eq!(
+        fields(store),
+        [
+            ("cache".to_string(), Some("Map<string, number>".to_string()), Visibility::Private),
+            ("name".to_string(), None, Visibility::Public),
+            ("db".to_string(), Some("Db".to_string()), Visibility::Private),
+            ("log".to_string(), Some("Logger".to_string()), Visibility::Public),
+        ]
+    );
+    let cfg = at(&b, &["fld", "src", "Config"]);
+    assert_eq!(fields(cfg), [("url".to_string(), Some("string".to_string()), Visibility::Public), ("retries".to_string(), Some("number".to_string()), Visibility::Public)]);
+}

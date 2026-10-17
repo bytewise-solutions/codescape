@@ -1,4 +1,4 @@
-use srcrelief_facts::Annotation;
+use srcrelief_facts::{Annotation, FieldDecl};
 use srcrelief_format::{SubKind, Visibility};
 use tree_sitter::{Node, Parser};
 
@@ -37,6 +37,7 @@ pub struct RsType {
     pub kind: SubKind,
     pub visibility: Visibility,
     pub fields: Vec<(String, String)>,
+    pub field_decls: Vec<FieldDecl>,
     pub attrs: Vec<Annotation>,
     pub methods: Vec<RsFn>,
     pub start_line: u32,
@@ -321,7 +322,7 @@ impl<'s> Ctx<'s> {
             "trait_item" => SubKind::Interface,
             _ => SubKind::Struct,
         };
-        let mut t = RsType { name, kind, visibility: self.visibility(n), fields: Vec::new(), attrs, methods: Vec::new(), start_line: line(n), end_line: end_line(n) };
+        let mut t = RsType { name, kind, visibility: self.visibility(n), fields: Vec::new(), field_decls: Vec::new(), attrs, methods: Vec::new(), start_line: line(n), end_line: end_line(n) };
         let body = n.child_by_field_name("body");
         match (n.kind(), body) {
             ("trait_item", Some(list)) => {
@@ -342,13 +343,26 @@ impl<'s> Ctx<'s> {
                 for fd in named_children(list).into_iter().filter(|f| f.kind() == "field_declaration") {
                     if let (Some(fname), Some(fty)) = (fd.child_by_field_name("name"), fd.child_by_field_name("type")) {
                         t.fields.push((self.text(fname).to_string(), self.type_name(fty, WRAPPERS)));
+                        t.field_decls.push(FieldDecl { name: self.text(fname).to_string(), ty: self.text(fty).to_string(), visibility: self.visibility(fd), line: line(fd) });
                     }
                 }
             }
             (_, Some(list)) if list.kind() == "ordered_field_declaration_list" => {
                 let mut c = list.walk();
-                for (i, fty) in list.children_by_field_name("type", &mut c).enumerate() {
-                    t.fields.push((i.to_string(), self.type_name(fty, WRAPPERS)));
+                let mut vis = Visibility::Private;
+                let mut i = 0;
+                for child in list.named_children(&mut c) {
+                    if child.kind() == "visibility_modifier" {
+                        vis = if self.text(child).replace(' ', "") == "pub" { Visibility::Public } else { Visibility::Package };
+                        continue;
+                    }
+                    if child.kind() == "attribute_item" {
+                        continue;
+                    }
+                    t.fields.push((i.to_string(), self.type_name(child, WRAPPERS)));
+                    t.field_decls.push(FieldDecl { name: i.to_string(), ty: self.text(child).to_string(), visibility: vis, line: line(child) });
+                    vis = Visibility::Private;
+                    i += 1;
                 }
             }
             _ => {}

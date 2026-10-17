@@ -186,7 +186,7 @@ fn open_rejects_wrong_version_and_truncation() {
 
 #[test]
 fn records_are_compact() {
-    assert!(std::mem::size_of::<ArchivedNode>() <= 40, "node is {} bytes", std::mem::size_of::<ArchivedNode>());
+    assert!(std::mem::size_of::<ArchivedNode>() <= 32, "node is {} bytes", std::mem::size_of::<ArchivedNode>());
     assert!(std::mem::size_of::<ArchivedEdge>() <= 12, "edge is {} bytes", std::mem::size_of::<ArchivedEdge>());
     assert!(std::mem::size_of::<ArchivedAgg>() <= 20, "aggregate is {} bytes", std::mem::size_of::<ArchivedAgg>());
 }
@@ -432,4 +432,25 @@ fn visibility_roundtrips_and_defaults_to_unknown() {
     assert_eq!(g.visibility(find(g, t, "helper")), Visibility::Private);
     assert_eq!(g.visibility(t), Visibility::Unknown);
     assert_eq!(Visibility::Protected.uml(), "#");
+}
+
+#[test]
+fn fields_are_stored_apart_from_the_graph() {
+    let mut b = GraphBuilder::new("proj");
+    let t = b.add_node(b.root(), NodeKind::Type, SubKind::Class, "T", Lang::Java);
+    let m = b.add_node(t, NodeKind::Member, SubKind::Method, "run", Lang::Java);
+    let f = b.add_node(t, NodeKind::Member, SubKind::Field, "count", Lang::Java);
+    b.set_detail(f, "Map<String, Integer>");
+    b.set_visibility(f, Visibility::Private);
+    b.set_span(f, "T.java", 7, 7);
+    b.add_edge(m, f, EdgeKind::Calls, Scope::Main, Confidence::Resolved, EdgeFlags::NONE);
+    let (_d, file) = roundtrip(b);
+    let g = file.graph();
+    let t = find(g, g.root(), "T");
+    let kids: Vec<&str> = g.children(t).map(|c| g.name(c)).collect();
+    assert_eq!(kids, ["run"], "fields are not nodes of the map");
+    let fields: Vec<(&str, &str, Visibility, u32)> = g.fields(t).map(|f| (f.name, f.ty, f.visibility, f.line)).collect();
+    assert_eq!(fields, [("count", "Map<String, Integer>", Visibility::Private, 7)]);
+    assert_eq!(g.fields(find(g, t, "run")).count(), 0);
+    assert!(g.out_edges(find(g, t, "run")).is_empty(), "edges to fields are dropped");
 }

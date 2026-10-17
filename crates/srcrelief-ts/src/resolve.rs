@@ -454,6 +454,15 @@ impl<'a> Resolver<'a> {
                     self.flag(id, f);
                     methods.insert(m.name.clone(), id);
                 }
+                for fd in &t.field_decls {
+                    let id = self.b.add_node(node, NodeKind::Member, SubKind::Field, &fd.name, f.lang);
+                    if !fd.ty.is_empty() {
+                        self.b.set_detail(id, &fd.ty);
+                    }
+                    self.b.set_visibility(id, fd.visibility);
+                    self.b.set_span(id, &f.rel, fd.line, fd.line);
+                    self.flag(id, f);
+                }
                 let mut fields = HashMap::new();
                 for (n, e) in &t.fields {
                     fields.entry(n.clone()).or_insert_with(|| e.clone());

@@ -144,6 +144,7 @@ pub fn extract_rust(d: &Discovery, module_nodes: &[NodeId], excludes: &GlobSet, 
     r.declare();
     r.declare_impl_only_types();
     r.attach_impls();
+    r.declare_fields();
     r.module_edges();
     r.package_edges();
     r.resolve(facts);
@@ -422,6 +423,29 @@ impl<'a> Resolver<'a> {
         self.b.set_lines(id, f.end_line - f.start_line + 1);
         self.flag_test(id, test);
         id
+    }
+
+    fn declare_fields(&mut self) {
+        let files = self.files;
+        let mut done: HashSet<usize> = HashSet::new();
+        for pi in 0..self.pkgs.len() {
+            let (file, body, test) = (self.pkgs[pi].file, self.pkgs[pi].body, self.pkgs[pi].test);
+            let f = &files[file];
+            for t in &f.rf.bodies[body].types {
+                let Some(&ti) = self.pkgs[pi].types.get(&t.name) else { continue };
+                if !done.insert(ti) {
+                    continue;
+                }
+                let owner = self.types[ti].node;
+                for fd in &t.field_decls {
+                    let id = self.b.add_node(owner, NodeKind::Member, SubKind::Field, &fd.name, Lang::Rust);
+                    self.b.set_detail(id, &fd.ty);
+                    self.b.set_visibility(id, fd.visibility);
+                    self.b.set_span(id, &f.rel, fd.line, fd.line);
+                    self.flag_test(id, test || has_cfg_test(&t.attrs));
+                }
+            }
+        }
     }
 
     fn declare(&mut self) {

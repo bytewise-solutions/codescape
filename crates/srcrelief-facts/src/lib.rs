@@ -88,3 +88,11 @@ impl ExtractStats {
         self.unresolved += o.unresolved;
     }
 }
+
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct FieldDecl {
+    pub name: String,
+    pub ty: String,
+    pub visibility: srcrelief_format::Visibility,
+    pub line: u32,
+}

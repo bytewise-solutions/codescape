@@ -1,4 +1,4 @@
-use srcrelief_facts::Annotation;
+use srcrelief_facts::{Annotation, FieldDecl};
 use srcrelief_format::{SubKind, Visibility};
 use tree_sitter::{Node, Parser};
 
@@ -65,6 +65,7 @@ pub struct TsType {
     pub decorators: Vec<Annotation>,
     pub decorator_refs: Vec<String>,
     pub fields: Vec<(String, TypeExpr)>,
+    pub field_decls: Vec<FieldDecl>,
     pub methods: Vec<TsFunc>,
     pub start_line: u32,
     pub end_line: u32,
@@ -75,6 +76,7 @@ pub struct TsFunc {
     pub name: String,
     pub sub: SubKind,
     pub visibility: Visibility,
+    pub param_fields: Vec<FieldDecl>,
     pub params: Vec<(String, String)>,
     pub returns: Option<String>,
     pub decorators: Vec<Annotation>,
@@ -90,6 +92,7 @@ impl Default for TsFunc {
             name: String::new(),
             sub: SubKind::Function,
             visibility: Visibility::Unknown,
+            param_fields: Vec::new(),
             params: Vec::new(),
             returns: None,
             decorators: Vec::new(),
@@ -143,6 +146,10 @@ fn line(n: Node) -> u32 {
 
 fn end_line(n: Node) -> u32 {
     n.end_position().row as u32 + 1
+}
+
+fn annotation_text(p: &Ctx, n: Node) -> String {
+    p.text(n).trim_start_matches(['?', ':']).trim().to_string()
 }
 
 fn member_visibility(p: &Ctx, m: Node, name: &str) -> Visibility {
@@ -284,6 +291,8 @@ impl<'s> Ctx<'s> {
                     let property = named_kids(p).iter().any(|k| k.kind() == "accessibility_modifier") || has_token(p, "readonly");
                     if let (true, Some(name), Some(fields)) = (property, &name, fields.as_deref_mut()) {
                         fields.push((name.clone(), TypeExpr::Named(ty.clone())));
+                        let declared = p.child_by_field_name("type").map(|t| annotation_text(self, t));
+                        f.param_fields.push(FieldDecl { name: name.clone(), ty: declared.unwrap_or_default(), visibility: member_visibility(self, p, name), line: line(p) });
                     }
                     f.params.push((name.unwrap_or_default(), ty));
                 }
@@ -476,6 +485,7 @@ impl<'s> Ctx<'s> {
                     decorators: Vec::new(),
                     decorator_refs: Vec::new(),
                     fields: Vec::new(),
+                    field_decls: Vec::new(),
                     methods: Vec::new(),
                     start_line: line(n),
                     end_line: end_line(n),
@@ -682,6 +692,7 @@ impl<'s> Ctx<'s> {
             decorators: Vec::new(),
             decorator_refs: Vec::new(),
             fields: Vec::new(),
+            field_decls: Vec::new(),
             methods: Vec::new(),
             start_line: line(n),
             end_line: end_line(n),
@@ -737,6 +748,8 @@ impl<'s> Ctx<'s> {
                             t.methods.push(f);
                         }
                         _ => {
+                            let declared = m.child_by_field_name("type").map(|x| annotation_text(self, x)).unwrap_or_default();
+                            t.field_decls.push(FieldDecl { name: name.clone(), ty: declared, visibility: member_visibility(self, m, &name), line: line(m) });
                             let ty = m.child_by_field_name("type").map(|x| TypeExpr::Named(self.type_name(x))).or_else(|| value.and_then(|v| self.infer(v)));
                             if let Some(ty) = ty {
                                 t.fields.push((name, ty));
@@ -757,6 +770,8 @@ impl<'s> Ctx<'s> {
                 _ => pending.clear(),
             }
         }
+        let from_params: Vec<FieldDecl> = t.methods.iter().filter(|f| f.sub == SubKind::Constructor).flat_map(|f| f.param_fields.clone()).collect();
+        t.field_decls.extend(from_params);
         Some(t)
     }
 
@@ -769,6 +784,7 @@ impl<'s> Ctx<'s> {
             decorators: Vec::new(),
             decorator_refs: Vec::new(),
             fields: Vec::new(),
+            field_decls: Vec::new(),
             methods: Vec::new(),
             start_line: line(n),
             end_line: end_line(n),
@@ -788,6 +804,8 @@ impl<'s> Ctx<'s> {
                         }
                     }
                     "property_signature" => {
+                        let declared = m.child_by_field_name("type").map(|x| annotation_text(self, x)).unwrap_or_default();
+                        t.field_decls.push(FieldDecl { name: name.clone(), ty: declared, visibility: Visibility::Public, line: line(m) });
                         if let Some(ty) = m.child_by_field_name("type") {
                             t.fields.push((name, TypeExpr::Named(self.type_name(ty))));
                         }

@@ -19,6 +19,7 @@ struct BNode {
     lang: Lang,
     flags: NodeFlags,
     vis: Visibility,
+    detail: u32,
     lines: u32,
     file: u32,
     start_line: u32,
@@ -82,6 +83,7 @@ impl GraphBuilder {
             lang,
             flags: NodeFlags::NONE,
             vis: Visibility::Unknown,
+            detail: NONE,
             lines: 0,
             file: NONE,
             start_line: 0,
@@ -90,6 +92,11 @@ impl GraphBuilder {
         });
         self.children.push(Vec::new());
         id
+    }
+
+    fn is_field(&self, n: NodeId) -> bool {
+        let node = &self.nodes[n as usize];
+        node.kind == NodeKind::Member && node.sub == SubKind::Field
     }
 
     pub fn root(&self) -> NodeId {
@@ -135,6 +142,15 @@ impl GraphBuilder {
 
     pub fn set_visibility(&mut self, node: NodeId, vis: Visibility) {
         self.nodes[node as usize].vis = vis;
+    }
+
+    pub fn set_detail(&mut self, node: NodeId, detail: &str) {
+        self.nodes[node as usize].detail = self.strings.intern(detail);
+    }
+
+    pub fn detail(&self, node: NodeId) -> Option<&str> {
+        let d = self.nodes[node as usize].detail;
+        (d != NONE).then(|| self.strings.list[d as usize].as_str())
     }
 
     pub fn visibility(&self, node: NodeId) -> Visibility {
@@ -234,11 +250,22 @@ impl GraphBuilder {
             child_offsets[head] = order.len() as u32;
             head += 1;
             for &c in &self.children[old] {
+                if self.is_field(c) {
+                    continue;
+                }
                 new_id[c as usize] = order.len() as NodeId;
                 order.push(c);
             }
         }
-
+        let mut fields: Vec<FieldRec> = Vec::new();
+        for (new, &old) in order.iter().enumerate() {
+            for &c in self.children[old as usize].iter().filter(|&&c| self.is_field(c)) {
+                let f = &self.nodes[c as usize];
+                fields.push(FieldRec { owner: new as u32, name: f.name, ty: f.detail, line: f.start_line, vis: f.vis as u8 });
+            }
+        }
+        let n = order.len();
+        child_offsets.truncate(n + 1);
         child_offsets[n] = n as u32;
         let mut depth = vec![0u32; n];
         let mut parent_new = vec![NONE; n];
@@ -405,9 +432,8 @@ impl GraphBuilder {
                 parent: parent_new[new],
                 kind: b.kind as u8,
                 sub: b.sub as u8,
-                lang: b.lang as u8,
+                lang_vis: b.lang as u8 | (b.vis as u8) << 4,
                 flags: b.flags.0,
-                vis: b.vis as u8,
                 subtree_lines: subtree[new].min(u32::MAX as u64) as u32,
                 file: b.file,
                 start_line: b.start_line,
@@ -463,6 +489,6 @@ impl GraphBuilder {
         }
         str_offsets.push(strings.len() as u32);
 
-        Graph { strings, str_offsets, nodes, child_offsets, edges, edge_index, aggs, agg_offsets, tags, tag_offsets, entries, stats, provenance }
+        Graph { strings, str_offsets, nodes, child_offsets, edges, edge_index, aggs, agg_offsets, tags, tag_offsets, entries, stats, provenance, fields }
     }
 }
