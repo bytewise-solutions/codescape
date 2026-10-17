@@ -5,7 +5,8 @@ packages, types and members appearing as you zoom in. Arrows that point upward (
 higher one) are drawn red and counted, so you can tell at a glance whether a project is layered cleanly.
 
 This is the proof of concept described in `docs/superpowers/specs/2026-10-16-srcrelief-design.md`. It reads
-**Java (Gradle)** and **Go (go.mod / go.work)** projects.
+**Java (Gradle)**, **Go (go.mod / go.work)**, **TypeScript / JavaScript (package.json)** and **Rust (Cargo)**
+projects.
 
 ## Run it
 
@@ -20,7 +21,13 @@ Point it at the project folder. Every module under it is discovered and linked b
   kept apart and hidden by default, tick **View ▸ Test dependencies**).
 - **Go**: modules from `go.work`, or every `go.mod` under the folder; a module depends on another when its
   `require` names it.
-- Other build roots found inside (`package.json`, `pom.xml`, …) are listed in the status bar as not indexed.
+- **TypeScript / JavaScript**: every `package.json` folder with sources of its own, plus npm/yarn workspaces and
+  `pnpm-workspace.yaml`; links from `dependencies` naming another package (`devDependencies` are test links). Imports
+  follow relative paths, `tsconfig.json` `paths` and workspace package names. Only code is read (`.ts`, `.tsx`,
+  `.js`, `.jsx`, `.mjs`, `.cjs`); HTML, Vue, Svelte and Astro templates are not.
+- **Rust**: Cargo workspace members, or a lone crate; links from path and workspace dependencies. Packages follow the
+  module tree (`(lib)`, `a::b`, `bin/x`, `examples/x`), and methods from every `impl` block land on their type.
+- Other build roots found inside (`pom.xml`, `pyproject.toml`, …) are listed in the status bar as not indexed.
 
 Nothing is written into the project. The index lives in the user cache folder
 (`~/.cache/srcrelief/<hash>.relief` on Linux) and is rebuilt when sources, detection rules or index settings
@@ -175,7 +182,7 @@ writes nothing into the project unless you press that last button.
 Framework knowledge (which methods a framework calls back, what registers an HTTP route, how things are coloured)
 lives in **rule packs**, not in SrcRelief's code. The built-in packs in `rules/` use exactly the format you would
 write yourself: `java-core`, `libgdx`, `spring-boot`, `dagger`, `go-core`, `fiber`, `rabbitmq-amqp091`,
-`google-wire`, `default-visuals`.
+`google-wire`, `ts-core`, `angular`, `express`, `rust-core`, `layers`, `significance`, `default-visuals`.
 
 Packs load in this order, later ones overriding earlier rules with the same `id`:
 built-in → `~/.config/srcrelief/rules/<pack>/` → `<project>/.srcrelief/rules/<pack>/` → `[packs] dirs`.
@@ -205,7 +212,9 @@ Each rule has exactly one matcher:
 
 | Matcher | Produces |
 |---|---|
-| `main = { category }` | an entry point for every language-level `main` |
+| `main = { category, label }` | an entry point for every language-level `main`; `label` may use `{module}`, `{package}`, `{name}` |
+| `main_call = { methods, file_imports, label, handoff, category }` | makes the function that issues one of these calls the main (e.g. Angular's `bootstrapApplication`) |
+| `object_route = { var_types, calls, path_key, target_keys, children_key, kind, label }` | routes declared as object literals (e.g. Angular `Routes`), nested `children` joining their paths |
 | `path = { glob, category }` | the category of mains under matching paths |
 | `supertype = { types, callbacks = [{ method, lifecycle, order }] }` | framework callbacks on subclasses, nested under the main that reaches them |
 | `annotation = { names, handoff }` | marks a main as handing off to a framework (e.g. Spring Boot) |
@@ -216,7 +225,7 @@ Each rule has exactly one matcher:
 | `dispatch = { from_override, to_override }` | an implied call the framework makes (e.g. `Game.render` → `Screen.render`) |
 | `name_tag = { kinds, pattern, tag }` | tags on modules, packages, types or members |
 | `query = { language, file, capture, kind, label }` | entry points from a tree-sitter query |
-| `wiring = { file_markers, file_imports, calls, annotations, type_prefixes }` | marks dependency-injection code as wiring |
+| `wiring = { file_markers, file_imports, calls, annotations, type_prefixes, requires_imports, caller_prefixes }` | marks dependency-injection code as wiring |
 | `test_code = { file_imports, dir_names, paths }` | marks test helpers as test code |
 
 Lifecycles: `once`, `repeating`, `on-event`, `later`, `unknown`. Visual rules (`tag_style`, `frame` with
@@ -230,9 +239,11 @@ a callback with lifecycle `unknown`.
 
 ```
 crates/srcrelief-format   the .relief file: graph model, builder, memory-mapped reader
-crates/srcrelief-build    module discovery (Gradle, go.mod, go.work)
+crates/srcrelief-build    module discovery (Gradle, go.mod, go.work, package.json, Cargo)
 crates/srcrelief-java     Java extractor (tree-sitter)
 crates/srcrelief-go       Go extractor (tree-sitter)
+crates/srcrelief-ts       TypeScript / JavaScript extractor (tree-sitter)
+crates/srcrelief-rust     Rust extractor (tree-sitter)
 crates/srcrelief-facts    language-neutral facts handed from extractors to rule packs
 crates/srcrelief-rules    rule pack loader and engine
 crates/srcrelief-index    indexing pipeline, project settings, cache, CLI
@@ -246,16 +257,16 @@ rules/                    built-in rule packs
 
 ```sh
 cargo test --workspace                     # everything that needs no external project
-cargo test --workspace -- --include-ignored  # also the acceptance checks on the two reference projects
+cargo test --workspace -- --include-ignored  # also the acceptance checks on the reference projects and on SrcRelief itself
 ```
 
 Scale numbers are in `docs/benchmarks.md`.
 
 ## Known limits of the POC
 
-- Calls are resolved by name from what the source states (imports, declared types); chained calls are mostly
-  unresolved. The status bar shows the ratio (about 60–70% resolved on the reference projects).
+- Calls are resolved from what the source states (imports, declared types, return types); there is no type
+  inference, so callback parameters, loop variables and pattern bindings stay unresolved, and nothing inside Rust
+  macros is read. The status bar shows the ratio (about 55–85% resolved depending on the language).
 - Overloaded methods share one box; fields are not drawn.
-- No source view and no tunnel (sequence) view yet; the index already records spans, lifecycles and call edges
-  for them.
-- JS/TS, Maven and other languages are not indexed.
+- No tunnel (sequence) view yet; the index already records spans, lifecycles and call edges for it.
+- Maven, Kotlin, Python and other languages are not indexed.
