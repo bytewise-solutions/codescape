@@ -141,3 +141,16 @@ pub fn edge_look(links: u32, max_links: u32, lit: bool) -> EdgeLook {
 pub fn edge_alpha(links: u32) -> f32 {
     (0.4 + (links.max(1) as f32).log2() * 0.2).min(1.0)
 }
+
+pub fn stereotype(sub: srcrelief_format::SubKind, lang: srcrelief_format::Lang) -> Option<&'static str> {
+    use srcrelief_format::{Lang, SubKind};
+    match sub {
+        SubKind::Interface if lang == Lang::Rust => Some("«trait»"),
+        SubKind::Interface => Some("«interface»"),
+        SubKind::Enum => Some("«enumeration»"),
+        SubKind::Record => Some("«record»"),
+        SubKind::Struct => Some("«struct»"),
+        SubKind::Annotation => Some("«annotation»"),
+        _ => None,
+    }
+}

@@ -251,8 +251,7 @@ impl Builder<'_> {
         let g = self.g;
         let (ox, oy, s, w) = if open {
             let layout = self.cache.shared(g, node);
-            let xf = Xform::fit(&layout, world);
-            (xf.dx, xf.dy, xf.s, layout.size[0] as f64 * xf.s)
+            (world.x, world.y, Xform::fit(&layout, world).s, world.w)
         } else {
             (world.x, world.y, world.w / box_size(g, node)[0] as f64, world.w)
         };
@@ -302,12 +301,8 @@ impl Builder<'_> {
         self.scene.boxes[idx].rows = rows;
         self.scene.boxes[idx].more_rows = more_rows;
         self.scene.stats.drawn += 1;
-        if !source && rect.h >= MIN_LABEL_PX * 1.6 {
+        if !source && !compact && rect.h >= MIN_LABEL_PX * 1.6 {
             let size = if open { 13.0 } else { (rect.h * 0.2).clamp(MIN_LABEL_PX, 16.0) };
-            let size = match self.scene.boxes[idx].rows.first() {
-                Some(r) => size.min((r.rect.y - rect.y - 4.0) * 0.6).max(MIN_LABEL_PX),
-                None => size,
-            };
             let (pos, centered, detail) = if compact {
                 ([rect.x + 8.0, rect.y + 6.0], false, None)
             } else if open {

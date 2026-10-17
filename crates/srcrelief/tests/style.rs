@@ -1,3 +1,4 @@
+use srcrelief_format::{Lang, SubKind};
 use srcrelief::style::{edge_alpha, edge_width};
 
 #[test]
@@ -38,4 +39,14 @@ fn quiet_arrows_stay_faint_until_lit() {
     assert_eq!(lit.alpha, 1.0);
     assert!(edge_look(16, 20, true).width > lit.width, "lit arrows keep their weight");
     assert_eq!(edge_look(1, 0, false), EdgeLook { ..faint }, "an empty container does not divide by zero");
+}
+
+#[test]
+fn uml_stereotypes_name_the_kind_of_type() {
+    use srcrelief::style::stereotype;
+    assert_eq!(stereotype(SubKind::Interface, Lang::Java), Some("«interface»"));
+    assert_eq!(stereotype(SubKind::Interface, Lang::Rust), Some("«trait»"));
+    assert_eq!(stereotype(SubKind::Enum, Lang::Go), Some("«enumeration»"));
+    assert_eq!(stereotype(SubKind::Struct, Lang::Go), Some("«struct»"));
+    assert_eq!(stereotype(SubKind::Class, Lang::Java), None, "a plain class has no stereotype in UML");
 }

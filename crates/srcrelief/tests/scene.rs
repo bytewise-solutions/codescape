@@ -395,7 +395,7 @@ fn methods_are_rows_of_their_card_and_free_functions_stay_boxes() {
 }
 
 #[test]
-fn a_card_title_never_runs_into_its_rows() {
+fn a_card_showing_rows_has_a_header_not_a_corner_title() {
     let fx = fixture();
     let g = fx.file.graph();
     let mut cache = LayoutCache::new(Vec::new(), LayoutOptions::default());
@@ -403,7 +403,32 @@ fn a_card_title_never_runs_into_its_rows() {
     let cam = Camera::fit(world_rect(g, &mut cache, t).unwrap(), VIEW);
     let s = build_scene_at(g, &mut cache, &cam, VIEW, &VisualRules::default(), None, [-50.0, -50.0], &[]);
     let card = s.boxes.iter().find(|b| b.node == t).unwrap();
-    let label = s.labels.iter().find(|l| l.node == t).unwrap();
     assert!(!card.rows.is_empty());
-    assert!(label.pos[1] + label.size <= card.rows[0].rect.y + 0.5, "title {label:?} overlaps first row {:?}", card.rows[0].rect);
+    assert!(s.labels.iter().all(|l| l.node != t), "the card draws its own UML header instead of a corner title");
+}
+
+#[test]
+fn rows_start_at_the_card_left_edge_even_with_boxes_inside() {
+    let mut b = GraphBuilder::new("p");
+    let pkg = b.add_node(b.root(), NodeKind::Package, SubKind::None, "jobs", Lang::Go);
+    let port = b.add_node(pkg, NodeKind::Type, SubKind::Interface, "JobService", Lang::Go);
+    b.set_span(port, "a.go", 1, 400);
+    for (i, m) in ["Find", "Purge"].iter().enumerate() {
+        let n = b.add_node(port, NodeKind::Member, SubKind::Method, m, Lang::Go);
+        b.set_span(n, "a.go", 2 + i as u32, 2 + i as u32);
+    }
+    let imp = b.add_node(pkg, NodeKind::Type, SubKind::Struct, "jobService", Lang::Go);
+    b.set_span(imp, "b.go", 1, 10);
+    b.add_edge(imp, port, EdgeKind::Implements, Scope::Main, Confidence::Resolved, EdgeFlags::NONE);
+    let dir = tempfile::tempdir().unwrap();
+    write_graph(&b.finish(), &dir.path().join("g")).unwrap();
+    let f = ReliefFile::open(&dir.path().join("g")).unwrap();
+    let g = f.graph();
+    let mut cache = LayoutCache::new(Vec::new(), LayoutOptions { show_details: true, ..Default::default() });
+    let port = g.children(g.children(g.root()).start).find(|&c| g.name(c) == "JobService").unwrap();
+    let cam = Camera::fit(world_rect(g, &mut cache, port).unwrap(), VIEW);
+    let s = build_scene_at(g, &mut cache, &cam, VIEW, &VisualRules::default(), None, [-50.0, -50.0], &[]);
+    let card = s.boxes.iter().find(|b| b.node == port).unwrap();
+    assert!(card.open && !card.rows.is_empty());
+    assert!(card.rows[0].rect.x - card.rect.x < card.rect.w * 0.1, "rows hug the left edge: card {:?} row {:?}", card.rect, card.rows[0].rect);
 }

@@ -1504,16 +1504,33 @@ impl Project {
 
     fn paint_rows(&self, painter: &egui::Painter, b: &crate::canvas::SceneBox) {
         let g = self.file.graph();
-        let clip = painter.with_clip_rect(erect(b.rect).shrink(2.0).intersect(erect(self.view)));
-        let size = (b.rows[0].rect.h * 0.72).min(13.0);
+        let card = erect(b.rect);
+        let clip = painter.with_clip_rect(card.shrink(1.0).intersect(erect(self.view)));
+        let row_h = b.rows[0].rect.h;
+        let size = (row_h * 0.72).min(13.0);
         let font = FontId::proportional(size);
         let dim = |c: Color32| if b.dimmed { c.gamma_multiply(0.35) } else { c };
-        for row in &b.rows {
-            let r = erect(row.rect);
-            if self.pointer.is_some_and(|p| r.contains(p)) || self.selected == Some(row.node) {
-                clip.rect_filled(r, 2.0, style::ACCENT.gamma_multiply(if self.selected == Some(row.node) { 0.18 } else { 0.08 }));
+        let header = egui::Rect::from_min_max(card.min, Pos2::new(card.max.x, b.rows[0].rect.y - row_h * 0.3));
+        clip.rect_filled(header, egui::CornerRadius { nw: 3, ne: 3, sw: 0, se: 0 }, dim(style::tint(style::BAR, style::kind_stroke(b.sub), 0.18)));
+        clip.line_segment([header.left_bottom(), header.right_bottom()], Stroke::new(1.0, dim(style::kind_stroke(b.sub).gamma_multiply(0.7))));
+        let title = (header.height() * 0.34).clamp(7.0, 15.0);
+        let stereo = style::stereotype(b.sub, g.lang(b.node));
+        let name_y = if stereo.is_some() { header.center().y + title * 0.45 } else { header.center().y };
+        if let Some(st) = stereo {
+            clip.text(Pos2::new(header.center().x, name_y - title * 1.05), Align2::CENTER_CENTER, st, FontId::proportional(title * 0.75), dim(style::MUTED));
+        }
+        let name = fit_label(g.name(b.node), header.width() - 12.0, title);
+        let title_color = if self.selected == Some(b.node) { style::ACCENT } else { dim(style::BOX_TITLE) };
+        clip.text(Pos2::new(header.center().x, name_y), Align2::CENTER_CENTER, name, FontId::proportional(title), title_color);
+        for (i, row) in b.rows.iter().enumerate() {
+            let r = erect(row.rect).expand2(egui::vec2(6.0, 0.0));
+            if i % 2 == 1 {
+                clip.rect_filled(r, 0.0, style::TEXT.gamma_multiply(0.025));
             }
-            let mark = r.left_center() + egui::vec2(size * 0.45, 0.0);
+            if self.pointer.is_some_and(|p| r.contains(p)) || self.selected == Some(row.node) {
+                clip.rect_filled(r, 0.0, style::ACCENT.gamma_multiply(if self.selected == Some(row.node) { 0.18 } else { 0.08 }));
+            }
+            let mark = Pos2::new(row.rect.x + size * 0.45, r.center().y);
             if srcrelief_layout::is_constructor(g, row.node) {
                 let d = size * 0.28;
                 let pts = vec![mark + egui::vec2(0.0, -d), mark + egui::vec2(d, 0.0), mark + egui::vec2(0.0, d), mark + egui::vec2(-d, 0.0)];
@@ -1527,9 +1544,9 @@ impl Project {
                 Mark::Focus => style::ACCENT,
                 Mark::None => dim(style::TEXT),
             };
-            let name = if g.name(row.node) == "<init>" { g.parent(row.node).map_or("<init>", |t| g.name(t)) } else { g.name(row.node) };
-            let text = fit_label(name, r.width() - size * 1.4, size);
-            clip.text(Pos2::new(r.left() + size * 1.1, r.center().y), Align2::LEFT_CENTER, text, font.clone(), color);
+            let base = if g.name(row.node) == "<init>" { g.parent(row.node).map_or("<init>", |t| g.name(t)) } else { g.name(row.node) };
+            let text = fit_label(&format!("{base}()"), row.rect.w - size * 1.4, size);
+            clip.text(Pos2::new(row.rect.x + size * 1.1, r.center().y), Align2::LEFT_CENTER, text, font.clone(), color);
         }
         if b.more_rows > 0 {
             let last = erect(b.rows[b.rows.len() - 1].rect);
