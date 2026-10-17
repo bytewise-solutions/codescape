@@ -155,7 +155,7 @@ too).
 
 ```sh
 codescape <dir> --screenshot out.png [--focus NAME] [--entry LABEL] [--zoom FACTOR] [--settings] [--review REV] [--review-target REV] [--review-by-commit]
-         [--open METHOD] [--sequence METHOD] [--map-only]
+         [--open METHOD] [--sequence METHOD] [--map-only] [--fly NAME]
 ```
 
 Renders one frame after zooming to the first node matching `NAME`, selecting an entry point, opening the settings

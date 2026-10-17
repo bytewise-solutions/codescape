@@ -32,6 +32,8 @@ struct Args {
     sequence: Option<String>,
     #[arg(long, help = "With --screenshot: hide both side panels")]
     map_only: bool,
+    #[arg(long, help = "With --screenshot: frame the first node matching this name without selecting it")]
+    fly: Option<String>,
 }
 
 fn main() -> eframe::Result {
@@ -54,6 +56,7 @@ fn main() -> eframe::Result {
         open: args.open,
         sequence: args.sequence,
         map_only: args.map_only,
+        fly: args.fly,
     });
     eframe::run_native("Codescape", options, Box::new(move |cc| Ok(Box::new(codescape::app::CodescapeApp::new(cc, args.dir, args.config, shot)))))
 }

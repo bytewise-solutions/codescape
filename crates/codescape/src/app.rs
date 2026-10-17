@@ -478,6 +478,7 @@ struct Project {
     context_node: Option<NodeId>,
     pending_sequence: Option<NodeId>,
     pending_open: Option<NodeId>,
+    deferred_plan: Option<ShotPlan>,
     show_left: bool,
     show_right: bool,
     review_error: Option<String>,
@@ -672,6 +673,7 @@ impl Project {
             context_node: None,
             pending_sequence: None,
             pending_open: None,
+            deferred_plan: None,
             show_left: true,
             show_right: true,
             review_bar: None,
@@ -713,6 +715,29 @@ impl Project {
 
     fn apply_plan(&mut self, plan: &ShotPlan) {
         self.scripted = true;
+        if plan.map_only {
+            self.toggle_both_panels();
+        }
+        self.settings_open |= plan.settings;
+        self.shortcuts_open |= plan.shortcuts;
+        let reviewing = plan.review.is_some() || plan.review_target.is_some() || plan.review_by_commit;
+        if reviewing {
+            self.deferred_plan = Some(plan.clone());
+            self.enter_review(plan.review.clone().filter(|r| r != "main"), plan.review_target.clone());
+        }
+        if plan.review_by_commit {
+            if let Some(bar) = self.review_bar.as_mut() {
+                bar.by_commit = true;
+            }
+            self.refresh_steps();
+            self.compare_now();
+        }
+        if !reviewing {
+            self.apply_plan_targets(plan);
+        }
+    }
+
+    fn apply_plan_targets(&mut self, plan: &ShotPlan) {
         let entry = plan.entry.as_ref().and_then(|label| {
             let g = self.file.graph();
             (0..g.entries().len()).find(|&i| g.entry_label(i) == label)
@@ -739,20 +764,8 @@ impl Project {
             self.selected = Some(m);
             self.open_sequence(m);
         }
-        if plan.map_only {
-            self.toggle_both_panels();
-        }
-        self.settings_open |= plan.settings;
-        self.shortcuts_open |= plan.shortcuts;
-        if plan.review.is_some() || plan.review_target.is_some() || plan.review_by_commit {
-            self.enter_review(plan.review.clone().filter(|r| r != "main"), plan.review_target.clone());
-        }
-        if plan.review_by_commit {
-            if let Some(bar) = self.review_bar.as_mut() {
-                bar.by_commit = true;
-            }
-            self.refresh_steps();
-            self.compare_now();
+        if let Some(n) = plan.fly.as_ref().and_then(|name| self.search.query(self.file.graph(), name, 1).first().copied()) {
+            self.fly_to(n);
         }
     }
 
@@ -959,6 +972,7 @@ impl Project {
         self.home = (dir != origin.0).then_some(origin);
         self.review_bar = old.review_bar.take();
         self.review_job = old.review_job.take();
+        self.deferred_plan = old.deferred_plan.take();
         self.cam = old.cam;
         self.view = old.view;
         self.needs_fit = false;
@@ -1321,6 +1335,11 @@ impl Project {
         let mut action = None;
         self.poll_review(ui.ctx());
         self.poll_analysis(ui.ctx());
+        if self.review_job.is_none()
+            && let Some(plan) = self.deferred_plan.take()
+        {
+            self.apply_plan_targets(&plan);
+        }
         let (jump, open, settings) = ui.input_mut(|i| (i.consume_shortcut(&JUMP), i.consume_shortcut(&OPEN), i.consume_shortcut(&SETTINGS)));
         self.search_open |= jump;
         self.settings_open |= settings;

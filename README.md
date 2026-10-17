@@ -13,7 +13,7 @@ It was built to read code you did not write, and in particular to review what a 
 the map shows what is new and changed, the list puts the riskiest changes first, and a sequence diagram tells any
 method from the entry point that reaches it.
 
-![The map of this repository](docs/images/map.png)
+![Reviewing ripgrep 15.1.0 → 15.2.0: changed crates outlined, the riskiest changes listed first](docs/images/review.png)
 
 ## Features
 
@@ -35,10 +35,19 @@ method from the entry point that reaches it.
 - **Nothing written into your project.** The index (a memory-mapped file, about a quarter of the source size) and
   every compared version live in your cache folder.
 
+## Screenshots
+
 | | |
 |---|---|
-| ![A type as a UML card](docs/images/card.png) | ![Reviewing a branch](docs/images/review.png) |
-| ![A sequence diagram](docs/images/sequence.png) | |
+| ![ripgrep's eleven crates as one layered map](docs/images/map.png) | ![Spring PetClinic's owner package as UML cards](docs/images/cards.png) |
+| **The map.** ripgrep's crates laid out top-down by dependency, entry point on top. | **UML cards.** Controllers above the repositories they call, with fields, methods, visibility and calls. |
+| ![An HTTP route selected, its controller's file open](docs/images/code.png) | ![A changed method with its added and removed lines](docs/images/diff.png) |
+| **Reading code.** Picking the route `GET /owners/{ownerId}` opens its controller and lists what it uses and what reaches it. | **Line diff in review.** `run_one` as changed between two ripgrep releases: added lines in green, removed ones marked in red. |
+| ![A sequence diagram from main through run to search_parallel](docs/images/sequence.png) | |
+| **Sequence diagrams.** `search_parallel` told from `main`, crossing into the `ignore` crate. | |
+
+The screenshots show [ripgrep](https://github.com/BurntSushi/ripgrep) (MIT / Unlicense) and
+[Spring PetClinic](https://github.com/spring-projects/spring-petclinic) (Apache-2.0), opened as they are.
 
 ## Install
 
