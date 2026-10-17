@@ -1,5 +1,5 @@
-use similar::{ChangeTag, TextDiff};
-use srcrelief_format::{ArchivedGraph, NodeId, NodeKind, SCOPE_MAIN};
+use similar::{ChangeTag, DiffOp, TextDiff};
+use srcrelief_format::{ArchivedGraph, NodeId, NodeKind, SCOPE_MAIN, Visibility};
 use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 
@@ -26,6 +26,15 @@ pub struct Change {
     pub removed: u32,
     pub complexity: Option<(u16, u16)>,
     pub inside: Counts,
+    pub fingerprint: u64,
+    pub signature: bool,
+    pub widened: Option<(Visibility, Visibility)>,
+}
+
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct FileDiff {
+    pub added: Vec<u32>,
+    pub removed: Vec<(u32, Vec<String>)>,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -41,11 +50,16 @@ pub struct Review {
     pub removed: Vec<Removed>,
     pub new_arrows: Vec<(NodeId, NodeId)>,
     pub removed_arrows: Vec<(String, String)>,
+    files: HashMap<String, FileDiff>,
 }
 
 impl Review {
     pub fn change(&self, n: NodeId) -> &Change {
         &self.changes[n as usize]
+    }
+
+    pub fn file(&self, path: &str) -> Option<&FileDiff> {
+        self.files.get(path)
     }
 
     pub fn totals(&self) -> Counts {
@@ -68,11 +82,15 @@ struct Source<'a> {
 }
 
 impl Source<'_> {
+    fn file(&mut self, rel: &str) -> &Vec<String> {
+        let path = self.root.join(rel);
+        self.files.entry(path.clone()).or_insert_with(|| std::fs::read_to_string(&path).map(|s| s.lines().map(str::to_string).collect()).unwrap_or_default())
+    }
+
     fn lines(&mut self, n: NodeId) -> Vec<String> {
         let (start, end) = self.g.span(n);
         let Some(file) = self.g.file(n).filter(|_| start >= 1 && end >= start) else { return Vec::new() };
-        let path = self.root.join(file);
-        let all = self.files.entry(path.clone()).or_insert_with(|| std::fs::read_to_string(&path).map(|s| s.lines().map(str::to_string).collect()).unwrap_or_default());
+        let all = self.file(file);
         let end = (end as usize).min(all.len());
         all[(start as usize - 1).min(end)..end].iter().map(|l| l.trim().to_string()).filter(|l| !l.is_empty()).collect()
     }
@@ -86,6 +104,38 @@ fn line_delta(before: &[String], after: &[String]) -> (u32, u32) {
         ChangeTag::Delete => (add, del + 1),
         ChangeTag::Equal => (add, del),
     })
+}
+
+fn fingerprint(lines: &[String]) -> u64 {
+    lines.iter().flat_map(|l| l.bytes().chain([b'\n'])).fold(0xcbf2_9ce4_8422_2325, |h, b| (h ^ u64::from(b)).wrapping_mul(0x0100_0000_01b3))
+}
+
+fn openness(v: Visibility) -> Option<u8> {
+    match v {
+        Visibility::Unknown => None,
+        Visibility::Private => Some(0),
+        Visibility::Package => Some(1),
+        Visibility::Protected => Some(2),
+        Visibility::Public => Some(3),
+    }
+}
+
+fn file_diff(before: &[String], after: &[String]) -> Option<FileDiff> {
+    let old: Vec<&str> = before.iter().map(|l| l.trim()).collect();
+    let new: Vec<&str> = after.iter().map(|l| l.trim()).collect();
+    let mut d = FileDiff::default();
+    for op in similar::capture_diff_slices(similar::Algorithm::Myers, &old, &new) {
+        match op {
+            DiffOp::Insert { new_index, new_len, .. } => d.added.extend((new_index..new_index + new_len).map(|i| i as u32 + 1)),
+            DiffOp::Delete { old_index, old_len, new_index } => d.removed.push((new_index as u32 + 1, before[old_index..old_index + old_len].to_vec())),
+            DiffOp::Replace { old_index, old_len, new_index, new_len } => {
+                d.added.extend((new_index..new_index + new_len).map(|i| i as u32 + 1));
+                d.removed.push((new_index as u32 + 1, before[old_index..old_index + old_len].to_vec()));
+            }
+            DiffOp::Equal { .. } => {}
+        }
+    }
+    (d != FileDiff::default()).then_some(d)
 }
 
 fn arrows(g: &ArchivedGraph) -> HashSet<(String, String)> {
@@ -108,20 +158,28 @@ pub fn compare(base: &ArchivedGraph, base_root: &Path, target: &ArchivedGraph, t
     let target_keys: HashMap<String, NodeId> = (0..target.node_count() as NodeId).filter(|&n| compared(target, n)).map(|n| (key(target, n), n)).collect();
     let mut before = Source { g: base, root: base_root, files: HashMap::new() };
     let mut after = Source { g: target, root: target_root, files: HashMap::new() };
-    let unchanged = Change { status: Status::Unchanged, added: 0, removed: 0, complexity: None, inside: Counts::default() };
+    let unchanged = Change { status: Status::Unchanged, added: 0, removed: 0, complexity: None, inside: Counts::default(), fingerprint: 0, signature: false, widened: None };
     let mut changes = vec![unchanged.clone(); target.node_count()];
     for n in (0..target.node_count() as NodeId).filter(|&n| compared(target, n)) {
         let c = &mut changes[n as usize];
         match base_keys.get(&key(target, n)) {
             None => {
+                let lines = after.lines(n);
                 c.status = Status::New;
-                c.added = after.lines(n).len() as u32;
+                c.added = lines.len() as u32;
+                c.fingerprint = fingerprint(&lines);
             }
             Some(&b) if matches!(target.kind(n), NodeKind::Type | NodeKind::Member) => {
                 let (old, new) = (before.lines(b), after.lines(n));
+                c.fingerprint = fingerprint(&new);
                 if old != new {
                     let (add, del) = line_delta(&old, &new);
-                    *c = Change { status: Status::Changed, added: add, removed: del, ..unchanged.clone() };
+                    *c = Change { status: Status::Changed, added: add, removed: del, signature: old.first() != new.first(), ..c.clone() };
+                }
+                if let (Some(x), Some(y)) = (openness(base.visibility(b)), openness(target.visibility(n))) {
+                    if y > x {
+                        c.widened = Some((base.visibility(b), target.visibility(n)));
+                    }
                 }
                 if let (Some(x), Some(y)) = (base.complexity(b), target.complexity(n)) {
                     if x != y {
@@ -177,7 +235,15 @@ pub fn compare(base: &ArchivedGraph, base_root: &Path, target: &ArchivedGraph, t
     added.sort();
     let mut gone: Vec<(String, String)> = old_arrows.difference(&new_arrows).cloned().collect();
     gone.sort();
-    Review { changes, removed, new_arrows: added, removed_arrows: gone }
+    let mut files = HashMap::new();
+    let paths: HashSet<&str> = (0..target.node_count() as NodeId).filter(|&n| compared(target, n)).filter_map(|n| target.file(n)).collect();
+    for path in paths {
+        let new = after.file(path).clone();
+        if let Some(d) = file_diff(before.file(path), &new) {
+            files.insert(path.to_string(), d);
+        }
+    }
+    Review { changes, removed, new_arrows: added, removed_arrows: gone, files }
 }
 
 #[derive(Clone, Debug, PartialEq)]

@@ -13,7 +13,9 @@ fn side(files: &[(&str, &str)]) -> Side {
     let tmp = tempfile::tempdir().unwrap();
     let dir = tmp.path().join("proj");
     std::fs::create_dir_all(&dir).unwrap();
-    std::fs::write(dir.join("go.mod"), "module example.com/shop\n\ngo 1.22\n").unwrap();
+    if !files.iter().any(|(rel, _)| *rel == "package.json") {
+        std::fs::write(dir.join("go.mod"), "module example.com/shop\n\ngo 1.22\n").unwrap();
+    }
     for (rel, body) in files {
         let p = dir.join(rel);
         std::fs::create_dir_all(p.parent().unwrap()).unwrap();
@@ -103,4 +105,51 @@ fn a_branch_is_compared_with_where_it_left_main() {
     assert_eq!(r.removed.iter().map(|x| x.path.as_str()).collect::<Vec<_>>(), ["svc/cart/Cart/Clear"]);
     let status = std::process::Command::new("git").args(["status", "--porcelain"]).current_dir(&repo).output().unwrap();
     assert_eq!(String::from_utf8_lossy(&status.stdout).trim(), "?? svc/cart/extra.go", "the checkout is left alone");
+}
+
+#[test]
+fn files_are_diffed_line_by_line_ignoring_indentation() {
+    let base = side(&[("cart/cart.go", BASE_CART), ("pay/pay.go", PAY)]);
+    let target = side(&[("cart/cart.go", TARGET_CART), ("pay/pay.go", PAY)]);
+    let r = compare(base.file.graph(), Path::new(&base.dir), target.file.graph(), Path::new(&target.dir));
+    let d = r.file("cart/cart.go").expect("cart.go differs");
+    for line in [3, 8, 9, 10, 11, 19] {
+        assert!(d.added.contains(&line), "line {line} is new: {:?}", d.added);
+    }
+    assert!(!d.added.contains(&16), "re-indented line");
+    let gone: Vec<&String> = d.removed.iter().flat_map(|(_, lines)| lines).collect();
+    assert!(gone.iter().any(|l| l.contains("Clear()")), "{gone:?}");
+    assert!(r.file("pay/pay.go").is_none());
+}
+
+#[test]
+fn a_mark_follows_the_text_of_a_block() {
+    let base = side(&[("cart/cart.go", BASE_CART), ("pay/pay.go", PAY)]);
+    let target = side(&[("cart/cart.go", TARGET_CART), ("pay/pay.go", PAY)]);
+    let again = side(&[("cart/cart.go", &TARGET_CART.replace("x++", "x += 2")), ("pay/pay.go", PAY)]);
+    let (bg, tg, ag) = (base.file.graph(), target.file.graph(), again.file.graph());
+    let first = compare(bg, Path::new(&base.dir), tg, Path::new(&target.dir));
+    let second = compare(bg, Path::new(&base.dir), ag, Path::new(&again.dir));
+    let print = |r: &Review, g: &ArchivedGraph, m: &str| r.change(node(g, &["proj", "cart", "Cart", m])).fingerprint;
+    assert_eq!(print(&first, tg, "Discount"), print(&second, ag, "Discount"), "same text, same mark");
+    assert_ne!(print(&first, tg, "Add"), print(&second, ag, "Add"), "the agent changed Add again");
+    assert_ne!(print(&first, tg, "Add"), print(&first, tg, "Discount"));
+}
+
+#[test]
+fn signature_and_visibility_changes_are_told() {
+    let base = side(&[("cart/cart.go", BASE_CART), ("pay/pay.go", PAY)]);
+    let target = side(&[("cart/cart.go", &TARGET_CART.replace("Total() int", "Total(tax int) int")), ("pay/pay.go", PAY)]);
+    let r = compare(base.file.graph(), Path::new(&base.dir), target.file.graph(), Path::new(&target.dir));
+    let tg = target.file.graph();
+    assert!(r.change(node(tg, &["proj", "cart", "Cart", "Total"])).signature);
+    assert!(!r.change(node(tg, &["proj", "cart", "Cart", "Add"])).signature, "only the body changed");
+
+    let ts = |vis: &str| format!("export class Cart {{\n  {vis}helper(): number {{\n    return 1;\n  }}\n}}\n");
+    let base = side(&[("package.json", "{\"name\":\"shop\"}"), ("src/cart.ts", &ts("private "))]);
+    let target = side(&[("package.json", "{\"name\":\"shop\"}"), ("src/cart.ts", &ts(""))]);
+    let r = compare(base.file.graph(), Path::new(&base.dir), target.file.graph(), Path::new(&target.dir));
+    let tg = target.file.graph();
+    let helper = (0..tg.node_count() as NodeId).find(|&n| tg.name(n) == "helper").unwrap();
+    assert_eq!(r.change(helper).widened, Some((Visibility::Private, Visibility::Public)));
 }
