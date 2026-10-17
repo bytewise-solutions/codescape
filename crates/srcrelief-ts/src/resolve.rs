@@ -441,12 +441,14 @@ impl<'a> Resolver<'a> {
             for t in &f.tf.types {
                 let shown = if t.name == "default" { stem.as_str() } else { t.name.as_str() };
                 let node = self.b.add_node(pkg, NodeKind::Type, t.kind, shown, f.lang);
+                self.b.set_visibility(node, exported(&f.tf, &t.name));
                 self.b.set_span(node, &f.rel, t.start_line, t.end_line);
                 self.b.set_lines(node, t.end_line - t.start_line + 1);
                 self.flag(node, f);
                 let mut methods = HashMap::new();
                 for m in &t.methods {
                     let id = self.b.add_node(node, NodeKind::Member, m.sub, &m.name, f.lang);
+                    self.b.set_visibility(id, if m.visibility == Visibility::Unknown { Visibility::Public } else { m.visibility });
                     self.b.set_span(id, &f.rel, m.start_line, m.end_line);
                     self.b.set_lines(id, m.end_line - m.start_line + 1);
                     self.flag(id, f);
@@ -474,6 +476,7 @@ impl<'a> Resolver<'a> {
             for func in &f.tf.funcs {
                 let shown = if func.name == "default" { stem.as_str() } else { func.name.as_str() };
                 let node = self.b.add_node(pkg, NodeKind::Member, SubKind::Function, shown, f.lang);
+                self.b.set_visibility(node, exported(&f.tf, &func.name));
                 self.b.set_span(node, &f.rel, func.start_line, func.end_line);
                 self.b.set_lines(node, func.end_line - func.start_line + 1);
                 self.flag(node, f);
@@ -1078,5 +1081,13 @@ impl<'a> Resolver<'a> {
             _ => self.stats.unresolved += 1,
         }
         cf
+    }
+}
+
+fn exported(tf: &TsFile, name: &str) -> Visibility {
+    if name == "default" || tf.default_export.as_deref() == Some(name) || tf.exports.iter().any(|(local, _)| local == name) {
+        Visibility::Public
+    } else {
+        Visibility::Package
     }
 }

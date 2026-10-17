@@ -417,6 +417,7 @@ impl<'a> Resolver<'a> {
 
     fn add_fn(&mut self, parent: NodeId, sub: SubKind, f: &RsFn, rel: &str, test: bool) -> NodeId {
         let id = self.b.add_node(parent, NodeKind::Member, sub, &f.name, Lang::Rust);
+        self.b.set_visibility(id, f.visibility);
         self.b.set_span(id, rel, f.start_line, f.end_line);
         self.b.set_lines(id, f.end_line - f.start_line + 1);
         self.flag_test(id, test);
@@ -433,7 +434,11 @@ impl<'a> Resolver<'a> {
                 let ttest = test || has_cfg_test(&t.attrs);
                 let ti = match self.pkgs[pi].types.get(&t.name) {
                     Some(&ti) => ti,
-                    None => self.new_type(pi, &t.name, t.kind, &f.rel, (t.start_line, t.end_line), ttest, t.fields.iter().cloned().collect()),
+                    None => {
+                        let ti = self.new_type(pi, &t.name, t.kind, &f.rel, (t.start_line, t.end_line), ttest, t.fields.iter().cloned().collect());
+                        self.b.set_visibility(self.types[ti].node, t.visibility);
+                        ti
+                    }
                 };
                 self.type_occs[file].push((pi, body, i));
                 for (j, m) in t.methods.iter().enumerate() {

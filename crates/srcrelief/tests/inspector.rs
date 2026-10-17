@@ -105,3 +105,17 @@ fn inside_lists_implementations_folded_into_an_interface() {
     assert_eq!(kids.iter().map(|(_, s)| s.as_str()).collect::<Vec<_>>(), ["Run", "jobService"]);
     assert_eq!(summary, "2 items: 1 method, 1 struct");
 }
+
+#[test]
+fn header_names_the_visibility_when_known() {
+    let mut b = GraphBuilder::new("p");
+    let t = b.add_node(b.root(), NodeKind::Type, SubKind::Class, "Store", Lang::Java);
+    let m = b.add_node(t, NodeKind::Member, SubKind::Method, "evict", Lang::Java);
+    b.set_visibility(m, Visibility::Private);
+    let dir = tempfile::tempdir().unwrap();
+    write_graph(&b.finish(), &dir.path().join("g")).unwrap();
+    let f = ReliefFile::open(&dir.path().join("g")).unwrap();
+    let g = f.graph();
+    assert_eq!(header(g, named(g, "evict")).kind, "METHOD · Java · private");
+    assert_eq!(header(g, named(g, "Store")).kind, "CLASS · Java", "unknown visibility says nothing");
+}

@@ -18,6 +18,7 @@ struct BNode {
     sub: SubKind,
     lang: Lang,
     flags: NodeFlags,
+    vis: Visibility,
     lines: u32,
     file: u32,
     start_line: u32,
@@ -80,6 +81,7 @@ impl GraphBuilder {
             sub,
             lang,
             flags: NodeFlags::NONE,
+            vis: Visibility::Unknown,
             lines: 0,
             file: NONE,
             start_line: 0,
@@ -129,6 +131,14 @@ impl GraphBuilder {
 
     pub fn add_flags(&mut self, node: NodeId, flags: NodeFlags) {
         self.nodes[node as usize].flags |= flags;
+    }
+
+    pub fn set_visibility(&mut self, node: NodeId, vis: Visibility) {
+        self.nodes[node as usize].vis = vis;
+    }
+
+    pub fn visibility(&self, node: NodeId) -> Visibility {
+        self.nodes[node as usize].vis
     }
 
     pub fn flags(&self, node: NodeId) -> NodeFlags {
@@ -397,6 +407,7 @@ impl GraphBuilder {
                 sub: b.sub as u8,
                 lang: b.lang as u8,
                 flags: b.flags.0,
+                vis: b.vis as u8,
                 subtree_lines: subtree[new].min(u32::MAX as u64) as u32,
                 file: b.file,
                 start_line: b.start_line,

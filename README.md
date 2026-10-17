@@ -87,7 +87,8 @@ enough to read.
   **View ▸ Quiet arrows** off to draw every arrow by its weight instead.
 - **Implements / inherits** arrows are dotted with a hollow triangle at the interface, like UML.
 - **Types are UML cards.** A header with the stereotype («interface», «trait», «struct», «enumeration», «record»)
-  and the name, then the methods as left-aligned rows, constructors first (◇); a dot
+  and the name, then the methods as left-aligned rows with their visibility (`+` public, `#` protected, `~` package,
+  `-` private), constructors first (◇); a dot
   marks methods used from outside the type or that are entry points. Arrows join cards, not methods. Hover a row to
   see it, click it to select the method (its uses light up), double-click to open the file at that method. Functions
   that live directly in a package (Go, TypeScript, Rust) stay boxes.

@@ -25,6 +25,25 @@ macro_rules! u8_enum {
 u8_enum!(NodeKind { Project, Module, Package, Type, Member, External });
 u8_enum!(SubKind { None, Class, Interface, Enum, Record, Annotation, Struct, NamedType, Method, Function, Field, Constructor });
 u8_enum!(Lang { None, Java, Go, TypeScript, JavaScript, Rust });
+u8_enum!(Visibility { Unknown, Public, Protected, Package, Private });
+
+impl Default for Visibility {
+    fn default() -> Self {
+        Visibility::Unknown
+    }
+}
+
+impl Visibility {
+    pub fn uml(self) -> &'static str {
+        match self {
+            Visibility::Unknown => "",
+            Visibility::Public => "+",
+            Visibility::Protected => "#",
+            Visibility::Package => "~",
+            Visibility::Private => "-",
+        }
+    }
+}
 u8_enum!(EdgeKind { DependsOn, Calls, Inherits, Implements, Instantiates, FrameworkDispatch });
 u8_enum!(Scope { Main, Test });
 u8_enum!(Confidence { Resolved, Guessed });
@@ -156,6 +175,7 @@ pub struct Node {
     pub sub: u8,
     pub lang: u8,
     pub flags: u8,
+    pub vis: u8,
     pub subtree_lines: u32,
     pub file: u32,
     pub start_line: u32,

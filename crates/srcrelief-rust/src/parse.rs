@@ -1,5 +1,5 @@
 use srcrelief_facts::Annotation;
-use srcrelief_format::SubKind;
+use srcrelief_format::{SubKind, Visibility};
 use tree_sitter::{Node, Parser};
 
 #[derive(Clone, Debug, Default, PartialEq)]
@@ -35,6 +35,7 @@ pub struct RsUse {
 pub struct RsType {
     pub name: String,
     pub kind: SubKind,
+    pub visibility: Visibility,
     pub fields: Vec<(String, String)>,
     pub attrs: Vec<Annotation>,
     pub methods: Vec<RsFn>,
@@ -59,6 +60,7 @@ pub struct RsFn {
     pub attrs: Vec<Annotation>,
     pub params: Vec<(String, String)>,
     pub has_self: bool,
+    pub visibility: Visibility,
     pub ret: Option<String>,
     pub generics: Vec<(String, String)>,
     pub locals: Vec<(String, Expr)>,
@@ -319,7 +321,7 @@ impl<'s> Ctx<'s> {
             "trait_item" => SubKind::Interface,
             _ => SubKind::Struct,
         };
-        let mut t = RsType { name, kind, fields: Vec::new(), attrs, methods: Vec::new(), start_line: line(n), end_line: end_line(n) };
+        let mut t = RsType { name, kind, visibility: self.visibility(n), fields: Vec::new(), attrs, methods: Vec::new(), start_line: line(n), end_line: end_line(n) };
         let body = n.child_by_field_name("body");
         match (n.kind(), body) {
             ("trait_item", Some(list)) => {
@@ -327,7 +329,11 @@ impl<'s> Ctx<'s> {
                 for item in named_children(list) {
                     match item.kind() {
                         "attribute_item" => attrs.extend(self.attribute(item)),
-                        "function_item" | "function_signature_item" => t.methods.push(self.func(item, std::mem::take(&mut attrs), &[])),
+                        "function_item" | "function_signature_item" => {
+                            let mut f = self.func(item, std::mem::take(&mut attrs), &[]);
+                            f.visibility = t.visibility;
+                            t.methods.push(f);
+                        }
                         _ => attrs.clear(),
                     }
                 }
@@ -360,12 +366,26 @@ impl<'s> Ctx<'s> {
             for item in named_children(list) {
                 match item.kind() {
                     "attribute_item" => attrs.extend(self.attribute(item)),
-                    "function_item" => fns.push(self.func(item, std::mem::take(&mut attrs), &generics)),
+                    "function_item" => {
+                        let mut f = self.func(item, std::mem::take(&mut attrs), &generics);
+                        if trait_.is_some() {
+                            f.visibility = Visibility::Public;
+                        }
+                        fns.push(f);
+                    }
                     _ => attrs.clear(),
                 }
             }
         }
         RsImpl { self_ty, trait_, attrs, generics, fns, start_line: line(n), end_line: end_line(n) }
+    }
+
+    fn visibility(&self, n: Node) -> Visibility {
+        match named_children(n).into_iter().find(|c| c.kind() == "visibility_modifier").map(|c| self.text(c).replace(' ', "")) {
+            Some(v) if v == "pub" => Visibility::Public,
+            Some(_) => Visibility::Package,
+            None => Visibility::Private,
+        }
     }
 
     fn func(&self, n: Node, attrs: Vec<Annotation>, outer_generics: &[(String, String)]) -> RsFn {
@@ -374,6 +394,7 @@ impl<'s> Ctx<'s> {
         let mut f = RsFn {
             name: n.child_by_field_name("name").map(|x| self.text(x).to_string()).unwrap_or_default(),
             attrs,
+            visibility: self.visibility(n),
             ret: n.child_by_field_name("return_type").map(|t| self.type_name(t, RESULTS)).filter(|s| !s.is_empty()),
             generics,
             start_line: line(n),

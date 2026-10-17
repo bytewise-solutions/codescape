@@ -415,3 +415,21 @@ fn links_count_distinct_type_pairs() {
     assert_eq!(agg.calls.to_native(), 5);
     assert_eq!(agg.links.to_native(), 3, "A->C, B->C and helper->C; wiring is not a link");
 }
+
+#[test]
+fn visibility_roundtrips_and_defaults_to_unknown() {
+    let mut b = GraphBuilder::new("proj");
+    let t = b.add_node(b.root(), NodeKind::Type, SubKind::Class, "T", Lang::Java);
+    let m = b.add_node(t, NodeKind::Member, SubKind::Method, "run", Lang::Java);
+    let h = b.add_node(t, NodeKind::Member, SubKind::Method, "helper", Lang::Java);
+    b.set_visibility(m, Visibility::Public);
+    b.set_visibility(h, Visibility::Private);
+    assert_eq!(b.visibility(h), Visibility::Private);
+    let (_d, file) = roundtrip(b);
+    let g = file.graph();
+    let t = find(g, g.root(), "T");
+    assert_eq!(g.visibility(find(g, t, "run")), Visibility::Public);
+    assert_eq!(g.visibility(find(g, t, "helper")), Visibility::Private);
+    assert_eq!(g.visibility(t), Visibility::Unknown);
+    assert_eq!(Visibility::Protected.uml(), "#");
+}

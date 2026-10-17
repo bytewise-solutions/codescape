@@ -218,3 +218,20 @@ type batchProducer struct{}\n\nfunc (p *batchProducer) Publish(tenant string, b 
     let from: Vec<&str> = b.edges().iter().filter(|e| e.to == iface && e.kind == EdgeKind::Implements).map(|e| b.name(e.from)).collect();
     assert_eq!(from, ["eventProducer"]);
 }
+
+#[test]
+fn exported_names_are_public_and_the_rest_package() {
+    let tmp = tempfile::tempdir().unwrap();
+    std::fs::write(tmp.path().join("go.mod"), "module example.com/v\n\ngo 1.22\n").unwrap();
+    std::fs::write(tmp.path().join("v.go"), "package v\n\ntype Store struct{}\n\nfunc (s *Store) Get() {}\n\nfunc (s *Store) evict() {}\n\ntype cache struct{}\n\nfunc Open() {}\n\nfunc helper() {}\n").unwrap();
+    let d = discover(tmp.path(), &default_excludes()).unwrap();
+    let mut b = GraphBuilder::new("v");
+    let nodes: Vec<NodeId> = d.modules.iter().map(|m| b.add_node(b.root(), NodeKind::Module, SubKind::None, &m.name, Lang::Go)).collect();
+    let mut facts = ProjectFacts::default();
+    extract_go(&d, &nodes, &default_excludes(), &mut b, &mut facts);
+    let pkg = b.children(nodes[0])[0];
+    let store = b.child(pkg, "Store").unwrap();
+    for (n, v) in [(store, Visibility::Public), (b.child(store, "Get").unwrap(), Visibility::Public), (b.child(store, "evict").unwrap(), Visibility::Package), (b.child(pkg, "cache").unwrap(), Visibility::Package), (b.child(pkg, "Open").unwrap(), Visibility::Public), (b.child(pkg, "helper").unwrap(), Visibility::Package)] {
+        assert_eq!(b.visibility(n), v, "{}", b.name(n));
+    }
+}

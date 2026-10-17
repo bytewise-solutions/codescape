@@ -180,3 +180,30 @@ fn unresolvable_calls_are_counted_not_guessed() {
     assert_eq!(r.stats.guessed, 0);
     assert!(r.b.edges().iter().all(|e| e.confidence == Confidence::Resolved));
 }
+
+#[test]
+fn class_members_and_exports_carry_their_visibility() {
+    let tmp = tempfile::tempdir().unwrap();
+    let r = tmp.path();
+    std::fs::write(r.join("package.json"), "{\"name\": \"vis\"}").unwrap();
+    std::fs::write(r.join("tsconfig.json"), "{}").unwrap();
+    std::fs::create_dir_all(r.join("src")).unwrap();
+    std::fs::write(
+        r.join("src/store.ts"),
+        "export class Store {\n  constructor(private db: string) {}\n  get(): void {}\n  protected load(): void {}\n  private evict(): void {}\n  #secret(): void {}\n}\nclass Cache {}\nexport function open() {}\nfunction helper() {}\n",
+    )
+    .unwrap();
+    let d = discover(r, &default_excludes()).unwrap();
+    let mut b = GraphBuilder::new("vis");
+    let module_nodes: Vec<NodeId> = d.modules.iter().map(|m| b.add_node(b.root(), NodeKind::Module, SubKind::None, &m.name, m.lang)).collect();
+    let mut facts = ProjectFacts::default();
+    extract_ts(&d, &module_nodes, &default_excludes(), &mut b, &mut facts);
+    let vis = |path: &[&str]| b.visibility(at(&b, path));
+    assert_eq!(vis(&["vis", "src", "Store"]), Visibility::Public);
+    assert_eq!(vis(&["vis", "src", "Cache"]), Visibility::Package, "not exported");
+    for (m, v) in [("constructor", Visibility::Public), ("get", Visibility::Public), ("load", Visibility::Protected), ("evict", Visibility::Private), ("#secret", Visibility::Private)] {
+        assert_eq!(vis(&["vis", "src", "Store", m]), v, "{m}");
+    }
+    assert_eq!(vis(&["vis", "src", "open"]), Visibility::Public);
+    assert_eq!(vis(&["vis", "src", "helper"]), Visibility::Package);
+}

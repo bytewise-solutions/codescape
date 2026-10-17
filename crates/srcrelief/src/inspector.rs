@@ -1,4 +1,4 @@
-use srcrelief_format::{ArchivedGraph, Lang, NodeFlags, NodeId, NodeKind, SubKind};
+use srcrelief_format::{ArchivedGraph, Lang, NodeFlags, NodeId, NodeKind, SubKind, Visibility};
 use srcrelief_layout::display_children;
 use std::collections::BTreeMap;
 
@@ -62,7 +62,17 @@ fn nearest(g: &ArchivedGraph, n: NodeId, kind: NodeKind) -> Option<NodeId> {
 
 pub fn header(g: &ArchivedGraph, n: NodeId) -> Header {
     let word = kind_word(g, n).to_uppercase();
-    let kind = if g.lang(n) == Lang::None { word } else { format!("{word} · {:?}", g.lang(n)) };
+    let mut kind = if g.lang(n) == Lang::None { word } else { format!("{word} · {:?}", g.lang(n)) };
+    let vis = match g.visibility(n) {
+        Visibility::Public => "public",
+        Visibility::Protected => "protected",
+        Visibility::Package => "package",
+        Visibility::Private => "private",
+        Visibility::Unknown => "",
+    };
+    if !vis.is_empty() {
+        kind.push_str(&format!(" · {vis}"));
+    }
     let owners = g.path(n).into_iter().rev().skip(1).filter(|&p| p != g.root()).take(2).map(|p| (p, g.name(p).to_string())).collect();
     let (start, end) = g.span(n);
     let location = g.file(n).filter(|_| start >= 1 && end >= start).map(|f| {

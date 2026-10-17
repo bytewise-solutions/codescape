@@ -1,5 +1,5 @@
 use srcrelief_facts::{Annotation, Import};
-use srcrelief_format::SubKind;
+use srcrelief_format::{SubKind, Visibility};
 use tree_sitter::{Node, Parser};
 
 #[derive(Clone, Debug, Default, PartialEq)]
@@ -14,6 +14,7 @@ pub struct JavaFile {
 pub struct JType {
     pub name: String,
     pub kind: SubKind,
+    pub visibility: Visibility,
     pub extends: Vec<String>,
     pub implements: Vec<String>,
     pub annotations: Vec<Annotation>,
@@ -31,6 +32,7 @@ pub struct JMethod {
     pub return_type: String,
     pub is_static: bool,
     pub is_public: bool,
+    pub visibility: Visibility,
     pub annotations: Vec<Annotation>,
     pub locals: Vec<(String, String)>,
     pub calls: Vec<JCall>,
@@ -208,6 +210,13 @@ impl<'s> Ctx<'s> {
         first_named_of(n, &["modifiers"])
     }
 
+    fn visibility(&self, n: Node) -> Visibility {
+        [("public", Visibility::Public), ("protected", Visibility::Protected), ("private", Visibility::Private)]
+            .into_iter()
+            .find(|(w, _)| self.has_modifier(n, w))
+            .map_or(Visibility::Package, |(_, v)| v)
+    }
+
     fn has_modifier(&self, n: Node, word: &str) -> bool {
         Self::modifiers(n).is_some_and(|m| {
             let mut c = m.walk();
@@ -228,6 +237,7 @@ impl<'s> Ctx<'s> {
         let mut t = JType {
             name,
             kind,
+            visibility: self.visibility(n),
             extends: Vec::new(),
             implements: Vec::new(),
             annotations: self.annotations(Self::modifiers(n)),
@@ -290,6 +300,7 @@ impl<'s> Ctx<'s> {
             return_type: m.child_by_field_name("type").map(|t| self.type_name(t)).unwrap_or_default(),
             is_static: self.has_modifier(m, "static"),
             is_public: self.has_modifier(m, "public"),
+            visibility: self.visibility(m),
             annotations: self.annotations(Self::modifiers(m)),
             start_line: line(m),
             end_line: end_line(m),

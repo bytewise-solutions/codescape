@@ -508,3 +508,30 @@ fn unknown_receivers_guess_only_into_imported_crates() {
     assert_eq!(guessed, ["k"]);
     assert_eq!(b.edges().iter().find(|e| e.to == target).unwrap().confidence, Confidence::Guessed);
 }
+
+#[test]
+fn pub_modifiers_become_visibility() {
+    let tmp = tempfile::tempdir().unwrap();
+    let r = tmp.path();
+    write(r, "Cargo.toml", "[package]\nname = \"vis\"\n");
+    write(
+        r,
+        "src/lib.rs",
+        "pub struct Store;\nstruct Cache;\npub trait Port { fn run(&self); }\nimpl Store {\n    pub fn get(&self) {}\n    pub(crate) fn load(&self) {}\n    fn evict(&self) {}\n}\nimpl Port for Store { fn run(&self) {} }\npub fn open() {}\nfn helper() {}\n",
+    );
+    let d = discover(r, &default_excludes()).unwrap();
+    let mut b = GraphBuilder::new("vis");
+    let module_nodes: Vec<NodeId> = d.modules.iter().map(|m| b.add_node(b.root(), NodeKind::Module, SubKind::None, &m.name, m.lang)).collect();
+    let mut facts = ProjectFacts::default();
+    extract_rust(&d, &module_nodes, &default_excludes(), &mut b, &mut facts);
+    let vis = |path: &[&str]| b.visibility(at(&b, path));
+    assert_eq!(vis(&["vis", "(lib)", "Store"]), Visibility::Public);
+    assert_eq!(vis(&["vis", "(lib)", "Cache"]), Visibility::Private);
+    assert_eq!(vis(&["vis", "(lib)", "Store", "get"]), Visibility::Public);
+    assert_eq!(vis(&["vis", "(lib)", "Store", "load"]), Visibility::Package);
+    assert_eq!(vis(&["vis", "(lib)", "Store", "evict"]), Visibility::Private);
+    assert_eq!(vis(&["vis", "(lib)", "Store", "run"]), Visibility::Public, "trait methods are as visible as the trait");
+    assert_eq!(vis(&["vis", "(lib)", "Port", "run"]), Visibility::Public);
+    assert_eq!(vis(&["vis", "(lib)", "open"]), Visibility::Public);
+    assert_eq!(vis(&["vis", "(lib)", "helper"]), Visibility::Private);
+}

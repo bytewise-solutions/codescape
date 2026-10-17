@@ -6,7 +6,7 @@ use std::ops::Range;
 use std::path::Path;
 
 pub const MAGIC: &[u8; 8] = b"SRCRLF01";
-pub const FORMAT_VERSION: u32 = 10;
+pub const FORMAT_VERSION: u32 = 11;
 const HEADER: usize = 48;
 
 #[derive(Debug, thiserror::Error)]
@@ -104,6 +104,10 @@ impl ArchivedGraph {
 
     pub fn sub_kind(&self, id: NodeId) -> SubKind {
         SubKind::from_u8(self.node(id).sub)
+    }
+
+    pub fn visibility(&self, id: NodeId) -> Visibility {
+        Visibility::from_u8(self.node(id).vis)
     }
 
     pub fn lang(&self, id: NodeId) -> Lang {

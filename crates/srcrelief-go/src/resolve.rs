@@ -85,6 +85,7 @@ pub fn extract_go(d: &Discovery, module_nodes: &[NodeId], excludes: &GlobSet, b:
             })
         })
         .collect();
+    let first = b.node_count() as NodeId;
     let mut r = Resolver::new(d, module_nodes, b, &parsed);
     r.visible = r
         .declared_reach()
@@ -96,6 +97,12 @@ pub fn extract_go(d: &Discovery, module_nodes: &[NodeId], excludes: &GlobSet, b:
         })
         .collect();
     r.declare();
+    for n in first..r.b.node_count() as NodeId {
+        if matches!(r.b.node_kind(n), NodeKind::Type | NodeKind::Member) {
+            let exported = r.b.name(n).chars().next().is_some_and(char::is_uppercase);
+            r.b.set_visibility(n, if exported { Visibility::Public } else { Visibility::Package });
+        }
+    }
     r.implements_edges();
     r.module_edges();
     r.package_edges();

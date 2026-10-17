@@ -1564,7 +1564,9 @@ impl Project {
                 Mark::None => dim(style::TEXT),
             };
             let base = if g.name(row.node) == "<init>" { g.parent(row.node).map_or("<init>", |t| g.name(t)) } else { g.name(row.node) };
-            let text = fit_label(&format!("{base}()"), row.rect.w - size * 1.4, size);
+            let vis = g.visibility(row.node).uml();
+            let shown = if vis.is_empty() { format!("{base}()") } else { format!("{vis} {base}()") };
+            let text = fit_label(&shown, row.rect.w - size * 1.4, size);
             clip.text(Pos2::new(row.rect.x + size * 1.1, r.center().y), Align2::LEFT_CENTER, text, font.clone(), color);
         }
         if b.more_rows > 0 {

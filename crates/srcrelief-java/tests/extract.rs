@@ -171,3 +171,29 @@ fn java_files_record_package_and_import_targets() {
     assert!(fx.import_targets.contains(&at(&r.b, &["core", "com.example.core"])));
     assert!(fx.import_targets.contains(&at(&r.b, &["util", "com.example.util"])));
 }
+
+#[test]
+fn members_and_types_carry_their_visibility() {
+    let tmp = tempfile::tempdir().unwrap();
+    let r = tmp.path();
+    std::fs::write(r.join("settings.gradle"), "include 'app'\n").unwrap();
+    let src = r.join("app/src/main/java/v");
+    std::fs::create_dir_all(&src).unwrap();
+    std::fs::write(
+        src.join("Vis.java"),
+        "package v;\npublic class Vis {\n  public void a() {}\n  protected void b() {}\n  private void c() {}\n  void d() {}\n  Vis() {}\n}\ninterface Port {\n  void run();\n}\n",
+    )
+    .unwrap();
+    let d = discover(r, &default_excludes()).unwrap();
+    let mut b = GraphBuilder::new("vis");
+    let module_nodes: Vec<NodeId> = d.modules.iter().map(|m| b.add_node(b.root(), NodeKind::Module, SubKind::None, &m.name, Lang::Java)).collect();
+    let mut facts = ProjectFacts::default();
+    extract_java(&d, &module_nodes, &default_excludes(), &mut b, &mut facts);
+    let vis = |path: &[&str]| b.visibility(at(&b, path));
+    assert_eq!(vis(&["app", "v", "Vis"]), Visibility::Public);
+    assert_eq!(vis(&["app", "v", "Port"]), Visibility::Package);
+    for (m, v) in [("a", Visibility::Public), ("b", Visibility::Protected), ("c", Visibility::Private), ("d", Visibility::Package), ("<init>", Visibility::Package)] {
+        assert_eq!(vis(&["app", "v", "Vis", m]), v, "{m}");
+    }
+    assert_eq!(vis(&["app", "v", "Port", "run"]), Visibility::Public, "interface methods are public");
+}

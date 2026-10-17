@@ -177,6 +177,8 @@ impl<'a> Resolver<'a> {
         let node = self.b.add_node(parent, NodeKind::Type, t.kind, &t.name, Lang::Java);
         self.b.set_span(node, &f.rel, t.start_line, t.end_line);
         self.b.set_lines(node, t.end_line - t.start_line + 1);
+        self.b.set_visibility(node, t.visibility);
+        let public_members = matches!(t.kind, SubKind::Interface | SubKind::Annotation);
         if f.is_test {
             self.b.add_flags(node, NodeFlags::TEST);
         }
@@ -186,6 +188,7 @@ impl<'a> Resolver<'a> {
                 let id = self.b.add_node(node, NodeKind::Member, SubKind::Method, &m.name, Lang::Java);
                 self.b.set_span(id, &f.rel, m.start_line, m.end_line);
                 self.b.set_lines(id, m.end_line - m.start_line + 1);
+                self.b.set_visibility(id, if public_members && m.visibility == Visibility::Package { Visibility::Public } else { m.visibility });
                 if f.is_test {
                     self.b.add_flags(id, NodeFlags::TEST);
                 }

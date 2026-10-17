@@ -1,5 +1,5 @@
 use srcrelief_facts::Annotation;
-use srcrelief_format::SubKind;
+use srcrelief_format::{SubKind, Visibility};
 use tree_sitter::{Node, Parser};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -74,6 +74,7 @@ pub struct TsType {
 pub struct TsFunc {
     pub name: String,
     pub sub: SubKind,
+    pub visibility: Visibility,
     pub params: Vec<(String, String)>,
     pub returns: Option<String>,
     pub decorators: Vec<Annotation>,
@@ -88,6 +89,7 @@ impl Default for TsFunc {
         TsFunc {
             name: String::new(),
             sub: SubKind::Function,
+            visibility: Visibility::Unknown,
             params: Vec::new(),
             returns: None,
             decorators: Vec::new(),
@@ -141,6 +143,17 @@ fn line(n: Node) -> u32 {
 
 fn end_line(n: Node) -> u32 {
     n.end_position().row as u32 + 1
+}
+
+fn member_visibility(p: &Ctx, m: Node, name: &str) -> Visibility {
+    if name.starts_with('#') {
+        return Visibility::Private;
+    }
+    match named_kids(m).into_iter().find(|k| k.kind() == "accessibility_modifier").map(|k| p.text(k)) {
+        Some("private") => Visibility::Private,
+        Some("protected") => Visibility::Protected,
+        _ => Visibility::Public,
+    }
 }
 
 fn named_kids(n: Node) -> Vec<Node> {
@@ -591,6 +604,8 @@ impl<'s> Ctx<'s> {
         if let Some(decl) = n.child_by_field_name("declaration") {
             let before = (out.types.len(), out.funcs.len());
             self.statement(decl, out, &decorators);
+            let declared: Vec<String> = out.types[before.0..].iter().map(|t| t.name.clone()).chain(out.funcs[before.1..].iter().map(|f| f.name.clone())).collect();
+            out.exports.extend(declared.into_iter().map(|n| (n.clone(), n)));
             if is_default {
                 out.default_export = out.types.get(before.0).map(|t| t.name.clone()).or_else(|| out.funcs.get(before.1).map(|f| f.name.clone()));
             }
@@ -690,6 +705,7 @@ impl<'s> Ctx<'s> {
                     let name = m.child_by_field_name("name").map(|x| self.text(x).to_string()).unwrap_or_default();
                     let sub = if name == "constructor" { SubKind::Constructor } else { SubKind::Method };
                     let mut f = self.function(&name, sub, m, Some(&mut t.fields));
+                    f.visibility = member_visibility(self, m, &name);
                     f.decorators.splice(0..0, pending.drain(..));
                     if let Some(prev) = t.methods.iter_mut().find(|p| p.name == name) {
                         if sub == SubKind::Constructor {
@@ -715,6 +731,7 @@ impl<'s> Ctx<'s> {
                     match value {
                         Some(v) if is_function(v) => {
                             let mut f = self.function(&name, SubKind::Method, v, None);
+                            f.visibility = member_visibility(self, m, &name);
                             f.start_line = line(m);
                             f.decorators = decorators;
                             t.methods.push(f);
