@@ -5,6 +5,7 @@ mod inspector;
 mod panels;
 mod reach;
 mod review;
+mod sequence;
 mod scene;
 mod search;
 mod source;
