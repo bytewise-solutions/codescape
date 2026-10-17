@@ -4,7 +4,7 @@ use crate::panels::{EntryGroupView, group_entries};
 use crate::focus::{Focus, FocusMode, History, Mark, UsageIndex, focus};
 use crate::search::{self, SearchIndex};
 use crate::shot::{Shot, ShotPlan, ShotStep};
-use crate::input::{Nav, SHORTCUTS, Step, interpret, nearest_in};
+use crate::input::{CHEATSHEET, Nav, Step, interpret, nearest_in};
 use crate::inspector;
 use crate::source::{LINE_SPACING, SourceCache, Token, advance, file_font, highlight, hscroll_by, initial_scroll, merge_spans, scroll_at, scroll_by, thumb};
 use crate::settings_window::{self, SettingsForm};
@@ -263,6 +263,11 @@ impl eframe::App for ReliefApp {
                 let menu = egui::Panel::top("top").show(ui, |ui| egui::MenuBar::new().ui(ui, |ui| {
                     let file = self.file_menu(ui, true);
                     project.view_menu(ui);
+                    ui.menu_button("Help", |ui| {
+                        if ui.add(egui::Button::new("Shortcuts").shortcut_text("? / F1")).clicked() {
+                            project.shortcuts_open = true;
+                        }
+                    });
                     file
                 }).inner).inner;
                 let action = project.ui(ui).or(menu);
@@ -505,6 +510,7 @@ impl Project {
             }
         }
         self.settings_open |= plan.settings;
+        self.shortcuts_open |= plan.shortcuts;
     }
 
     fn set_display(&mut self, key: &SettingKey, on: bool) {
@@ -538,9 +544,6 @@ impl Project {
             if ui.add(egui::Button::new("Jump to…").shortcut_text(jump)).clicked() {
                 self.search_open = true;
             }
-            if ui.add(egui::Button::new("Keyboard shortcuts").shortcut_text("?")).clicked() {
-                self.shortcuts_open = true;
-            }
         });
         if let Some((key, on)) = changed {
             self.set_display(&key, on);
@@ -550,7 +553,7 @@ impl Project {
     fn keyboard(&mut self, ui: &egui::Ui) {
         let plain = |k: Key| ui.input(|i| i.key_pressed(k) && !i.modifiers.alt && !i.modifiers.command && !i.modifiers.ctrl);
         let typed = |c: &str| ui.input(|i| i.events.iter().any(|e| matches!(e, egui::Event::Text(t) if t == c)));
-        if typed("?") {
+        if typed("?") || plain(Key::F1) {
             self.shortcuts_open = true;
             return;
         }
@@ -697,12 +700,23 @@ impl Project {
             self.keyboard(ui);
         }
         if self.shortcuts_open {
-            egui::Window::new("Keyboard shortcuts").open(&mut self.shortcuts_open).collapsible(false).resizable(false).anchor(Align2::CENTER_TOP, [0.0, 60.0]).show(ui.ctx(), |ui| {
-                egui::Grid::new("shortcuts").num_columns(2).spacing([18.0, 6.0]).show(ui, |ui| {
-                    for (keys, what) in SHORTCUTS {
-                        ui.label(egui::RichText::new(*keys).strong().color(style::ACCENT));
-                        ui.label(*what);
-                        ui.end_row();
+            egui::Window::new("Shortcuts").open(&mut self.shortcuts_open).collapsible(false).resizable(false).anchor(Align2::CENTER_TOP, [0.0, 60.0]).show(ui.ctx(), |ui| {
+                ui.horizontal_top(|ui| {
+                    for column in CHEATSHEET.chunks(2) {
+                        ui.vertical(|ui| {
+                            for (section, rows) in column {
+                                ui.label(egui::RichText::new(*section).strong().color(style::TEXT));
+                                egui::Grid::new(*section).num_columns(2).spacing([14.0, 4.0]).show(ui, |ui| {
+                                    for (keys, what) in rows.iter() {
+                                        ui.label(egui::RichText::new(*keys).monospace().color(style::ACCENT));
+                                        ui.label(egui::RichText::new(*what).color(style::MUTED));
+                                        ui.end_row();
+                                    }
+                                });
+                                ui.add_space(10.0);
+                            }
+                        });
+                        ui.add_space(18.0);
                     }
                 });
             });
@@ -778,6 +792,11 @@ impl Project {
             }
             ui.separator();
             ui.label(egui::RichText::new(format!("{:.1} ms · {} boxes", self.scene_ms, self.scene.stats.drawn)).color(style::MUTED));
+            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                if ui.link(egui::RichText::new("? shortcuts").color(style::MUTED)).clicked() {
+                    self.shortcuts_open = true;
+                }
+            });
         });
     }
 

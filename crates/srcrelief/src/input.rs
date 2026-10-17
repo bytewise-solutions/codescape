@@ -52,16 +52,44 @@ pub fn nearest_in(step: Step, from_id: NodeId, from: Rect, candidates: &[(NodeId
         .map(|(_, id)| id)
 }
 
-pub const SHORTCUTS: &[(&str, &str)] = &[
-    ("← → ↑ ↓", "select the nearest box in that direction"),
-    ("Enter", "zoom into the selected box"),
-    ("Backspace", "go up to the parent"),
-    ("Esc", "clear the selection"),
-    ("1 2 3", "show neighbours / everything it reaches / everywhere it's used"),
-    ("+ −", "zoom in / out"),
-    ("F", "fit the whole project"),
-    ("Page Up Page Down Home End", "scroll the file under the pointer or the selected one"),
-    ("Alt+←", "back to the previous selection"),
-    ("Ctrl+K", "jump to a name"),
-    ("?", "this list"),
+pub const CHEATSHEET: &[(&str, &[(&str, &str)])] = &[
+    (
+        "Move around",
+        &[
+            ("Wheel", "scroll up and down"),
+            ("Shift + wheel", "scroll sideways"),
+            ("Ctrl + wheel", "zoom around the pointer (pinch on a trackpad)"),
+            ("Drag", "pan"),
+            ("+ −", "zoom in / out"),
+            ("F", "fit the whole project"),
+            ("Double-click", "zoom into a box"),
+            ("Enter", "zoom into the selected box"),
+            ("Backspace", "go up to the parent"),
+        ],
+    ),
+    (
+        "Select and follow",
+        &[
+            ("Click", "select a box or a method row; its links light up"),
+            ("← → ↑ ↓", "select the nearest box in that direction"),
+            ("1 2 3", "show neighbours / everything it reaches / everywhere it's used"),
+            ("Alt+←", "back to the previous selection"),
+            ("Esc", "clear the selection"),
+            ("Ctrl+K", "jump to a name (Up / Down to pick, Enter to go)"),
+        ],
+    ),
+    (
+        "Code",
+        &[
+            ("Zoom in close", "a type or function opens its whole file; zoom out to close it"),
+            ("Double-click a method row", "open the file at that method"),
+            ("Wheel / Shift + wheel", "scroll the file down / sideways"),
+            ("Page Up Page Down Home End", "scroll the file under the pointer or the selected one"),
+            ("Drag the scrollbar", "move through the file"),
+        ],
+    ),
+    (
+        "Windows",
+        &[("Ctrl+O", "open a folder"), ("Ctrl+,", "project settings"), ("? or F1", "this cheatsheet")],
+    ),
 ];

@@ -52,7 +52,7 @@ tick in View is remembered for each project.
 | Jump to a name | `Ctrl+K`, type, `Enter` |
 | Go back up | click a breadcrumb segment, or the minimap |
 
-Keyboard (press `?` in the app for this list):
+Keyboard (press `?` or `F1`, or **Help ▸ Shortcuts**, for the full cheatsheet with mouse gestures):
 
 | Keys | Action |
 |---|---|
