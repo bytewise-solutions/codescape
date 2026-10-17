@@ -56,3 +56,16 @@ fn a_file_opens_on_its_type_and_scrolls_within_its_lines() {
     assert_eq!(scroll_by(165.0, -400.0, 20.0, 200, 30), 172.0, "stops with the last line still in view, plus a margin");
     assert_eq!(scroll_by(0.0, -100.0, 20.0, 10, 30), 0.0, "a short file does not scroll");
 }
+
+#[test]
+fn the_scrollbar_thumb_shows_the_visible_share_and_position() {
+    let (top, len) = thumb(0.0, 200, 50, 400.0);
+    assert_eq!((top, len), (0.0, 100.0), "a quarter of the file on screen is a quarter of the track");
+    let (top, len) = thumb(max_scroll(200, 50), 200, 50, 400.0);
+    assert!((top + len - 400.0).abs() < 0.01, "at the end the thumb touches the bottom");
+    assert_eq!(thumb(0.0, 10000, 50, 400.0).1, 24.0, "never thinner than a grabbable minimum");
+    assert_eq!(thumb(0.0, 20, 50, 400.0), (0.0, 400.0), "a short file fills the track");
+    assert_eq!(scroll_at(0.0, 200, 50, 400.0), 0.0);
+    assert_eq!(scroll_at(400.0, 200, 50, 400.0), max_scroll(200, 50));
+    assert!((scroll_at(200.0, 200, 50, 400.0) - max_scroll(200, 50) / 2.0).abs() < 0.01, "the thumb centre follows the pointer");
+}

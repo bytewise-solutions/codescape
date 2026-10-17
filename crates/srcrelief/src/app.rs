@@ -6,7 +6,7 @@ use crate::search::{self, SearchIndex};
 use crate::shot::{Shot, ShotPlan, ShotStep};
 use crate::input::{Nav, SHORTCUTS, Step, interpret, nearest_in};
 use crate::inspector;
-use crate::source::{LINE_SPACING, SourceCache, Token, advance, file_font, highlight, initial_scroll, merge_spans, scroll_by};
+use crate::source::{LINE_SPACING, SourceCache, Token, advance, file_font, highlight, initial_scroll, merge_spans, scroll_at, scroll_by, thumb};
 use crate::settings_window::{self, SettingsForm};
 use crate::view::{layout_options, toggle, view_items};
 use crate::{minimap, style};
@@ -341,6 +341,8 @@ struct Project {
     last_frame: Instant,
     source: std::cell::RefCell<SourceCache>,
     file_scroll: HashMap<NodeId, f32>,
+    scroll_drag: Option<NodeId>,
+    pointer: Option<Pos2>,
 }
 
 fn chevron(painter: &egui::Painter, center: Pos2, up: bool) {
@@ -458,6 +460,8 @@ impl Project {
             last_frame: Instant::now(),
             source,
             file_scroll: HashMap::new(),
+            scroll_drag: None,
+            pointer: None,
         })
     }
 
@@ -1020,10 +1024,21 @@ impl Project {
         let now = Instant::now();
         let dt = now.duration_since(self.last_frame).as_secs_f32().min(0.1);
         self.last_frame = now;
-        if resp.dragged() {
+        self.pointer = resp.hover_pos();
+        if resp.drag_started() {
+            self.scroll_drag = resp.interact_pointer_pos().and_then(|p| self.scrollbar_at(p));
+        }
+        if let (Some(node), Some(p), true) = (self.scroll_drag, resp.interact_pointer_pos(), resp.dragged()) {
+            if let Some(v) = self.pointer_scroll(node, p) {
+                self.file_scroll.insert(node, v);
+            }
+        } else if resp.dragged() {
             let d = resp.drag_delta();
             self.cam.pan_by([d.x, d.y]);
             self.target = None;
+        }
+        if resp.drag_stopped() {
+            self.scroll_drag = None;
         }
         if let Some(p) = resp.hover_pos() {
             let (scroll, pinch, mods) = ui.input(|i| (i.smooth_scroll_delta, i.zoom_delta(), i.modifiers));
@@ -1050,7 +1065,11 @@ impl Project {
             if let Some(p) = resp.interact_pointer_pos() {
                 let root = self.cache.shared(g, g.root());
                 let (legend, legend_toggle) = self.legend_rects();
-                if legend_toggle.contains(Pos2::new(p.x, p.y)) {
+                if let Some(node) = self.scrollbar_at(p) {
+                    if let Some(v) = self.pointer_scroll(node, p) {
+                self.file_scroll.insert(node, v);
+            }
+                } else if legend_toggle.contains(Pos2::new(p.x, p.y)) {
                     let shown = self.settings.settings().view(View::Legend).value;
                     display = Some((View::Legend, !shown));
                 } else if legend.contains(Pos2::new(p.x, p.y)) {
@@ -1086,7 +1105,12 @@ impl Project {
         for (n, y, line_h) in shown {
             let start = g.span(n).0;
             let view_y = self.view.y;
-            self.file_scroll.entry(n).or_insert_with(|| initial_scroll(start, y, view_y, line_h));
+            let opening = initial_scroll(start, y, view_y, line_h);
+            if self.target.is_some() {
+                self.file_scroll.insert(n, opening);
+            } else {
+                self.file_scroll.entry(n).or_insert(opening);
+            }
         }
         self.scene_ms = started.elapsed().as_secs_f32() * 1000.0;
         self.paint(&painter);
@@ -1349,10 +1373,13 @@ impl Project {
             }
             stack.extend(g.children(c));
         }
-        for (s, e) in merge_spans(own).iter() {
+        let own = merge_spans(own);
+        for (s, e) in own.iter() {
             let band = egui::Rect::from_min_size(Pos2::new(b.rect.x + 2.0, top + (*s - 1) as f32 * line_h), egui::vec2(b.rect.w - 4.0, (*e - *s + 1) as f32 * line_h));
             clip.rect_filled(band, 0.0, style::BOX_STROKE.gamma_multiply(0.10));
         }
+        self.paint_scrollbar(&clip, sheet, b.node, scroll, lines.len(), (sheet.height() / line_h) as usize, &own);
+        let clip = painter.with_clip_rect(egui::Rect::from_min_max(sheet.min, Pos2::new(self.scrollbar_track(sheet).left() - 4.0, sheet.max.y)));
         let first = ((self.view.y - top) / line_h).floor().max(0.0) as usize;
         let last = (((self.view.bottom() - top) / line_h).ceil().max(0.0) as usize).min(lines.len());
         if first >= last {
@@ -1376,6 +1403,39 @@ impl Project {
             }
             clip.galley(Pos2::new(b.rect.x + gutter + advance(size), y), clip.layout_job(job), style::TEXT);
         }
+    }
+
+    fn pointer_in(&self, r: egui::Rect) -> bool {
+        self.pointer.is_some_and(|p| r.expand2(egui::vec2(4.0, 0.0)).contains(p))
+    }
+
+    fn scrollbar_track(&self, page: egui::Rect) -> egui::Rect {
+        egui::Rect::from_min_max(Pos2::new(page.right() - 12.0, page.top() + 6.0), Pos2::new(page.right() - 4.0, page.bottom() - 6.0))
+    }
+
+    fn scrollbar_at(&self, p: Pos2) -> Option<NodeId> {
+        self.scene.boxes.iter().rev().filter(|b| b.source).find(|b| self.scrollbar_track(self.file_page(b)).expand2(egui::vec2(4.0, 0.0)).contains(p)).map(|b| b.node)
+    }
+
+    fn pointer_scroll(&self, node: NodeId, p: Pos2) -> Option<f32> {
+        let b = self.scene.boxes.iter().find(|b| b.node == node && b.source)?;
+        let track = self.scrollbar_track(self.file_page(b));
+        let (_, total, visible) = self.file_metrics(node)?;
+        Some(scroll_at(p.y - track.top(), total, visible, track.height()))
+    }
+
+    fn paint_scrollbar(&self, painter: &egui::Painter, page: egui::Rect, node: NodeId, scroll: f32, total: usize, visible: usize, own: &[(u32, u32)]) {
+        let track = self.scrollbar_track(page);
+        painter.rect_filled(track, 4.0, style::BAR);
+        for &(s, e) in own {
+            let y0 = track.top() + (s - 1) as f32 / total.max(1) as f32 * track.height();
+            let h = ((e - s + 1) as f32 / total.max(1) as f32 * track.height()).max(2.0);
+            painter.rect_filled(egui::Rect::from_min_size(Pos2::new(track.left(), y0), egui::vec2(3.0, h)), 1.0, style::BOX_STROKE.gamma_multiply(0.8));
+        }
+        let (top, len) = thumb(scroll, total, visible, track.height());
+        let hot = self.scroll_drag == Some(node) || self.pointer_in(track);
+        let knob = egui::Rect::from_min_size(Pos2::new(track.left() + 1.0, track.top() + top), egui::vec2(track.width() - 2.0, len));
+        painter.rect_filled(knob, 3.0, style::MUTED.gamma_multiply(if hot { 0.9 } else { 0.55 }));
     }
 
     fn paint_label(&self, painter: &egui::Painter, l: &crate::canvas::SceneLabel) {

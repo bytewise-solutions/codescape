@@ -153,7 +153,32 @@ pub fn initial_scroll(start_line: u32, box_y: f32, view_y: f32, line_h: f32) -> 
     (start_line.saturating_sub(1) as f32 - (box_y - view_y) / line_h).max(0.0)
 }
 
+pub fn max_scroll(total: usize, visible: usize) -> f32 {
+    (total as f32 - visible as f32 + END_MARGIN_LINES).max(0.0)
+}
+
 pub fn scroll_by(current: f32, wheel_px: f32, line_h: f32, total: usize, visible: usize) -> f32 {
-    let max = (total as f32 - visible as f32 + END_MARGIN_LINES).max(0.0);
-    (current - wheel_px / line_h).clamp(0.0, max)
+    (current - wheel_px / line_h).clamp(0.0, max_scroll(total, visible))
+}
+
+const MIN_THUMB_PX: f32 = 24.0;
+
+fn thumb_len(total: usize, visible: usize, track: f32) -> f32 {
+    (track * visible as f32 / total.max(1) as f32).clamp(MIN_THUMB_PX.min(track), track)
+}
+
+pub fn thumb(scroll: f32, total: usize, visible: usize, track: f32) -> (f32, f32) {
+    let len = thumb_len(total, visible, track);
+    let max = max_scroll(total, visible);
+    let top = if max > 0.0 { (track - len) * (scroll / max).clamp(0.0, 1.0) } else { 0.0 };
+    (top, len)
+}
+
+pub fn scroll_at(y: f32, total: usize, visible: usize, track: f32) -> f32 {
+    let len = thumb_len(total, visible, track);
+    let room = track - len;
+    if room <= 0.0 {
+        return 0.0;
+    }
+    ((y - len / 2.0).clamp(0.0, room) / room) * max_scroll(total, visible)
 }
