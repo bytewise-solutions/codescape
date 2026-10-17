@@ -2,7 +2,7 @@ use crate::camera::{Camera, WRect};
 use crate::focus::{Mark, Marks};
 use crate::source::file_font;
 use srcrelief_format::{ArchivedGraph, NodeFlags, NodeId, NodeKind, SubKind};
-use srcrelief_layout::{ContainerLayout, Direction, LayoutCache, Rect, display_children, display_path};
+use srcrelief_layout::{CARD_MAX_ROWS, CARD_ROW, CARD_TOP, ContainerLayout, Direction, LayoutCache, Rect, box_size, card_members, display_children, display_path};
 use srcrelief_rules::VisualRules;
 
 pub const OPEN_THRESHOLD_PX: f32 = 220.0;
@@ -10,6 +10,14 @@ pub const MIN_DRAW_PX: f32 = 3.0;
 pub const MIN_LABEL_PX: f32 = 7.0;
 pub const MIN_CHILD_PX: f32 = 36.0;
 pub const FILE_VIEW_SHARE: f32 = 0.45;
+pub const MIN_ROW_PX: f32 = 7.0;
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct CardRow {
+    pub node: NodeId,
+    pub rect: Rect,
+    pub mark: Mark,
+}
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct SceneBox {
@@ -26,6 +34,8 @@ pub struct SceneBox {
     pub hidden_details: usize,
     pub shown_details: usize,
     pub source: bool,
+    pub rows: Vec<CardRow>,
+    pub more_rows: usize,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -82,6 +92,10 @@ pub struct Scene {
 impl Scene {
     pub fn box_at(&self, p: [f32; 2]) -> Option<NodeId> {
         self.boxes.iter().rev().find(|b| b.rect.contains(p)).map(|b| b.node)
+    }
+
+    pub fn row_at(&self, p: [f32; 2]) -> Option<NodeId> {
+        self.boxes.iter().rev().filter(|b| !b.source).find_map(|b| b.rows.iter().find(|r| r.rect.contains(p)).map(|r| r.node))
     }
 
     pub fn deepest_open_at(&self, p: [f32; 2]) -> Option<NodeId> {
@@ -233,6 +247,33 @@ impl Builder<'_> {
         }
     }
 
+    fn card_rows(&mut self, node: NodeId, world: WRect, open: bool) -> (Vec<CardRow>, usize) {
+        let g = self.g;
+        let (ox, oy, s, w) = if open {
+            let layout = self.cache.shared(g, node);
+            let xf = Xform::fit(&layout, world);
+            (xf.dx, xf.dy, xf.s, layout.size[0] as f64 * xf.s)
+        } else {
+            (world.x, world.y, world.w / box_size(g, node)[0] as f64, world.w)
+        };
+        if (CARD_ROW as f64 * s * self.cam.zoom) < MIN_ROW_PX as f64 {
+            return (Vec::new(), 0);
+        }
+        let opts = self.cache.options();
+        let members: Vec<NodeId> = card_members(g, node).into_iter().filter(|&m| !opts.hides(g, m)).collect();
+        let shown = members.len().min(CARD_MAX_ROWS);
+        let rows = members
+            .iter()
+            .take(shown)
+            .enumerate()
+            .map(|(i, &m)| {
+                let r = WRect::new(ox + 8.0 * s, oy + (CARD_TOP as f64 + i as f64 * CARD_ROW as f64) * s, (w - 16.0 * s).max(0.0), CARD_ROW as f64 * s);
+                CardRow { node: m, rect: self.cam.world_to_screen_rect(r, self.view), mark: self.mark(m) }
+            })
+            .collect();
+        (rows, members.len() - shown)
+    }
+
     fn visit(&mut self, node: NodeId, world: WRect, depth: u32) {
         let rect = self.cam.world_to_screen_rect(world, self.view);
         if rect.w < MIN_DRAW_PX || !rect.intersects(&self.view) {
@@ -242,7 +283,8 @@ impl Builder<'_> {
         let g = self.g;
         let opts = self.cache.options();
         let shown: Vec<NodeId> = display_children(g, node).into_iter().filter(|&c| !opts.hides(g, c)).collect();
-        let has_children = !shown.is_empty();
+        let card = g.kind(node) == NodeKind::Type;
+        let has_children = shown.iter().any(|&c| !(card && g.kind(c) == NodeKind::Member));
         let file_level = match g.kind(node) {
             NodeKind::Type => shown.iter().all(|&c| g.kind(c) != NodeKind::Type || g.parent(c) == Some(node)),
             NodeKind::Member => g.parent(node).is_some_and(|p| g.kind(p) == NodeKind::Package),
@@ -253,11 +295,22 @@ impl Builder<'_> {
         let source = file_level && wide && chosen && g.file(node).is_some() && file_font(rect.w).is_some();
         let open = !source && has_children && rect.w >= OPEN_THRESHOLD_PX;
         let tag_color = g.tags(node).find_map(|t| self.vis.style_for(t).map(|s| s.color));
-        self.scene.boxes.push(SceneBox { node, rect, open, depth, kind: g.kind(node), sub: g.sub_kind(node), flags: g.flags(node), mark: self.mark(node), dimmed: self.marks.is_some() && self.mark(node) == Mark::None, tag_color, hidden_details: 0, shown_details: 0, source });
+        self.scene.boxes.push(SceneBox { node, rect, open, depth, kind: g.kind(node), sub: g.sub_kind(node), flags: g.flags(node), mark: self.mark(node), dimmed: self.marks.is_some() && self.mark(node) == Mark::None, tag_color, hidden_details: 0, shown_details: 0, source, rows: Vec::new(), more_rows: 0 });
+        let (rows, more_rows) = if card && !source { self.card_rows(node, world, open) } else { (Vec::new(), 0) };
+        let compact = !rows.is_empty();
+        let idx = self.scene.boxes.len() - 1;
+        self.scene.boxes[idx].rows = rows;
+        self.scene.boxes[idx].more_rows = more_rows;
         self.scene.stats.drawn += 1;
         if !source && rect.h >= MIN_LABEL_PX * 1.6 {
             let size = if open { 13.0 } else { (rect.h * 0.2).clamp(MIN_LABEL_PX, 16.0) };
-            let (pos, centered, detail) = if open {
+            let size = match self.scene.boxes[idx].rows.first() {
+                Some(r) => size.min((r.rect.y - rect.y - 4.0) * 0.6).max(MIN_LABEL_PX),
+                None => size,
+            };
+            let (pos, centered, detail) = if compact {
+                ([rect.x + 8.0, rect.y + 6.0], false, None)
+            } else if open {
                 ([rect.x + 8.0, rect.y + 6.0], false, Some(summary(g, node)))
             } else {
                 let detail = (rect.h >= 40.0).then(|| summary(g, node));

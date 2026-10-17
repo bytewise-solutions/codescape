@@ -1,5 +1,5 @@
 use crate::camera::Camera;
-use crate::canvas::{Scene, build_scene_at, root_world, world_rect};
+use crate::canvas::{Scene, build_scene_at, fit_label, root_world, world_rect};
 use crate::panels::{EntryGroupView, group_entries};
 use crate::focus::{Focus, FocusMode, History, Mark, UsageIndex, focus};
 use crate::search::{self, SearchIndex};
@@ -336,6 +336,8 @@ struct Project {
     settings_open: bool,
     form: SettingsForm,
     app_counts: HashMap<NodeId, usize>,
+    entry_nodes: std::collections::HashSet<NodeId>,
+    goto_line: Option<(NodeId, u32)>,
     totals: Totals,
     scene_ms: f32,
     last_frame: Instant,
@@ -392,6 +394,7 @@ impl Project {
         let source = std::cell::RefCell::new(SourceCache::new(&dir));
         let file = ReliefFile::open(path).map_err(|e| format!("{e}"))?;
         let g = file.graph();
+        let entry_nodes = g.entries().iter().map(|e| e.node.to_native()).collect();
         let groups = group_entries(g, &visual);
         let search = SearchIndex::new(g);
         let usage = UsageIndex::new(g);
@@ -458,6 +461,8 @@ impl Project {
             settings_open: false,
             form: SettingsForm::default(),
             app_counts,
+            entry_nodes,
+            goto_line: None,
             totals,
             scene_ms: 0.0,
             last_frame: Instant::now(),
@@ -1097,14 +1102,17 @@ impl Project {
                 } else if let Some(b) = self.scene.boxes.iter().rev().find(|b| b.open && b.hidden_details + b.shown_details > 0 && chip_rect(b.rect).contains([p.x, p.y])) {
                     details_toggle = Some((b.node, b.hidden_details > 0));
                 } else {
-                    clicked_box = self.file_page_at(p).or_else(|| self.scene.box_at([p.x, p.y]));
+                    clicked_box = self.file_page_at(p).or_else(|| self.scene.row_at([p.x, p.y])).or_else(|| self.scene.box_at([p.x, p.y]));
                 }
             }
         }
         let mut fly = None;
+        let mut open_row: Option<(NodeId, NodeId)> = None;
         if resp.double_clicked() {
             if let Some(p) = resp.interact_pointer_pos() {
-                if let Some(n) = self.file_page_at(p).or_else(|| self.scene.box_at([p.x, p.y])) {
+                if let Some(m) = self.scene.row_at([p.x, p.y]) {
+                    open_row = g.parent(m).map(|t| (m, t));
+                } else if let Some(n) = self.file_page_at(p).or_else(|| self.scene.box_at([p.x, p.y])) {
                     self.selected = Some(n);
                     fly = Some(n);
                 }
@@ -1127,12 +1135,18 @@ impl Project {
         for (n, y, line_h) in shown {
             let start = g.span(n).0;
             let view_y = self.view.y;
-            let opening = initial_scroll(start, y, view_y, line_h);
+            let opening = match self.goto_line {
+                Some((t, line)) if t == n => line.saturating_sub(4) as f32,
+                _ => initial_scroll(start, y, view_y, line_h),
+            };
             if self.target.is_some() {
                 self.file_scroll.insert(n, opening);
             } else {
                 self.file_scroll.entry(n).or_insert(opening);
             }
+        }
+        if self.target.is_none() && self.goto_line.is_some_and(|(t, _)| self.file_scroll.contains_key(&t)) {
+            self.goto_line = None;
         }
         self.scene_ms = started.elapsed().as_secs_f32() * 1000.0;
         self.paint(&painter);
@@ -1156,6 +1170,11 @@ impl Project {
         }
         if let Some(n) = fly {
             self.set_focus(n, None, true, true);
+        }
+        if let Some((m, t)) = open_row {
+            self.goto_line = Some((t, self.file.graph().span(m).0));
+            self.set_focus(m, None, false, true);
+            self.fly_to(t);
         }
     }
 
@@ -1184,6 +1203,9 @@ impl Project {
             }
             for l in self.scene.labels.iter().filter(|l| l.depth == depth) {
                 self.paint_label(&painter, l);
+            }
+            for b in self.scene.boxes.iter().filter(|b| b.depth == depth && !b.rows.is_empty()) {
+                self.paint_rows(&painter, b);
             }
         }
         for b in self.scene.boxes.iter().filter(|b| b.source) {
@@ -1478,6 +1500,41 @@ impl Project {
         let hot = self.scroll_drag == Some(node) || self.pointer_in(track);
         let knob = egui::Rect::from_min_size(Pos2::new(track.left() + 1.0, track.top() + top), egui::vec2(track.width() - 2.0, len));
         painter.rect_filled(knob, 3.0, style::MUTED.gamma_multiply(if hot { 0.9 } else { 0.55 }));
+    }
+
+    fn paint_rows(&self, painter: &egui::Painter, b: &crate::canvas::SceneBox) {
+        let g = self.file.graph();
+        let clip = painter.with_clip_rect(erect(b.rect).shrink(2.0).intersect(erect(self.view)));
+        let size = (b.rows[0].rect.h * 0.72).min(13.0);
+        let font = FontId::proportional(size);
+        let dim = |c: Color32| if b.dimmed { c.gamma_multiply(0.35) } else { c };
+        for row in &b.rows {
+            let r = erect(row.rect);
+            if self.pointer.is_some_and(|p| r.contains(p)) || self.selected == Some(row.node) {
+                clip.rect_filled(r, 2.0, style::ACCENT.gamma_multiply(if self.selected == Some(row.node) { 0.18 } else { 0.08 }));
+            }
+            let mark = r.left_center() + egui::vec2(size * 0.45, 0.0);
+            if srcrelief_layout::is_constructor(g, row.node) {
+                let d = size * 0.28;
+                let pts = vec![mark + egui::vec2(0.0, -d), mark + egui::vec2(d, 0.0), mark + egui::vec2(0.0, d), mark + egui::vec2(-d, 0.0)];
+                clip.add(Shape::convex_polygon(pts, Color32::TRANSPARENT, Stroke::new(1.0, dim(style::CONSTRUCTOR))));
+            } else if self.entry_nodes.contains(&row.node) || self.usage.used_from_outside(g, row.node) {
+                clip.circle_filled(mark, size * 0.18, dim(if self.entry_nodes.contains(&row.node) { style::ENTRY } else { style::MUTED }));
+            }
+            let color = match row.mark {
+                Mark::Down => style::REACH,
+                Mark::Up => style::CALLER,
+                Mark::Focus => style::ACCENT,
+                Mark::None => dim(style::TEXT),
+            };
+            let name = if g.name(row.node) == "<init>" { g.parent(row.node).map_or("<init>", |t| g.name(t)) } else { g.name(row.node) };
+            let text = fit_label(name, r.width() - size * 1.4, size);
+            clip.text(Pos2::new(r.left() + size * 1.1, r.center().y), Align2::LEFT_CENTER, text, font.clone(), color);
+        }
+        if b.more_rows > 0 {
+            let last = erect(b.rows[b.rows.len() - 1].rect);
+            clip.text(Pos2::new(last.left() + size * 1.1, last.bottom() + last.height() / 2.0), Align2::LEFT_CENTER, format!("… {} more", b.more_rows), font, style::MUTED);
+        }
     }
 
     fn paint_label(&self, painter: &egui::Painter, l: &crate::canvas::SceneLabel) {

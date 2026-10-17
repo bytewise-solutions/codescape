@@ -310,7 +310,7 @@ fn wiring_never_moves_boxes() {
 }
 
 #[test]
-fn constructors_first_in_their_layer() {
+fn constructors_head_their_card() {
     let mut b = GraphBuilder::new("p");
     let t = b.add_node(b.root(), NodeKind::Type, SubKind::Struct, "checkoutService", Lang::Go);
     for (name, sub) in [("Run", SubKind::Method), ("Alpha", SubKind::Method), ("NewCheckoutService", SubKind::Constructor)] {
@@ -322,9 +322,9 @@ fn constructors_first_in_their_layer() {
     let f = ReliefFile::open(&dir.path().join("g")).unwrap();
     let g = f.graph();
     let t = g.children(g.root()).start;
-    let l = layout_container(g, t, &[], &LayoutOptions::default());
-    let leftmost = l.children.iter().min_by(|a, b| (a.layer, a.rect.y as i64, a.rect.x as i64).cmp(&(b.layer, b.rect.y as i64, b.rect.x as i64))).unwrap();
-    assert_eq!(g.name(leftmost.node), "NewCheckoutService");
+    let rows: Vec<&str> = card_members(g, t).into_iter().map(|m| g.name(m)).collect();
+    assert_eq!(rows[0], "NewCheckoutService");
+    assert_eq!(rows.len(), 3);
 }
 
 #[test]
@@ -674,4 +674,45 @@ fn revealing_a_detail_opens_its_container_details() {
     assert_eq!(opts.details_in, [pkg]);
     assert!(!opts.hides(gr, g.ids["Price"]));
     assert!(!opts.reveal(gr, g.ids["Handler"]), "a visible box needs nothing");
+}
+
+#[test]
+fn types_are_cards_with_room_for_their_method_rows() {
+    let g = ports();
+    let gr = g.file.graph();
+    let opts = LayoutOptions::default();
+    let handler = layout_container(gr, g.ids["Handler"], &[], &opts);
+    assert!(handler.children.is_empty(), "methods are rows of the card, not boxes");
+    let port = layout_container(gr, g.ids["Repository"], &[], &opts);
+    let kids: Vec<&str> = port.children.iter().map(|c| gr.name(c.node)).collect();
+    assert_eq!(kids, ["pgRepository"], "folded implementations are still boxes");
+    assert!(port.children[0].rect.y >= card_rows_bottom(gr, g.ids["Repository"]), "they sit below the method rows");
+    let size = box_size(gr, g.ids["Handler"]);
+    assert!(size[1] >= card_rows_bottom(gr, g.ids["Handler"]), "the card is tall enough for its rows");
+}
+
+#[test]
+fn a_card_with_nested_boxes_is_as_wide_as_the_card() {
+    let g = ports();
+    let gr = g.file.graph();
+    let port = layout_container(gr, g.ids["Repository"], &[], &LayoutOptions::default());
+    assert!(port.size[0] >= box_size(gr, g.ids["Repository"])[0] - 0.01, "rows keep the card's scale: {:?}", port.size);
+}
+
+#[test]
+fn java_init_counts_as_a_constructor_on_the_card() {
+    let mut b = GraphBuilder::new("p");
+    let t = b.add_node(b.root(), NodeKind::Type, SubKind::Class, "TextFilter", Lang::Java);
+    for (name, line) in [("isActive", 10), ("<init>", 30)] {
+        let m = b.add_node(t, NodeKind::Member, SubKind::Method, name, Lang::Java);
+        b.set_span(m, "f", line, line + 3);
+    }
+    let dir = tempfile::tempdir().unwrap();
+    write_graph(&b.finish(), &dir.path().join("g")).unwrap();
+    let f = ReliefFile::open(&dir.path().join("g")).unwrap();
+    let g = f.graph();
+    let t = g.children(g.root()).start;
+    let rows = card_members(g, t);
+    assert_eq!(g.name(rows[0]), "<init>");
+    assert!(is_constructor(g, rows[0]));
 }

@@ -361,3 +361,49 @@ fn a_class_with_a_nested_class_still_opens_as_a_file() {
     let s = scene(g, &mut cache, &cam);
     assert!(s.boxes.iter().any(|b| b.node == outer && b.source), "the nested class is part of the same file");
 }
+
+#[test]
+fn methods_are_rows_of_their_card_and_free_functions_stay_boxes() {
+    let mut b = GraphBuilder::new("p");
+    let pkg = b.add_node(b.root(), NodeKind::Package, SubKind::None, "billing", Lang::Go);
+    let t = b.add_node(pkg, NodeKind::Type, SubKind::Struct, "Service", Lang::Go);
+    b.set_span(t, "s.go", 10, 90);
+    for (name, sub, line) in [("Charge", SubKind::Method, 40), ("Refund", SubKind::Method, 60), ("NewService", SubKind::Constructor, 20)] {
+        let m = b.add_node(t, NodeKind::Member, sub, name, Lang::Go);
+        b.set_span(m, "s.go", line, line + 10);
+    }
+    let helper = b.add_node(pkg, NodeKind::Member, SubKind::Function, "round", Lang::Go);
+    b.set_span(helper, "s.go", 95, 99);
+    let dir = tempfile::tempdir().unwrap();
+    write_graph(&b.finish(), &dir.path().join("g")).unwrap();
+    let f = ReliefFile::open(&dir.path().join("g")).unwrap();
+    let g = f.graph();
+    let mut cache = LayoutCache::new(Vec::new(), LayoutOptions { show_details: true, ..Default::default() });
+    let pkg = g.children(g.root()).start;
+    let t = g.children(pkg).find(|&c| g.name(c) == "Service").unwrap();
+    let cam = Camera::fit(world_rect(g, &mut cache, t).unwrap(), VIEW);
+    let s = build_scene_at(g, &mut cache, &cam, VIEW, &VisualRules::default(), None, [-50.0, -50.0], &[]);
+    let card = s.boxes.iter().find(|b| b.node == t).unwrap();
+    let rows: Vec<&str> = card.rows.iter().map(|r| g.name(r.node)).collect();
+    assert_eq!(rows, ["NewService", "Charge", "Refund"], "constructor first, then source order");
+    assert!(s.boxes.iter().all(|b| g.parent(b.node) != Some(t)), "no method boxes");
+    let r = card.rows[1].rect;
+    assert_eq!(s.row_at([r.x + 2.0, r.y + 2.0]).map(|n| g.name(n)), Some("Charge"));
+    let far = fit_all(g, &mut cache);
+    let s = scene(g, &mut cache, &far);
+    assert!(s.boxes.iter().any(|b| g.name(b.node) == "round"), "a function outside any type is still a box");
+}
+
+#[test]
+fn a_card_title_never_runs_into_its_rows() {
+    let fx = fixture();
+    let g = fx.file.graph();
+    let mut cache = LayoutCache::new(Vec::new(), LayoutOptions::default());
+    let t = node(g, &["left", "left.api", "T"]);
+    let cam = Camera::fit(world_rect(g, &mut cache, t).unwrap(), VIEW);
+    let s = build_scene_at(g, &mut cache, &cam, VIEW, &VisualRules::default(), None, [-50.0, -50.0], &[]);
+    let card = s.boxes.iter().find(|b| b.node == t).unwrap();
+    let label = s.labels.iter().find(|l| l.node == t).unwrap();
+    assert!(!card.rows.is_empty());
+    assert!(label.pos[1] + label.size <= card.rows[0].rect.y + 0.5, "title {label:?} overlaps first row {:?}", card.rows[0].rect);
+}

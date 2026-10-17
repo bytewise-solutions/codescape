@@ -26,6 +26,11 @@ fn followed(e: &srcrelief_format::ArchivedEdge) -> bool {
 }
 
 impl UsageIndex {
+    pub fn used_from_outside(&self, g: &ArchivedGraph, member: NodeId) -> bool {
+        let owner = g.parent(member).unwrap_or(member);
+        self.incoming[member as usize].iter().any(|&s| !g.is_ancestor(owner, s))
+    }
+
     pub fn new(g: &ArchivedGraph) -> UsageIndex {
         let mut incoming = vec![Vec::new(); g.node_count()];
         for n in 0..g.node_count() as NodeId {

@@ -1,8 +1,8 @@
 use crate::fold::{display_children, folded_into};
 use crate::order::{Ordering, minimize};
-use crate::{ChildBox, ContainerLayout, Direction, FrameBox, LaidEdge, LayoutOptions, Rect, box_size};
+use crate::{ChildBox, ContainerLayout, Direction, FrameBox, LaidEdge, LayoutOptions, Rect, box_size, card_rows_bottom};
 use globset::Glob;
-use srcrelief_format::{ArchivedGraph, Category, NodeFlags, NodeId, SCOPE_MAIN, SCOPE_TEST, SubKind};
+use srcrelief_format::{ArchivedGraph, Category, NodeFlags, NodeId, NodeKind, SCOPE_MAIN, SCOPE_TEST, SubKind};
 use std::collections::HashSet;
 use srcrelief_rules::FrameRule;
 use std::collections::HashMap;
@@ -64,7 +64,7 @@ fn add_wiring(g: &ArchivedGraph, node: NodeId, mut l: ContainerLayout, opts: &La
         .into_iter()
         .filter(|&c| g.flags(c).intersects(NodeFlags::WIRING | NodeFlags::NOISE | NodeFlags::DETAIL) && !opts.hides(g, c))
         .collect();
-    let top = if l.children.is_empty() { HEADER + PAD } else { l.size[1] - PAD + GAP_Y };
+    let top = if l.children.is_empty() { l.header + PAD } else { l.size[1] - PAD + GAP_Y };
     let layer = l.children.iter().map(|c| c.layer + 1).max().unwrap_or(0);
     let mut x = PAD;
     let mut row_h: f32 = 0.0;
@@ -96,10 +96,12 @@ fn add_wiring(g: &ArchivedGraph, node: NodeId, mut l: ContainerLayout, opts: &La
 }
 
 fn layout_structure(g: &ArchivedGraph, node: NodeId, frames: &[FrameRule], opts: &LayoutOptions) -> ContainerLayout {
-    let kids: Vec<NodeId> = display_children(g, node).into_iter().filter(|&c| !opts.hides(g, c)).collect();
+    let card = g.kind(node) == NodeKind::Type;
+    let header = if card { card_rows_bottom(g, node).max(HEADER) } else { HEADER };
+    let kids: Vec<NodeId> = display_children(g, node).into_iter().filter(|&c| !opts.hides(g, c) && !(card && g.kind(c) == NodeKind::Member)).collect();
     let n = kids.len();
     if n == 0 {
-        return ContainerLayout { size: [0.0, 0.0], header: HEADER, ..Default::default() };
+        return ContainerLayout { size: [0.0, 0.0], header, ..Default::default() };
     }
     let owners = entry_owners(g);
     let pinned: Vec<bool> = kids.iter().map(|k| owners.contains(k)).collect();
@@ -259,9 +261,12 @@ fn layout_structure(g: &ArchivedGraph, node: NodeId, frames: &[FrameRule], opts:
         }
     }
     let row_widths: Vec<f32> = rows.iter().map(|(_, r)| r.iter().map(|&v| sizes[v][0]).sum::<f32>() + GAP_X * (r.len() as f32 - 1.0)).collect();
-    let content_w = row_widths.iter().copied().fold(0.0, f32::max);
+    let mut content_w = row_widths.iter().copied().fold(0.0, f32::max);
+    if card {
+        content_w = content_w.max(box_size(g, node)[0] - 2.0 * PAD);
+    }
     let mut rects = vec![Rect::default(); n];
-    let mut y = HEADER + PAD;
+    let mut y = header + PAD;
     let frame_top_room = if groups.iter().any(|g| g.is_some()) { FRAME_LABEL + FRAME_PAD } else { 0.0 };
     y += frame_top_room;
     for ((_, row), rw) in rows.iter().zip(&row_widths) {
@@ -326,8 +331,8 @@ fn layout_structure(g: &ArchivedGraph, node: NodeId, frames: &[FrameRule], opts:
         .collect();
 
     ContainerLayout {
-        size: [content_w + 2.0 * PAD, height.max(HEADER + 2.0 * PAD)],
-        header: HEADER,
+        size: [content_w + 2.0 * PAD, height.max(header + 2.0 * PAD)],
+        header,
         children: (0..n).map(|v| ChildBox { node: kids[v], rect: rects[v], layer: layer[v], pinned: pinned[v] }).collect(),
         edges: laid_edges,
         frames: frame_boxes,

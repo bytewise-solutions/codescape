@@ -86,7 +86,11 @@ enough to read.
   or select a box and its own arrows light up at full strength, as thick as the number of classes they link. Turn
   **View ▸ Quiet arrows** off to draw every arrow by its weight instead.
 - **Implements / inherits** arrows are dotted with a hollow triangle at the interface, like UML.
-- **Constructors live inside their type.** A Go `func NewX(...) *X` is shown inside `X`, not as a box of its own.
+- **Types are cards.** A class, struct, interface or trait lists its methods as rows, constructors first (◇); a dot
+  marks methods used from outside the type or that are entry points. Arrows join cards, not methods. Hover a row to
+  see it, click it to select the method (its uses light up), double-click to open the file at that method. Functions
+  that live directly in a package (Go, TypeScript, Rust) stay boxes.
+- **Constructors live inside their type.** A Go `func NewX(...) *X` is a row of `X`'s card, not a box of its own.
 - **Dependency injection is set aside.** Code recognised as wiring (Google Wire's generated injectors and provider
   sets, Dagger components/modules) is hidden with its arrows, so it never changes the layering. Tick **View ▸ Wiring**
   to show it muted, with faint dotted arrows. Highlighting an entry point still follows wiring.
