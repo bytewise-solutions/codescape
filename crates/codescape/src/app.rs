@@ -2337,15 +2337,73 @@ impl Project {
     }
 
     fn legend_shown(&self) -> style::LegendShown {
-        let opts = self.cache.options();
-        let view = |v: View| self.settings.settings().view(v).value;
-        style::LegendShown {
-            wiring: opts.show_wiring,
-            noise: opts.show_noise,
-            complexity: view(View::Complexity),
-            unused: view(View::Unused),
-            review: self.review.is_some(),
+        let g = self.file.graph();
+        let rv = self.review.as_ref();
+        let hints = self.settings.settings().view(View::Complexity).value;
+        let mut on = style::LegendShown::default();
+        for b in &self.scene.boxes {
+            match (b.kind, b.sub) {
+                (NodeKind::Module | NodeKind::Package, _) => on.containers = true,
+                (NodeKind::Type | NodeKind::Member, SubKind::Interface) => on.interface = true,
+                (NodeKind::Type | NodeKind::Member, SubKind::Enum | SubKind::Record) => on.enumeration = true,
+                (NodeKind::Type | NodeKind::Member, SubKind::Function | SubKind::Method | SubKind::Field) => on.function = true,
+                (NodeKind::Type | NodeKind::Member, SubKind::Constructor) => on.constructor = true,
+                (NodeKind::Type | NodeKind::Member, SubKind::Annotation) => {}
+                (NodeKind::Type | NodeKind::Member, _) => on.classes = true,
+                _ => {}
+            }
+            on.wiring |= b.flags.contains(NodeFlags::WIRING);
+            on.error |= b.flags.contains(NodeFlags::NOISE);
+            on.visibility |= !b.rows.is_empty() || !b.field_rows.is_empty();
+            on.entry |= self.app_counts.contains_key(&b.node);
+            for row in &b.rows {
+                on.constructor |= codescape_layout::is_constructor(g, row.node);
+                on.used_outside |= self.entry_nodes.contains(&row.node) || self.usage.used_from_outside(g, row.node);
+            }
+            let marks = std::iter::once(b.mark).chain(b.rows.iter().map(|r| r.mark));
+            for mark in marks {
+                on.uses |= mark == Mark::Down;
+                on.used_by |= mark == Mark::Up;
+            }
+            for n in std::iter::once(b.node).chain(b.rows.iter().map(|r| r.node)) {
+                on.selected |= self.selected == Some(n);
+                match g.complexity(n).filter(|_| hints).and_then(style::complexity_hint) {
+                    Some(c) if c == style::EDGE_UP => on.complexity_high = true,
+                    Some(_) => on.complexity = true,
+                    None => {}
+                }
+                on.unused |= self.unused(n).is_some();
+                if let Some(rv) = rv {
+                    match rv.review.change(n).status {
+                        Status::New => on.added = true,
+                        Status::Changed => on.changed = true,
+                        Status::Unchanged => {}
+                    }
+                    on.reviewed |= rv.states.get(&n) == Some(&MarkState::Reviewed);
+                }
+            }
+            on.lines |= b.source && rv.zip(g.file(b.node)).is_some_and(|(rv, f)| rv.review.file(f).is_some());
         }
+        on.group = !self.scene.frames.is_empty();
+        for e in &self.scene.edges {
+            on.added_arrow |= rv.is_some_and(|rv| rv.new_arrows.contains(&(e.a, e.b)));
+            if e.weight == 0 && e.implements == 0 && e.wiring > 0 {
+                on.arrow_wiring = true;
+            } else if e.weight == 0 && e.implements > 0 {
+                on.arrow_implements = true;
+            } else if e.test_only {
+                on.arrow_test = true;
+            } else if e.undeclared {
+                on.arrow_undeclared = true;
+            } else {
+                match e.dir {
+                    Direction::Down => on.arrow_calls = true,
+                    Direction::Up => on.arrow_up = true,
+                    Direction::Sideways => on.arrow_same_layer = true,
+                }
+            }
+        }
+        on
     }
 
     fn legend_rects(&self) -> (egui::Rect, egui::Rect) {
@@ -2354,7 +2412,7 @@ impl Project {
             let chip = egui::Rect::from_min_size(corner - egui::vec2(0.0, 22.0), egui::vec2(78.0, 22.0));
             return (chip, chip);
         }
-        let rows = style::legend(self.legend_shown()).len().div_ceil(2);
+        let rows = style::legend(self.legend_shown()).len().div_ceil(2).max(1);
         let size = egui::vec2(minimap::area(self.view).w * 2.0 + 8.0, rows as f32 * LEGEND_ROW + 10.0);
         let rect = egui::Rect::from_min_size(corner - egui::vec2(0.0, size.y), size);
         (rect, egui::Rect::from_min_size(rect.right_top() - egui::vec2(18.0, 0.0), egui::vec2(18.0, 18.0)))
@@ -2369,6 +2427,18 @@ impl Project {
             return;
         }
         let items = style::legend(self.legend_shown());
+        if items.is_empty() {
+            painter.rect_filled(top, 4.0, style::BAR);
+            chevron(painter, close.center(), false);
+            painter.text(
+                top.left_center() + egui::vec2(10.0, 0.0),
+                Align2::LEFT_CENTER,
+                "Nothing to explain in this view",
+                FontId::proportional(10.0),
+                style::MUTED,
+            );
+            return;
+        }
         let row = LEGEND_ROW;
         let half = items.len().div_ceil(2);
         let width = top.width();

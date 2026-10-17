@@ -75,11 +75,73 @@ pub enum LegendSample {
 
 #[derive(Clone, Copy, Debug, Default, PartialEq)]
 pub struct LegendShown {
+    pub interface: bool,
+    pub classes: bool,
+    pub containers: bool,
+    pub enumeration: bool,
+    pub function: bool,
+    pub constructor: bool,
     pub wiring: bool,
-    pub noise: bool,
+    pub error: bool,
+    pub visibility: bool,
+    pub used_outside: bool,
     pub complexity: bool,
+    pub complexity_high: bool,
     pub unused: bool,
-    pub review: bool,
+    pub added: bool,
+    pub changed: bool,
+    pub reviewed: bool,
+    pub added_arrow: bool,
+    pub lines: bool,
+    pub selected: bool,
+    pub uses: bool,
+    pub used_by: bool,
+    pub entry: bool,
+    pub group: bool,
+    pub arrow_calls: bool,
+    pub arrow_up: bool,
+    pub arrow_same_layer: bool,
+    pub arrow_undeclared: bool,
+    pub arrow_implements: bool,
+    pub arrow_test: bool,
+    pub arrow_wiring: bool,
+}
+
+impl LegendShown {
+    pub fn all() -> LegendShown {
+        LegendShown {
+            interface: true,
+            classes: true,
+            containers: true,
+            enumeration: true,
+            function: true,
+            constructor: true,
+            wiring: true,
+            error: true,
+            visibility: true,
+            used_outside: true,
+            complexity: true,
+            complexity_high: true,
+            unused: true,
+            added: true,
+            changed: true,
+            reviewed: true,
+            added_arrow: true,
+            lines: true,
+            selected: true,
+            uses: true,
+            used_by: true,
+            entry: true,
+            group: true,
+            arrow_calls: true,
+            arrow_up: true,
+            arrow_same_layer: true,
+            arrow_undeclared: true,
+            arrow_implements: true,
+            arrow_test: true,
+            arrow_wiring: true,
+        }
+    }
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -92,56 +154,47 @@ const fn item(label: &'static str, sample: LegendSample) -> LegendItem {
     LegendItem { label, sample }
 }
 
-pub fn legend(shown: LegendShown) -> Vec<LegendItem> {
+pub fn legend(on: LegendShown) -> Vec<LegendItem> {
     use LegendSample::*;
-    let mut v = vec![
-        item("interface", Box { stroke: INTERFACE }),
-        item("class / struct", Box { stroke: BOX_STROKE }),
-        item("enum / record", Box { stroke: ENUM }),
-        item("function / method", Box { stroke: FUNCTION }),
-        item("constructor", Box { stroke: CONSTRUCTOR }),
-        item("public / protected / package / private", Text { text: "+#~-" }),
-        item("used from outside its type", Dot { color: MUTED }),
+    let arrow = |color, dashed, dotted, hollow_head| Arrow { color, dashed, dotted, hollow_head };
+    let blue = match (on.classes, on.containers) {
+        (true, true) => Some("class / struct / package"),
+        (true, false) => Some("class / struct"),
+        (false, true) => Some("module / package"),
+        (false, false) => None,
+    };
+    let candidates = [
+        (on.interface, item("interface", Box { stroke: INTERFACE })),
+        (blue.is_some(), item(blue.unwrap_or_default(), Box { stroke: BOX_STROKE })),
+        (on.enumeration, item("enum / record", Box { stroke: ENUM })),
+        (on.function, item("function / method", Box { stroke: FUNCTION })),
+        (on.constructor, item("constructor", Box { stroke: CONSTRUCTOR })),
+        (on.wiring, item("wiring (DI)", Box { stroke: WIRING })),
+        (on.error, item("error type", Box { stroke: ERROR_TYPE })),
+        (on.visibility, item("public / protected / package / private", Text { text: "+#~-" })),
+        (on.used_outside, item("used from outside its type", Dot { color: MUTED })),
+        (on.complexity, item("complexity from 10", Pill { color: EDGE_SIDEWAYS, text: "10" })),
+        (on.complexity_high, item("complexity from 20", Pill { color: EDGE_UP, text: "20" })),
+        (on.unused, item("unused code", Outline { stroke: EDGE_UP, width: 1.5 })),
+        (on.added, item("new", Pill { color: ADDED, text: "NEW" })),
+        (on.changed, item("changed", Pill { color: EDGE_SIDEWAYS, text: "+1" })),
+        (on.reviewed, item("reviewed", Pill { color: MUTED, text: "ok" })),
+        (on.added_arrow, item("arrow the change adds", arrow(ADDED, false, false, false))),
+        (on.lines, item("lines added / removed", Lines)),
+        (on.selected, item("selected", Outline { stroke: ACCENT, width: 2.5 })),
+        (on.uses, item("the selection uses it", Outline { stroke: USES, width: 2.0 })),
+        (on.used_by, item("it uses the selection", Outline { stroke: CALLER, width: 2.0 })),
+        (on.entry, item("has an entry point", Dot { color: ENTRY })),
+        (on.group, item("group", Frame)),
+        (on.arrow_calls, item("calls / depends on", arrow(EDGE, false, false, false))),
+        (on.arrow_up, item("upward dependency", arrow(EDGE_UP, true, false, false))),
+        (on.arrow_same_layer, item("same layer", arrow(EDGE_SIDEWAYS, false, false, false))),
+        (on.arrow_undeclared, item("undeclared dependency", arrow(EDGE_SIDEWAYS, true, false, false))),
+        (on.arrow_implements, item("implements / extends", arrow(EDGE, true, false, true))),
+        (on.arrow_test, item("test-only dependency", arrow(EDGE, true, false, false))),
+        (on.arrow_wiring, item("wiring arrow", arrow(WIRING, false, true, false))),
     ];
-    if shown.wiring {
-        v.push(item("wiring (DI)", Box { stroke: WIRING }));
-    }
-    if shown.noise {
-        v.push(item("error type", Box { stroke: ERROR_TYPE }));
-    }
-    if shown.complexity {
-        v.push(item("complexity from 10", Pill { color: EDGE_SIDEWAYS, text: "10" }));
-        v.push(item("complexity from 20", Pill { color: EDGE_UP, text: "20" }));
-    }
-    if shown.unused {
-        v.push(item("unused code", Outline { stroke: EDGE_UP, width: 1.5 }));
-    }
-    if shown.review {
-        v.extend([
-            item("new", Pill { color: ADDED, text: "NEW" }),
-            item("changed", Pill { color: EDGE_SIDEWAYS, text: "+1" }),
-            item("reviewed", Pill { color: MUTED, text: "ok" }),
-            item("arrow the change adds", Arrow { color: ADDED, dashed: false, dotted: false, hollow_head: false }),
-            item("lines added / removed", Lines),
-        ]);
-    }
-    v.extend([
-        item("selected", Outline { stroke: ACCENT, width: 2.5 }),
-        item("the selection uses it", Outline { stroke: USES, width: 2.0 }),
-        item("it uses the selection", Outline { stroke: CALLER, width: 2.0 }),
-        item("has an entry point", Dot { color: ENTRY }),
-        item("group", Frame),
-        item("calls / depends on", Arrow { color: EDGE, dashed: false, dotted: false, hollow_head: false }),
-        item("upward dependency", Arrow { color: EDGE_UP, dashed: true, dotted: false, hollow_head: false }),
-        item("same layer", Arrow { color: EDGE_SIDEWAYS, dashed: false, dotted: false, hollow_head: false }),
-        item("undeclared dependency", Arrow { color: EDGE_SIDEWAYS, dashed: true, dotted: false, hollow_head: false }),
-        item("implements / extends", Arrow { color: EDGE, dashed: true, dotted: false, hollow_head: true }),
-        item("test-only dependency", Arrow { color: EDGE, dashed: true, dotted: false, hollow_head: false }),
-    ]);
-    if shown.wiring {
-        v.push(item("wiring arrow", Arrow { color: WIRING, dashed: false, dotted: true, hollow_head: false }));
-    }
-    v
+    candidates.into_iter().filter(|(shown, _)| *shown).map(|(_, it)| it).collect()
 }
 
 pub const CODE_KEYWORD: Color32 = Color32::from_rgb(198, 146, 233);

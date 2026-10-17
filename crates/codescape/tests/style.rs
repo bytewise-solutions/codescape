@@ -17,12 +17,11 @@ fn arrow_weight_follows_the_number_of_links() {
 #[test]
 fn legend_explains_every_style() {
     use codescape::style::{LegendSample, LegendShown, legend};
-    let all = LegendShown { wiring: true, noise: true, complexity: true, unused: true, review: true };
-    let items = legend(all);
+    let items = legend(LegendShown::all());
     let labels: Vec<&str> = items.iter().map(|i| i.label).collect();
     for needed in [
         "interface",
-        "class / struct",
+        "class / struct / package",
         "enum / record",
         "function / method",
         "constructor",
@@ -53,9 +52,6 @@ fn legend_explains_every_style() {
     ] {
         assert!(labels.contains(&needed), "legend misses {needed}");
     }
-    let lean = legend(LegendShown::default());
-    assert!(lean.iter().all(|i| !i.label.starts_with("wiring") && i.label != "error type"));
-    assert!(lean.iter().all(|i| !["complexity from 10", "unused code", "new", "reviewed"].contains(&i.label)), "only what is on the map");
     assert!(items.iter().any(|i| matches!(i.sample, LegendSample::Arrow { dashed: true, hollow_head: true, .. })));
 }
 
@@ -95,7 +91,7 @@ fn complexity_hints_appear_from_ten_and_turn_red_from_twenty() {
 #[test]
 fn what_the_selection_uses_is_not_coloured_like_new_code() {
     use codescape::style::{LegendSample, LegendShown, legend};
-    let items = legend(LegendShown { review: true, ..Default::default() });
+    let items = legend(LegendShown::all());
     let color = |label: &str| match items.iter().find(|i| i.label == label).unwrap().sample {
         LegendSample::Outline { stroke, .. } => stroke,
         LegendSample::Pill { color, .. } => color,
@@ -103,4 +99,27 @@ fn what_the_selection_uses_is_not_coloured_like_new_code() {
     };
     assert_ne!(color("the selection uses it"), color("new"));
     assert_ne!(color("the selection uses it"), color("it uses the selection"));
+}
+
+#[test]
+fn the_legend_lists_only_what_is_on_screen() {
+    use codescape::style::{LegendShown, legend};
+    assert!(legend(LegendShown::default()).is_empty());
+    let with = |set: fn(&mut LegendShown)| {
+        let mut shown = LegendShown::default();
+        set(&mut shown);
+        legend(shown).into_iter().map(|i| i.label).collect::<Vec<_>>()
+    };
+    assert_eq!(with(|s| s.interface = true), ["interface"]);
+    assert_eq!(with(|s| s.arrow_up = true), ["upward dependency"]);
+    assert_eq!(with(|s| s.containers = true), ["module / package"]);
+    assert_eq!(with(|s| s.classes = true), ["class / struct"]);
+    assert_eq!(
+        with(|s| {
+            s.containers = true;
+            s.classes = true;
+        }),
+        ["class / struct / package"]
+    );
+    assert_eq!(with(|s| s.added = true), ["new"]);
 }

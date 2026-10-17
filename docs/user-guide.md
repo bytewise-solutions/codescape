@@ -70,7 +70,8 @@ enough to read.
   top row, alphabetically, so a project looks the same from one day to the next. Everything else layers below by
   dependency; red arrows point upward (a layering violation), amber ones join two boxes of the same layer.
 - **Box colours by kind:** interface (teal), class/struct (blue), enum/record (violet), function/method (grey),
-  constructor (dim blue). A legend sits in the bottom-left corner; close it with its × or **View ▸ Legend**.
+  constructor (dim blue). A legend sits in the bottom-left corner and lists only what the current view draws, so it changes as you zoom,
+  select or review; fold it with its arrow or **View ▸ Legend**.
 - **The file when you zoom in close.** The class, struct or top-level function under the pointer (the middle of the
   view from the keyboard) gives way to its whole file once it fills about half the view, as a page filling its
   column; only that one opens, and it stays open until you zoom back out. The wheel scrolls the file, sideways too
