@@ -187,6 +187,19 @@ impl<'s> Ctx<'s> {
         }
     }
 
+    fn chain_path(&self, n: Node) -> Option<String> {
+        match n.kind() {
+            "call_expression" => self.chain_path(n.child_by_field_name("function")?).map(|f| format!("{f}()")),
+            "member_expression" => {
+                let obj = self.chain_path(n.child_by_field_name("object")?)?;
+                let prop = n.child_by_field_name("property")?;
+                (prop.kind() == "property_identifier").then(|| format!("{obj}.{}", self.text(prop)))
+            }
+            "non_null_expression" | "parenthesized_expression" => named_kids(n).first().and_then(|k| self.chain_path(*k)),
+            _ => self.path(n),
+        }
+    }
+
     fn type_name(&self, n: Node) -> String {
         match n.kind() {
             "type_annotation" | "parenthesized_type" | "readonly_type" => named_kids(n).last().map(|k| self.type_name(*k)).unwrap_or_default(),
@@ -222,9 +235,10 @@ impl<'s> Ctx<'s> {
             }
             "call_expression" => {
                 let f = n.child_by_field_name("function")?;
-                let callee = self.path(f)?;
+                let callee = self.chain_path(f)?;
                 if callee == "inject" {
                     let arg = n.child_by_field_name("arguments").and_then(|a| named_kids(a).into_iter().next())?;
+                    let arg = if arg.kind() == "instantiation_expression" { named_kids(arg).into_iter().next()? } else { arg };
                     return self.path(arg).map(TypeExpr::Named);
                 }
                 Some(TypeExpr::CallOf(callee))
@@ -232,7 +246,7 @@ impl<'s> Ctx<'s> {
             "await_expression" => named_kids(n).first().and_then(|k| self.infer(*k)).map(|t| TypeExpr::Await(Box::new(t))),
             "as_expression" | "satisfies_expression" => named_kids(n).last().map(|t| TypeExpr::Named(self.type_name(*t))),
             "non_null_expression" | "parenthesized_expression" => named_kids(n).first().and_then(|k| self.infer(*k)),
-            "identifier" | "member_expression" => self.path(n).map(TypeExpr::Path),
+            "identifier" | "member_expression" => self.chain_path(n).map(TypeExpr::Path),
             "string" | "template_string" => Some(TypeExpr::Named("string".into())),
             "number" => Some(TypeExpr::Named("number".into())),
             "true" | "false" => Some(TypeExpr::Named("boolean".into())),
@@ -343,7 +357,11 @@ impl<'s> Ctx<'s> {
                 }
                 "variable_declarator" => {
                     if let Some(name) = n.child_by_field_name("name").filter(|x| x.kind() == "identifier") {
-                        let ty = n.child_by_field_name("type").map(|t| TypeExpr::Named(self.type_name(t))).or_else(|| n.child_by_field_name("value").and_then(|v| self.infer(v)));
+                        let value = n.child_by_field_name("value");
+                        let ty = match value {
+                            Some(v) if is_function(v) => Some(TypeExpr::Named("Function".into())),
+                            _ => n.child_by_field_name("type").map(|t| TypeExpr::Named(self.type_name(t))).or_else(|| value.and_then(|v| self.infer(v))),
+                        };
                         if let Some(ty) = ty {
                             f.locals.push((self.text(name).to_string(), ty));
                         }
@@ -390,7 +408,7 @@ impl<'s> Ctx<'s> {
             "identifier" => (None, self.text(func).to_string()),
             "member_expression" => {
                 let Some(prop) = func.child_by_field_name("property") else { return };
-                let recv = func.child_by_field_name("object").and_then(|o| self.path(o)).unwrap_or_else(|| CHAIN.to_string());
+                let recv = func.child_by_field_name("object").and_then(|o| self.chain_path(o)).unwrap_or_else(|| CHAIN.to_string());
                 (Some(recv), self.text(prop).to_string())
             }
             _ => return,

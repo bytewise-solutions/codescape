@@ -680,11 +680,40 @@ impl<'a> Resolver<'a> {
 
     fn resolve_value(&self, ctx: Ctx, path: &str) -> Option<Val> {
         let mut segs = path.split('.');
-        let mut cur = self.head_value(ctx, segs.next()?)?;
+        let first = segs.next()?;
+        let mut cur = match first.strip_suffix("()") {
+            Some(name) => self.call_result(ctx, name, false)?,
+            None => self.head_value(ctx, first)?,
+        };
         for seg in segs {
-            cur = self.member(cur, seg)?;
+            cur = match seg.strip_suffix("()") {
+                Some(name) => self.call_member(cur, name, false)?,
+                None => self.member(cur, seg)?,
+            };
         }
         Some(cur)
+    }
+
+    fn call_member(&self, v: Val, m: &str, awaited: bool) -> Option<Val> {
+        match v {
+            Val::Inst(TypeRef::Project(t)) | Val::Static(t) => match self.lookup_method(t, m) {
+                Some((owner, _)) => {
+                    let ret = self.types[owner].returns.get(m)?;
+                    self.resolve_type(self.types[owner].file, ret, awaited).map(Val::Inst)
+                }
+                None => match self.field_type(t, m)? {
+                    Val::Inst(TypeRef::External(s)) => Some(Val::Inst(TypeRef::External(format!("{s}()")))),
+                    _ => None,
+                },
+            },
+            Val::Inst(TypeRef::External(s)) => Some(Val::Inst(TypeRef::External(format!("{s}.{m}()")))),
+            Val::Ns(f) => match self.symbol(f, m, 0)? {
+                Sym::Func(f, n) => self.func_ret(f, &n, awaited),
+                Sym::External(s) => Some(Val::Inst(TypeRef::External(format!("{s}()")))),
+                _ => None,
+            },
+            Val::Func(_) => None,
+        }
     }
 
     fn member(&self, v: Val, seg: &str) -> Option<Val> {
@@ -753,20 +782,8 @@ impl<'a> Resolver<'a> {
                 _ => None,
             };
         };
-        match self.resolve_value(ctx, recv)? {
-            Val::Inst(TypeRef::Project(t)) | Val::Static(t) => {
-                let (owner, _) = self.lookup_method(t, m)?;
-                let ret = self.types[owner].returns.get(m)?;
-                self.resolve_type(self.types[owner].file, ret, awaited).map(Val::Inst)
-            }
-            Val::Inst(TypeRef::External(s)) => Some(Val::Inst(TypeRef::External(format!("{s}.{m}()")))),
-            Val::Ns(f) => match self.symbol(f, m, 0)? {
-                Sym::Func(f, n) => self.func_ret(f, &n, awaited),
-                Sym::External(s) => Some(Val::Inst(TypeRef::External(format!("{s}()")))),
-                _ => None,
-            },
-            Val::Func(_) => None,
-        }
+        let v = self.resolve_value(ctx, recv)?;
+        self.call_member(v, m, awaited)
     }
 
     fn external_node(&mut self, name: &str, lang: Lang) -> NodeId {
@@ -1034,8 +1051,14 @@ impl<'a> Resolver<'a> {
                         }
                         self.stats.resolved += 1;
                     }
-                    None if self.has_external_super(t) => self.stats.resolved += 1,
-                    None => self.stats.unresolved += 1,
+                    None => match self.field_type(t, &call.method) {
+                        Some(Val::Inst(TypeRef::External(s))) => {
+                            cf.receiver_type = Some(s);
+                            self.stats.resolved += 1;
+                        }
+                        _ if self.has_external_super(t) => self.stats.resolved += 1,
+                        _ => self.stats.unresolved += 1,
+                    },
                 }
             }
             Some(Val::Inst(TypeRef::External(s))) => {

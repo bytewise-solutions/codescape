@@ -102,7 +102,7 @@ bootstrapApplication(AppComponent, appConfig).catch((err) => console.error(err))
     assert_eq!(arrow.returns.as_deref(), Some("Promise<Bar>"));
     assert_eq!(arrow.locals, [("y".to_string(), TypeExpr::Await(Box::new(TypeExpr::CallOf("x.load".into()))))]);
     let top: Vec<(Option<&str>, &str)> = f.top.calls.iter().map(|c| (c.receiver.as_deref(), c.method.as_str())).collect();
-    assert_eq!(top, [(Some("<chain>"), "catch"), (None, "bootstrapApplication"), (Some("console"), "error")]);
+    assert_eq!(top, [(Some("bootstrapApplication()"), "catch"), (None, "bootstrapApplication"), (Some("console"), "error")]);
     assert_eq!(f.top.calls[1].ident_args, [Some("AppComponent".to_string()), Some("appConfig".to_string())]);
     assert!(f.vars.contains(&("notFn".to_string(), TypeExpr::Named("number".into()))));
 }
@@ -153,6 +153,19 @@ fn javascript_classes_commonjs_exports_and_dynamic_imports() {
     let fns: Vec<&str> = f.funcs.iter().map(|x| x.name.as_str()).collect();
     assert_eq!(fns, ["start", "stop"]);
     assert!(f.imports.iter().any(|i| i.spec == "express" && i.default.as_deref() == Some("express")));
+}
+
+#[test]
+fn chained_receivers_keep_the_call_path() {
+    let f = ts("class A {\n  ref = inject(MatDialogRef<A>);\n  run() {\n    this.http.get(url).pipe(map(toX)).subscribe();\n    (a || b).go();\n    const local = (x: number) => x;\n    local(1);\n  }\n}\n");
+    let t = ty(&f, "A");
+    assert!(t.fields.contains(&("ref".to_string(), TypeExpr::Named("MatDialogRef".into()))));
+    let run = method(t, "run");
+    let recv = |m: &str| run.calls.iter().find(|c| c.method == m).and_then(|c| c.receiver.clone());
+    assert_eq!(recv("subscribe").as_deref(), Some("this.http.get().pipe()"));
+    assert_eq!(recv("pipe").as_deref(), Some("this.http.get()"));
+    assert_eq!(recv("go").as_deref(), Some(CHAIN));
+    assert!(run.locals.contains(&("local".to_string(), TypeExpr::Named("Function".into()))));
 }
 
 #[test]

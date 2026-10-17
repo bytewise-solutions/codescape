@@ -108,6 +108,10 @@ fn calls_through_constructor_properties_inject_fields_and_locals() {
     let rename = at(&r.b, &[USERS[0], USERS[1], "User", "rename"]);
     assert!(edge(&r.b, refresh, rename, EdgeKind::Calls).is_some(), "const user = this.svc.find() is typed by find's return type");
     assert!(edge(&r.b, find, rename, EdgeKind::Calls).is_some(), "const u = new User()");
+    let touch = at(&r.b, &[USERS[0], USERS[1], "User", "touch"]);
+    assert!(edge(&r.b, refresh, touch, EdgeKind::Calls).is_some(), "this.svc.find().touch() follows the chain");
+    let count = file(&r, "user-list.component.ts").calls.iter().find(|c| c.method == "count").unwrap();
+    assert_eq!(count.receiver_type.as_deref(), Some("@angular/core.signal()"), "calling a signal field");
     assert!(edge(&r.b, find, at(&r.b, &users("User")), EdgeKind::Instantiates).is_some());
     let base = at(&r.b, &[USERS[0], USERS[1], "BaseService", "base"]);
     assert!(edge(&r.b, load, base, EdgeKind::Calls).is_some(), "this.base() through the superclass");
