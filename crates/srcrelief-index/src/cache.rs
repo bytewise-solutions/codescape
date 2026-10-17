@@ -29,8 +29,11 @@ pub fn index_path(project_dir: &Path, cfg: &ProjectConfig) -> PathBuf {
 
 fn is_input(p: &Path) -> bool {
     let name = p.file_name().and_then(|n| n.to_str()).unwrap_or("");
-    matches!(p.extension().and_then(|e| e.to_str()), Some("java" | "go"))
-        || matches!(name, "settings.gradle" | "settings.gradle.kts" | "build.gradle" | "build.gradle.kts" | "go.mod" | "go.work")
+    matches!(p.extension().and_then(|e| e.to_str()), Some("java" | "go" | "ts" | "tsx" | "mts" | "cts" | "js" | "jsx" | "mjs" | "cjs" | "rs"))
+        || matches!(
+            name,
+            "settings.gradle" | "settings.gradle.kts" | "build.gradle" | "build.gradle.kts" | "go.mod" | "go.work" | "package.json" | "tsconfig.json" | "pnpm-workspace.yaml" | "Cargo.toml"
+        )
 }
 
 pub fn inputs_fingerprint(project_dir: &Path, excludes: &GlobSet) -> String {

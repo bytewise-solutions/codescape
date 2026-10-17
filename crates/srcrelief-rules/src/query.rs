@@ -7,6 +7,9 @@ fn language(lang: Lang) -> Option<Language> {
     match lang {
         Lang::Java => Some(tree_sitter_java::LANGUAGE.into()),
         Lang::Go => Some(tree_sitter_go::LANGUAGE.into()),
+        Lang::TypeScript => Some(tree_sitter_typescript::LANGUAGE_TSX.into()),
+        Lang::JavaScript => Some(tree_sitter_javascript::LANGUAGE.into()),
+        Lang::Rust => Some(tree_sitter_rust::LANGUAGE.into()),
         Lang::None => None,
     }
 }

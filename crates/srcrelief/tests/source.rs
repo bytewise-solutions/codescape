@@ -69,3 +69,17 @@ fn the_scrollbar_thumb_shows_the_visible_share_and_position() {
     assert_eq!(scroll_at(400.0, 200, 50, 400.0), max_scroll(200, 50));
     assert!((scroll_at(200.0, 200, 50, 400.0) - max_scroll(200, 50) / 2.0).abs() < 0.01, "the thumb centre follows the pointer");
 }
+
+#[test]
+fn rust_and_typescript_keywords_highlight_and_lifetimes_are_not_strings() {
+    let rs = highlight(&["pub fn get<'a>(s: &'a str) -> Option<&'a str> { let c = 'x'; None }"], Lang::Rust);
+    let kinds: Vec<(&str, Token)> = rs[0].iter().map(|(t, k)| (t.as_str(), *k)).collect();
+    assert!(kinds.contains(&("pub", Token::Keyword)) && kinds.contains(&("let", Token::Keyword)));
+    assert!(kinds.contains(&("'x'", Token::String)));
+    assert!(kinds.iter().all(|(t, k)| *k != Token::String || *t == "'x'"), "lifetimes stay text: {kinds:?}");
+    let ts = highlight(&["export async function load(id: string): Promise<void> { const x = `a${id}`; }"], Lang::TypeScript);
+    let kinds: Vec<(&str, Token)> = ts[0].iter().map(|(t, k)| (t.as_str(), *k)).collect();
+    for k in ["export", "async", "function", "const", "string", "void"] {
+        assert!(kinds.contains(&(k, Token::Keyword)), "{k} in {kinds:?}");
+    }
+}

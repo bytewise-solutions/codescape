@@ -13,12 +13,17 @@ srcrelief-facts = { path = "crates/srcrelief-facts" }
 srcrelief-build = { path = "crates/srcrelief-build" }
 srcrelief-java = { path = "crates/srcrelief-java" }
 srcrelief-go = { path = "crates/srcrelief-go" }
+srcrelief-ts = { path = "crates/srcrelief-ts" }
+srcrelief-rust = { path = "crates/srcrelief-rust" }
 srcrelief-rules = { path = "crates/srcrelief-rules" }
 srcrelief-index = { path = "crates/srcrelief-index" }
 srcrelief-layout = { path = "crates/srcrelief-layout" }
 tree-sitter = "0.27.1"
 tree-sitter-java = "0.23.5"
 tree-sitter-go = "0.25.0"
+tree-sitter-typescript = "0.23.2"
+tree-sitter-javascript = "0.25.0"
+tree-sitter-rust = "0.24.2"
 streaming-iterator = "0.1.9"
 rkyv = "0.8.18"
 memmap2 = "0.9.11"

@@ -1,5 +1,7 @@
+mod cargo;
 mod gomod;
 mod gradle;
+mod npm;
 mod walk;
 
 pub use gomod::{GoMod, parse_go_mod, parse_go_work};
@@ -16,6 +18,8 @@ use std::path::{Path, PathBuf};
 pub enum BuildKind {
     Gradle,
     GoMod,
+    Npm,
+    Cargo,
     Dirs,
 }
 
@@ -72,6 +76,8 @@ pub fn discover(root: &Path, excludes: &GlobSet) -> Result<Discovery> {
         discover_gradle(&root, build, &mut d);
     }
     discover_go(&root, &markers, &mut d);
+    npm::discover_npm(&root, &markers, &mut d);
+    cargo::discover_cargo(&root, &markers, &mut d);
 
     let claimed: Vec<PathBuf> = d.modules.iter().map(|m| m.dir.clone()).chain(gradle_roots.iter().cloned()).collect();
     let mut skipped_dirs: Vec<PathBuf> = Vec::new();

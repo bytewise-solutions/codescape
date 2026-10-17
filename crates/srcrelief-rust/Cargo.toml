@@ -1,0 +1,22 @@
+[package]
+name = "srcrelief-rust"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+autotests = false
+
+[dependencies]
+srcrelief-format.workspace = true
+srcrelief-facts.workspace = true
+srcrelief-build.workspace = true
+tree-sitter.workspace = true
+tree-sitter-rust.workspace = true
+rayon.workspace = true
+globset.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true
+
+[[test]]
+name = "all"
+path = "tests/all.rs"

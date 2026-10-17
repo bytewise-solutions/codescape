@@ -2770,6 +2770,8 @@ dependencies = [
  "srcrelief-go",
  "srcrelief-java",
  "srcrelief-rules",
+ "srcrelief-rust",
+ "srcrelief-ts",
  "tempfile",
  "toml",
  "toml_edit",
@@ -2817,6 +2819,23 @@ dependencies = [
  "tree-sitter",
  "tree-sitter-go",
  "tree-sitter-java",
+ "tree-sitter-javascript",
+ "tree-sitter-rust",
+ "tree-sitter-typescript",
+]
+
+[[package]]
+name = "srcrelief-rust"
+version = "0.1.0"
+dependencies = [
+ "globset",
+ "rayon",
+ "srcrelief-build",
+ "srcrelief-facts",
+ "srcrelief-format",
+ "tempfile",
+ "tree-sitter",
+ "tree-sitter-rust",
 ]
 
 [[package]]
@@ -2825,6 +2844,21 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "clap",
+]
+
+[[package]]
+name = "srcrelief-ts"
+version = "0.1.0"
+dependencies = [
+ "globset",
+ "rayon",
+ "srcrelief-build",
+ "srcrelief-facts",
+ "srcrelief-format",
+ "tempfile",
+ "tree-sitter",
+ "tree-sitter-javascript",
+ "tree-sitter-typescript",
 ]
 
 [[package]]
@@ -3062,10 +3096,40 @@ dependencies = [
 ]
 
 [[package]]
+name = "tree-sitter-javascript"
+version = "0.25.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "68204f2abc0627a90bdf06e605f5c470aa26fdcb2081ea553a04bdad756693f5"
+dependencies = [
+ "cc",
+ "tree-sitter-language",
+]
+
+[[package]]
 name = "tree-sitter-language"
 version = "0.1.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d0af592be68c579aa78a16846bd19422978c3c52e438523d45ff5d1bff1f9d4a"
+
+[[package]]
+name = "tree-sitter-rust"
+version = "0.24.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "439e577dbe07423ec2582ac62c7531120dbfccfa6e5f92406f93dd271a120e45"
+dependencies = [
+ "cc",
+ "tree-sitter-language",
+]
+
+[[package]]
+name = "tree-sitter-typescript"
+version = "0.23.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "6c5f76ed8d947a75cc446d5fccd8b602ebf0cde64ccf2ffa434d873d7a575eff"
+dependencies = [
+ "cc",
+ "tree-sitter-language",
+]
 
 [[package]]
 name = "tree_magic_mini"

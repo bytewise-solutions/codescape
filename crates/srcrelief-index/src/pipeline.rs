@@ -57,6 +57,8 @@ pub fn index_project(dir: &Path, cfg: &ProjectConfig, progress: &dyn Fn(Progress
     let mut stats = ExtractStats::default();
     stats.add(srcrelief_java::extract_java(&d, &module_nodes, &excludes, &mut b, &mut facts));
     stats.add(srcrelief_go::extract_go(&d, &module_nodes, &excludes, &mut b, &mut facts));
+    stats.add(srcrelief_ts::extract_ts(&d, &module_nodes, &excludes, &mut b, &mut facts));
+    stats.add(srcrelief_rust::extract_rust(&d, &module_nodes, &excludes, &mut b, &mut facts));
     progress(Progress::Rules);
     let packs = project_packs(&dir, cfg)?;
     let root = d.root.clone();

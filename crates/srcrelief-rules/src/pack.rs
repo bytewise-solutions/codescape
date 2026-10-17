@@ -14,6 +14,10 @@ const BUILTINS: &[(&str, &str)] = &[
     ("fiber", include_str!("../../../rules/fiber/pack.toml")),
     ("rabbitmq-amqp091", include_str!("../../../rules/rabbitmq-amqp091/pack.toml")),
     ("google-wire", include_str!("../../../rules/google-wire/pack.toml")),
+    ("ts-core", include_str!("../../../rules/ts-core/pack.toml")),
+    ("angular", include_str!("../../../rules/angular/pack.toml")),
+    ("express", include_str!("../../../rules/express/pack.toml")),
+    ("rust-core", include_str!("../../../rules/rust-core/pack.toml")),
     ("layers", include_str!("../../../rules/layers/pack.toml")),
     ("significance", include_str!("../../../rules/significance/pack.toml")),
     ("default-visuals", include_str!("../../../rules/default-visuals/pack.toml")),
@@ -363,6 +367,9 @@ fn parse_lang(s: &str) -> Result<Lang> {
     match s {
         "java" => Ok(Lang::Java),
         "go" => Ok(Lang::Go),
+        "typescript" => Ok(Lang::TypeScript),
+        "javascript" => Ok(Lang::JavaScript),
+        "rust" => Ok(Lang::Rust),
         other => bail!("unknown language `{other}`"),
     }
 }

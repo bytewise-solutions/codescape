@@ -22,6 +22,23 @@ const JAVA_WORDS: &[&str] = &[
     "volatile", "while", "null", "true", "false", "record", "yield",
 ];
 
+const TS_WORDS: &[&str] = &[
+    "abstract", "as", "async", "await", "break", "case", "catch", "class", "const", "constructor", "continue", "declare", "default",
+    "delete", "do", "else", "enum", "export", "extends", "false", "finally", "for", "from", "function", "get", "if", "implements",
+    "import", "in", "instanceof", "interface", "let", "namespace", "new", "null", "of", "private", "protected", "public", "readonly",
+    "return", "set", "static", "super", "switch", "this", "throw", "true", "try", "type", "typeof", "undefined", "var", "void", "while",
+    "yield", "string", "number", "boolean", "any", "unknown", "never", "object",
+];
+
+const RUST_WORDS: &[&str] = &[
+    "as", "async", "await", "break", "const", "continue", "crate", "dyn", "else", "enum", "extern", "false", "fn", "for", "if", "impl",
+    "in", "let", "loop", "match", "mod", "move", "mut", "pub", "ref", "return", "self", "Self", "static", "struct", "super", "trait",
+    "true", "type", "unsafe", "use", "where", "while", "bool", "char", "str", "u8", "u16", "u32", "u64", "usize", "i8", "i16", "i32",
+    "i64", "isize", "f32", "f64", "Option", "Result", "Some", "None", "Ok", "Err", "Vec", "String", "Box",
+];
+
+const CHAR_LITERAL_MAX: usize = 4;
+
 pub struct SourceCache {
     root: PathBuf,
     files: HashMap<String, Option<Arc<Vec<String>>>>,
@@ -59,7 +76,12 @@ pub enum Token {
 }
 
 pub fn highlight(lines: &[&str], lang: Lang) -> Vec<Vec<(String, Token)>> {
-    let words = if lang == Lang::Java { JAVA_WORDS } else { GO_WORDS };
+    let words = match lang {
+        Lang::Java => JAVA_WORDS,
+        Lang::TypeScript | Lang::JavaScript => TS_WORDS,
+        Lang::Rust => RUST_WORDS,
+        Lang::Go | Lang::None => GO_WORDS,
+    };
     let mut in_block = false;
     lines.iter().map(|line| highlight_line(line, words, &mut in_block)).collect()
 }
@@ -102,6 +124,11 @@ fn highlight_line(line: &str, words: &[&str], in_block: &mut bool) -> Vec<(Strin
                     break;
                 }
             }
+            continue;
+        }
+        if c == '\'' && !rest.char_indices().skip(1).take(CHAR_LITERAL_MAX).any(|(i, ch)| ch == '\'' && !rest[..i].ends_with('\\')) {
+            push("'", Token::Text);
+            rest = &rest[1..];
             continue;
         }
         if matches!(c, '"' | '\'' | '`') {

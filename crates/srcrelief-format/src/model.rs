@@ -24,7 +24,7 @@ macro_rules! u8_enum {
 
 u8_enum!(NodeKind { Project, Module, Package, Type, Member, External });
 u8_enum!(SubKind { None, Class, Interface, Enum, Record, Annotation, Struct, NamedType, Method, Function, Field, Constructor });
-u8_enum!(Lang { None, Java, Go });
+u8_enum!(Lang { None, Java, Go, TypeScript, JavaScript, Rust });
 u8_enum!(EdgeKind { DependsOn, Calls, Inherits, Implements, Instantiates, FrameworkDispatch });
 u8_enum!(Scope { Main, Test });
 u8_enum!(Confidence { Resolved, Guessed });
