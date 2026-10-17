@@ -502,7 +502,7 @@ fn unknown_receivers_guess_only_into_imported_crates() {
     let module_nodes: Vec<NodeId> = d.modules.iter().map(|m| b.add_node(b.root(), NodeKind::Module, SubKind::None, &m.name, m.lang)).collect();
     let mut facts = ProjectFacts::default();
     let stats = extract_rust(&d, &module_nodes, &default_excludes(), &mut b, &mut facts);
-    assert_eq!((stats.resolved, stats.guessed, stats.unresolved), (2, 1, 2));
+    assert_eq!((stats.resolved, stats.guessed, stats.unresolved), (1, 1, 3), "a method nothing defines is not resolved by elimination");
     let target = at(&b, &["a", "(lib)", "Thing", "unique_name"]);
     let guessed: Vec<&str> = b.edges().iter().filter(|e| e.to == target).map(|e| b.name(e.from)).collect();
     assert_eq!(guessed, ["k"]);

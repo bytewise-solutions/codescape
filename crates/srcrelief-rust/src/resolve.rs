@@ -868,7 +868,6 @@ impl<'a> Resolver<'a> {
         let all: Vec<(NodeId, usize)> = self.method_names.get(name).map(|v| v.iter().filter(|(_, m)| self.visible[cx.module].contains(m)).copied().collect()).unwrap_or_default();
         let imported: Vec<NodeId> = all.iter().filter(|(_, m)| cx.imported.contains(m)).map(|(n, _)| *n).collect();
         match (&all[..], &imported[..]) {
-            ([], _) => self.stats.resolved += 1,
             (_, [target]) if guess && !STD_METHODS.contains(&name) => {
                 let target = *target;
                 self.call_edge(cx, target, Confidence::Guessed);
