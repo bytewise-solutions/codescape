@@ -46,7 +46,7 @@ pub fn items(g: &ArchivedGraph, r: &Review) -> Vec<ReviewItem> {
                 if own && leaf {
                     let mut detail = format!("+{} −{}", c.added, c.removed);
                     if let Some((before, after)) = c.complexity {
-                        detail.push_str(&format!(" · complexity {before} → {after}"));
+                        detail.push_str(&format!(" · complexity {before} to {after}"));
                     }
                     out.push(item(ItemKind::Changed, detail));
                 }

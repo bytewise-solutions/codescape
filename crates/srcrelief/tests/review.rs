@@ -39,7 +39,7 @@ fn the_change_list_names_each_change_once_grouped_by_package() {
         [("proj / cart", "Cart.Add", ItemKind::Changed), ("proj / cart", "Cart.Clear", ItemKind::Removed), ("proj / cart", "Coupon", ItemKind::New)],
         "a new type is listed once, not with each of its methods; its unchanged parent type is not listed"
     );
-    assert_eq!(items[0].detail, "+3 −0 · complexity 1 → 2");
+    assert_eq!(items[0].detail, "+3 −0 · complexity 1 to 2");
     assert!(items[1].node.is_none() && items[1].parent.is_some());
 }
 

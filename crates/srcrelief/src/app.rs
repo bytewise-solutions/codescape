@@ -424,7 +424,7 @@ fn row_delta(c: &Change) -> Option<(String, Color32)> {
         Status::Changed => {
             let mut d = format!("+{} −{}", c.added, c.removed);
             if let Some((before, after)) = c.complexity.filter(|(b, a)| a > b) {
-                d.push_str(&format!(" · {before}→{after}"));
+                d.push_str(&format!(" · complexity {before} to {after}"));
             }
             Some((d, style::EDGE_SIDEWAYS))
         }
@@ -1007,7 +1007,7 @@ impl Project {
                     ui.add_space(6.0);
                     ui.label(egui::RichText::new(format!("NEW DEPENDENCIES ({})", rv.review.new_arrows.len())).small().color(style::ACCENT));
                     for &(a, b) in &rv.review.new_arrows {
-                        if ui.selectable_label(false, egui::RichText::new(format!("{} → {}", g.name(a), g.name(b))).color(style::REACH)).on_hover_text(format!("{} → {}", full_path(g, a), full_path(g, b))).clicked() {
+                        if ui.selectable_label(false, egui::RichText::new(format!("{} uses {}", g.name(a), g.name(b))).color(style::REACH)).on_hover_text(format!("{} uses {}", full_path(g, a), full_path(g, b))).clicked() {
                             fly = Some(a);
                         }
                     }
@@ -1015,7 +1015,7 @@ impl Project {
                 if !rv.review.removed_arrows.is_empty() {
                     ui.label(egui::RichText::new(format!("REMOVED DEPENDENCIES ({})", rv.review.removed_arrows.len())).small().color(style::MUTED));
                     for (a, b) in &rv.review.removed_arrows {
-                        ui.label(egui::RichText::new(format!("{} → {}", a.rsplit('/').next().unwrap_or(a), b.rsplit('/').next().unwrap_or(b))).color(style::MUTED)).on_hover_text(format!("{a} → {b}"));
+                        ui.label(egui::RichText::new(format!("{} uses {}", a.rsplit('/').next().unwrap_or(a), b.rsplit('/').next().unwrap_or(b))).color(style::MUTED)).on_hover_text(format!("{a} uses {b}"));
                     }
                 }
                 ui.add_space(12.0);
@@ -1522,7 +1522,8 @@ impl Project {
         if let Some((text, color)) = change.and_then(|c| review_badge(c, b.open)).filter(|_| b.rect.w > 60.0 && b.rect.h > 22.0) {
             let galley = painter.layout_no_wrap(text, FontId::proportional(10.5), style::BG);
             let size = galley.size() + egui::vec2(10.0, 4.0);
-            let chip = egui::Rect::from_min_size(r.right_bottom() - size - egui::vec2(5.0, 5.0), size);
+            let card = !(b.rows.is_empty() && b.field_rows.is_empty());
+            let chip = if card { egui::Rect::from_min_size(r.left_top() + egui::vec2(5.0, 5.0), size) } else { egui::Rect::from_min_size(r.right_bottom() - size - egui::vec2(5.0, 5.0), size) };
             if chip.left() > r.left() {
                 painter.rect_filled(chip, 7.0, color);
                 painter.galley(chip.center() - galley.size() / 2.0, galley, style::BG);
@@ -1835,7 +1836,8 @@ impl Project {
                 clip.rect_filled(r, 0.0, style::ACCENT.gamma_multiply(if self.selected == Some(row.node) { 0.18 } else { 0.08 }));
             }
             let change = self.review.as_ref().map(|rv| rv.review.change(row.node));
-            let delta = change.and_then(row_delta);
+            let card_new = self.review.as_ref().is_some_and(|rv| rv.review.change(b.node).status == Status::New);
+            let delta = change.and_then(row_delta).map(|(d, c)| (if card_new { String::new() } else { d }, c));
             if let Some((_, c)) = &delta {
                 clip.rect_filled(r, 0.0, c.gamma_multiply(0.14));
             }

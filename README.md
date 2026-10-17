@@ -101,7 +101,7 @@ enough to read.
   in a git worktree under the cache folder and indexed there once; your checkout is never touched. Blocks are matched
   by their names: new ones are outlined green with `NEW`, changed ones amber with `+added −removed` lines, the rest
   dimmed. Open boxes add up what changed inside them (`2 new · 3 changed · 1 removed`), card rows are tinted with
-  their line counts and any complexity increase (`· 4→9`), and arrows the change introduced are drawn green. The left
+  their line counts and any complexity increase (`· complexity 4 to 9`), and arrows the change introduced are drawn green. The left
   panel lists every change grouped by package, then new and removed dependencies; click one to fly to it, or step
   through them with `N` / `P`. Renamed or moved blocks show as removed plus new.
 - **Constructors live inside their type.** A Go `func NewX(...) *X` is a row of `X`'s card, not a box of its own.
