@@ -102,8 +102,20 @@ enough to read.
   by their names: new ones are outlined green with `NEW`, changed ones amber with `+added −removed` lines, the rest
   dimmed. Open boxes add up what changed inside them (`2 new · 3 changed · 1 removed`), card rows are tinted with
   their line counts and any complexity increase (`· complexity 4 to 9`), and arrows the change introduced are drawn green. The left
-  panel lists every change grouped by package, then new and removed dependencies; click one to fly to it, or step
-  through them with `N` / `P`. Renamed or moved blocks show as removed plus new.
+  panel lists every change, riskiest first, then new and removed dependencies (upward ones flagged); click one to fly
+  to it, or step through them with `N` / `P`. Each change says why it may deserve a look: `complexity 8 to 14`,
+  `used by 12` (many callers), `signature` (a public block's first line changed), `made public`, `unused` (a new
+  block nothing uses) and `untested` (no test reaches it). **By package** groups the list instead.
+  Zoom into a changed file to see its added lines in green and red marks where lines were removed; hover a mark to
+  read them. Renamed or moved blocks show as removed plus new.
+- **Reviewed marks.** Tick a change (or press `R`) once you have looked at it; `34 / 91 reviewed` tracks progress and
+  **Hide reviewed** leaves the rest. A mark remembers the block's text: when the agent changes it again, the change
+  comes back as `changed since review`. Marks are kept per project in the cache folder.
+- **Unused code.** **View ▸ Unused code** marks blocks nothing in main code calls, creates or names outside their
+  own lines, and lists them on the left: `unused`, `no caller in the project` (public, so possibly API used by
+  others) or `only tests use it`. Entry points, tests, generated code, constructors and methods implementing a
+  supertype's are never listed. Code reached by reflection or a framework can still show up, so read it as a hint.
+  `srcrelief-index <dir> --unused` prints the same list.
 - **Constructors live inside their type.** A Go `func NewX(...) *X` is a row of `X`'s card, not a box of its own.
 - **Dependency injection is set aside.** Code recognised as wiring (Google Wire's generated injectors and provider
   sets, Dagger components/modules) is hidden with its arrows, so it never changes the layering. Tick **View ▸ Wiring**

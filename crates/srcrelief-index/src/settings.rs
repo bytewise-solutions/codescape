@@ -41,12 +41,13 @@ pub enum View {
     Errors,
     Wiring,
     Complexity,
+    Unused,
     QuietArrows,
     Legend,
 }
 
 impl View {
-    pub const ALL: [View; 8] = [View::Tests, View::TestDeps, View::Details, View::Errors, View::Wiring, View::Complexity, View::QuietArrows, View::Legend];
+    pub const ALL: [View; 9] = [View::Tests, View::TestDeps, View::Details, View::Errors, View::Wiring, View::Complexity, View::Unused, View::QuietArrows, View::Legend];
 
     pub fn default_value(self) -> bool {
         matches!(self, View::Complexity | View::QuietArrows | View::Legend)
@@ -60,6 +61,7 @@ impl View {
             View::Errors => "Errors",
             View::Wiring => "Wiring",
             View::Complexity => "Complexity hints",
+            View::Unused => "Unused code",
             View::QuietArrows => "Quiet arrows",
             View::Legend => "Legend",
         }
@@ -152,6 +154,8 @@ struct ViewFile {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     complexity: Option<bool>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    unused: Option<bool>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     quiet_arrows: Option<bool>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     legend: Option<bool>,
@@ -212,6 +216,7 @@ impl ViewFile {
             View::Errors => &mut self.errors,
             View::Wiring => &mut self.wiring,
             View::Complexity => &mut self.complexity,
+            View::Unused => &mut self.unused,
             View::QuietArrows => &mut self.quiet_arrows,
             View::Legend => &mut self.legend,
         }

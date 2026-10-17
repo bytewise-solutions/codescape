@@ -1,5 +1,6 @@
 use srcrelief::review_view::*;
 use srcrelief_format::*;
+use srcrelief_index::analysis::analyse;
 use srcrelief_index::review::compare;
 use srcrelief_index::{ProjectConfig, index_project};
 
@@ -32,7 +33,7 @@ fn the_change_list_names_each_change_once_grouped_by_package() {
     let (b, t) = (side(&[("cart/cart.go", BASE)]), side(&[("cart/cart.go", TARGET)]));
     let tg = t.file.graph();
     let r = compare(b.file.graph(), &b.dir, tg, &t.dir);
-    let items = items(tg, &r);
+    let items = items(tg, &r, &analyse(tg, &t.dir));
     let shown: Vec<(&str, &str, ItemKind)> = items.iter().map(|i| (i.group.as_str(), i.label.as_str(), i.kind)).collect();
     assert_eq!(
         shown,
@@ -50,4 +51,38 @@ fn n_and_p_step_through_the_changes_and_wrap() {
     assert_eq!(step(3, Some(2), true), Some(0));
     assert_eq!(step(3, Some(0), false), Some(2));
     assert_eq!(step(0, None, true), None);
+}
+
+const TANGLED: &str = "package cart\n\ntype Cart struct{}\n\nfunc (c *Cart) Add(x int) int {\n\tif x > 1 {\n\t\tx++\n\t}\n\tif x > 2 {\n\t\tx++\n\t}\n\tif x > 3 {\n\t\tx++\n\t}\n\tif x > 4 {\n\t\tx++\n\t}\n\tif x > 5 || x < 0 {\n\t\tx++\n\t}\n\tif x > 6 && x < 99 {\n\t\tx++\n\t}\n\tfor x > 7 {\n\t\tx--\n\t}\n\treturn x\n}\n\ntype Coupon struct{}\n\nfunc (k *Coupon) Apply() {}\n";
+
+#[test]
+fn changes_are_ordered_by_risk_with_their_reasons() {
+    let (b, t) = (side(&[("cart/cart.go", BASE)]), side(&[("cart/cart.go", TANGLED)]));
+    let tg = t.file.graph();
+    let r = compare(b.file.graph(), &b.dir, tg, &t.dir);
+    let mut items = items(tg, &r, &analyse(tg, &t.dir));
+    by_risk(&mut items);
+    let shown: Vec<(&str, Vec<String>)> = items.iter().map(|i| (i.label.as_str(), i.risks.iter().map(Risk::label).collect())).collect();
+    assert_eq!(shown[0], ("Cart.Add", vec!["complexity 1 to 10".to_string()]));
+    assert_eq!(shown[1], ("Coupon", vec!["no caller in the project".to_string()]));
+    assert_eq!(shown[2], ("Cart.Clear", vec![]));
+}
+
+#[test]
+fn a_reviewed_mark_holds_until_the_block_changes_again() {
+    let b = side(&[("cart/cart.go", BASE)]);
+    let (t1, t2) = (side(&[("cart/cart.go", TARGET)]), side(&[("cart/cart.go", &TARGET.replace("x++", "x += 2"))]));
+    let list = |t: &Side| items(t.file.graph(), &compare(b.file.graph(), &b.dir, t.file.graph(), &t.dir), &analyse(t.file.graph(), &t.dir));
+    let (first, second) = (list(&t1), list(&t2));
+    let mut marks = ReviewMarks::default();
+    assert_eq!(marks.state(&first[0]), MarkState::Unseen);
+    for i in &first {
+        marks.toggle(i);
+    }
+    assert!(first.iter().all(|i| marks.state(i) == MarkState::Reviewed));
+    let path = b._tmp.path().join("p.marks");
+    marks.save(&path).unwrap();
+    let marks = ReviewMarks::load(&path);
+    let states: Vec<(&str, MarkState)> = second.iter().map(|i| (i.label.as_str(), marks.state(i))).collect();
+    assert_eq!(states, [("Cart.Add", MarkState::ChangedSince), ("Cart.Clear", MarkState::Reviewed), ("Coupon", MarkState::Reviewed)]);
 }

@@ -93,6 +93,7 @@ pub const CHEATSHEET: &[(&str, &[(&str, &str)])] = &[
         &[
             ("Review ▸ Compare with main", "see what this checkout changed since it left main"),
             ("N / P", "next / previous change"),
+            ("R", "mark the current change reviewed (again: unmark)"),
         ],
     ),
     (

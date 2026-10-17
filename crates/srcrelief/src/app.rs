@@ -6,7 +6,9 @@ use crate::search::{self, SearchIndex};
 use crate::shot::{Shot, ShotPlan, ShotStep};
 use crate::input::{CHEATSHEET, Nav, Step, interpret, nearest_in};
 use crate::inspector;
-use crate::review_view::{ItemKind, ReviewItem, items as review_items, step as review_step};
+use crate::review_view::{ItemKind, MarkState, ReviewItem, ReviewMarks, Risk, by_risk, items as review_items, step as review_step};
+use srcrelief_index::analysis::{Analysis, Usage, analyse};
+use std::sync::Arc;
 use srcrelief_index::review::{Change, Counts, Review, Status, compare, default_base, index_revision};
 use crate::source::{LINE_SPACING, SourceCache, Token, advance, file_font, highlight, hscroll_by, initial_scroll, merge_spans, scroll_at, scroll_by, thumb};
 use crate::settings_window::{self, SettingsForm};
@@ -311,6 +313,41 @@ struct ReviewState {
     items: Vec<ReviewItem>,
     cursor: Option<usize>,
     new_arrows: std::collections::HashSet<(NodeId, NodeId)>,
+    upward: std::collections::HashSet<(NodeId, NodeId)>,
+    marks: ReviewMarks,
+    marks_path: PathBuf,
+    states: HashMap<NodeId, MarkState>,
+    hide_reviewed: bool,
+    by_package: bool,
+}
+
+impl ReviewState {
+    fn visible(&self) -> Vec<usize> {
+        (0..self.items.len()).filter(|&i| !self.hide_reviewed || self.marks.state(&self.items[i]) != MarkState::Reviewed).collect()
+    }
+
+    fn reviewed(&self) -> usize {
+        self.items.iter().filter(|i| self.marks.state(i) == MarkState::Reviewed).count()
+    }
+
+    fn refresh(&mut self) {
+        self.states = self.items.iter().filter_map(|i| Some((i.node?, self.marks.state(i)))).collect();
+    }
+
+    fn reorder(&mut self) {
+        let current = self.cursor.map(|c| self.items[c].key.clone());
+        self.items.sort_by(|a, b| (&a.group, &a.label).cmp(&(&b.group, &b.label)));
+        if !self.by_package {
+            by_risk(&mut self.items);
+        }
+        self.cursor = current.and_then(|k| self.items.iter().position(|i| i.key == k));
+    }
+
+    fn toggle(&mut self, i: usize) -> Option<String> {
+        self.marks.toggle(&self.items[i]);
+        self.refresh();
+        self.marks.save(&self.marks_path).err().map(|e| format!("saving review marks: {e}"))
+    }
 }
 
 enum Action {
@@ -376,7 +413,9 @@ struct Project {
     scripted: bool,
     scroll_drag: Option<NodeId>,
     review: Option<ReviewState>,
-    review_job: Option<(String, Receiver<Result<(String, Review), String>>)>,
+    review_job: Option<(String, Receiver<Result<(String, Review, Analysis), String>>)>,
+    analysis: Option<Arc<Analysis>>,
+    analysis_job: Option<Receiver<Analysis>>,
     review_dialog: Option<String>,
     review_error: Option<String>,
     details_in: Vec<NodeId>,
@@ -415,6 +454,15 @@ fn review_badge(c: &Change, open: bool) -> Option<(String, Color32)> {
         Status::New => Some(("NEW".into(), style::REACH)),
         Status::Changed => Some((format!("+{} −{}", c.added, c.removed), style::EDGE_SIDEWAYS)),
         Status::Unchanged => None,
+    }
+}
+
+fn unused_short(u: Usage) -> &'static str {
+    match u {
+        Usage::Unused => "unused",
+        Usage::NoCallerInProject => "no caller",
+        Usage::OnlyTests => "tests only",
+        Usage::Used => "",
     }
 }
 
@@ -534,6 +582,8 @@ impl Project {
             scroll_drag: None,
             review: None,
             review_job: None,
+            analysis: None,
+            analysis_job: None,
             review_dialog: None,
             review_error: None,
             details_in: Vec::new(),
@@ -633,7 +683,7 @@ impl Project {
         let shown = rev.clone().unwrap_or_else(|| "main".into());
         let (tx, rx) = channel();
         std::thread::spawn(move || {
-            let result = (|| -> anyhow::Result<(String, Review)> {
+            let result = (|| -> anyhow::Result<(String, Review, Analysis)> {
                 let base_rev = match &rev {
                     Some(r) => r.clone(),
                     None => default_base(&dir)?,
@@ -641,7 +691,8 @@ impl Project {
                 let base = index_revision(&dir, &base_rev, &cfg, &cache, &|_| {})?;
                 let (bf, tf) = (ReliefFile::open(&base.index)?, ReliefFile::open(&target)?);
                 let review = compare(bf.graph(), &base.dir, tf.graph(), &dir);
-                Ok((format!("{} @ {}", rev.unwrap_or_else(|| "main".into()), &base.sha[..7]), review))
+                let analysis = analyse(tf.graph(), &dir);
+                Ok((format!("{} @ {}", rev.unwrap_or_else(|| "main".into()), &base.sha[..7]), review, analysis))
             })();
             let _ = tx.send(result.map_err(|e| format!("{e:#}")));
         });
@@ -652,10 +703,23 @@ impl Project {
     fn poll_review(&mut self, ctx: &egui::Context) {
         let Some((_, rx)) = &self.review_job else { return };
         match rx.try_recv() {
-            Ok(Ok((label, review))) => {
-                let items = review_items(self.file.graph(), &review);
+            Ok(Ok((label, review, analysis))) => {
+                let g = self.file.graph();
+                let items = review_items(g, &review, &analysis);
                 let new_arrows = review.new_arrows.iter().copied().collect();
-                self.review = Some(ReviewState { label, review, items, cursor: None, new_arrows });
+                let upward = review
+                    .new_arrows
+                    .iter()
+                    .copied()
+                    .filter(|&(a, b)| g.parent(a).is_some_and(|p| self.cache.get_or_compute(g, p).edges.iter().any(|e| e.a == a && e.b == b && e.dir == Direction::Up)))
+                    .collect();
+                let marks_path = srcrelief_index::cache_path(&self.dir).with_extension("marks");
+                let marks = ReviewMarks::load(&marks_path);
+                let mut rv = ReviewState { label, review, items, cursor: None, new_arrows, upward, marks, marks_path, states: HashMap::new(), hide_reviewed: false, by_package: false };
+                rv.reorder();
+                rv.refresh();
+                self.analysis = Some(Arc::new(analysis));
+                self.review = Some(rv);
                 self.review_job = None;
             }
             Ok(Err(e)) => {
@@ -664,6 +728,36 @@ impl Project {
             }
             Err(_) => ctx.request_repaint_after(std::time::Duration::from_millis(200)),
         }
+    }
+
+    fn poll_analysis(&mut self, ctx: &egui::Context) {
+        if self.analysis.is_some() || !self.settings.settings().view(View::Unused).value {
+            return;
+        }
+        let Some(rx) = &self.analysis_job else {
+            let (tx, rx) = channel();
+            let (dir, index) = (self.dir.clone(), self.index_path.clone());
+            std::thread::spawn(move || {
+                if let Ok(f) = ReliefFile::open(&index) {
+                    let _ = tx.send(analyse(f.graph(), &dir));
+                }
+            });
+            self.analysis_job = Some(rx);
+            return;
+        };
+        match rx.try_recv() {
+            Ok(a) => {
+                self.analysis = Some(Arc::new(a));
+                self.analysis_job = None;
+            }
+            Err(std::sync::mpsc::TryRecvError::Empty) => ctx.request_repaint_after(std::time::Duration::from_millis(100)),
+            Err(_) => self.analysis_job = None,
+        }
+    }
+
+    fn unused(&self, n: NodeId) -> Option<Usage> {
+        let a = self.analysis.as_ref().filter(|_| self.settings.settings().view(View::Unused).value)?;
+        a.usage.get(n as usize).copied().filter(|&u| u != Usage::Used)
     }
 
     fn goto_review_item(&mut self, i: usize) {
@@ -682,11 +776,19 @@ impl Project {
             self.shortcuts_open = true;
             return;
         }
-        if let Some(rv) = &self.review {
+        if let Some(rv) = &mut self.review {
             let forward = plain(Key::N);
             if forward || plain(Key::P) {
-                if let Some(i) = review_step(rv.items.len(), rv.cursor, forward) {
-                    self.goto_review_item(i);
+                let visible = rv.visible();
+                let at = rv.cursor.and_then(|c| visible.iter().position(|&v| v == c));
+                if let Some(i) = review_step(visible.len(), at, forward) {
+                    self.goto_review_item(visible[i]);
+                }
+                return;
+            }
+            if plain(Key::R) {
+                if let Some(c) = rv.cursor {
+                    self.review_error = rv.toggle(c);
                 }
                 return;
             }
@@ -814,6 +916,7 @@ impl Project {
     fn ui(&mut self, ui: &mut egui::Ui) -> Option<Action> {
         let mut action = None;
         self.poll_review(ui.ctx());
+        self.poll_analysis(ui.ctx());
         if let Some(text) = &mut self.review_dialog {
             let mut open = true;
             let mut go = None;
@@ -938,7 +1041,8 @@ impl Project {
             let mut exit = false;
             if let Some(rv) = &self.review {
                 let t = rv.review.totals();
-                ui.label(egui::RichText::new(format!("REVIEW vs {} · {} new · {} changed · {} removed", rv.label, t.new, t.changed, t.removed)).strong().color(style::ACCENT));
+                let removed = if t.removed > 0 { format!(" · {} removed", t.removed) } else { String::new() };
+                ui.label(egui::RichText::new(format!("REVIEW vs {} · {} new · {} changed{removed} · {} / {} reviewed", rv.label, t.new, t.changed, rv.reviewed(), rv.items.len())).strong().color(style::ACCENT));
                 exit = ui.link("exit").clicked();
                 ui.separator();
             }
@@ -976,40 +1080,91 @@ impl Project {
         let mut select: Option<usize> = None;
         let mut fly: Option<NodeId> = None;
         let mut review_pick: Option<usize> = None;
+        let mut review_toggle: Option<usize> = None;
+        let mut review_switches: Option<(bool, bool)> = None;
         egui::ScrollArea::vertical().show(ui, |ui| {
             let g = self.file.graph();
             if let Some(rv) = &self.review {
-                ui.label(egui::RichText::new(format!("CHANGES ({})  ·  N / P to step", rv.items.len())).small().color(style::ACCENT));
-                let mut groups: Vec<(&str, Vec<usize>)> = Vec::new();
-                for (i, item) in rv.items.iter().enumerate() {
-                    match groups.last_mut() {
-                        Some((g0, v)) if *g0 == item.group.as_str() => v.push(i),
-                        _ => groups.push((item.group.as_str(), vec![i])),
-                    }
+                let visible = rv.visible();
+                ui.label(egui::RichText::new(format!("CHANGES · {} / {} reviewed", rv.reviewed(), rv.items.len())).small().color(style::ACCENT))
+                    .on_hover_text("N / P: next / previous change · R: mark the current one reviewed");
+                let (mut hide, mut grouped) = (rv.hide_reviewed, rv.by_package);
+                ui.horizontal(|ui| {
+                    ui.checkbox(&mut hide, egui::RichText::new("Hide reviewed").small());
+                    ui.checkbox(&mut grouped, egui::RichText::new("By package").small()).on_hover_text("Off: riskiest first");
+                });
+                if (hide, grouped) != (rv.hide_reviewed, rv.by_package) {
+                    review_switches = Some((hide, grouped));
                 }
-                for (group, idx) in groups {
-                    egui::CollapsingHeader::new(format!("{group} ({})", idx.len())).id_salt(("review", group)).default_open(true).show(ui, |ui| {
-                        for i in idx {
-                            let item = &rv.items[i];
-                            let color = match item.kind {
-                                ItemKind::New => style::REACH,
-                                ItemKind::Changed => style::EDGE_SIDEWAYS,
-                                ItemKind::Removed => style::EDGE_UP,
-                            };
-                            let text = egui::RichText::new(format!("{}   {}", item.label, item.detail)).color(color);
-                            if ui.selectable_label(rv.cursor == Some(i), text).clicked() {
-                                review_pick = Some(i);
-                            }
+                let mut row = |ui: &mut egui::Ui, i: usize, with_group: bool| {
+                    let item = &rv.items[i];
+                    let state = rv.marks.state(item);
+                    let color = match (state, item.kind) {
+                        (MarkState::Reviewed, _) => style::MUTED,
+                        (_, ItemKind::New) => style::REACH,
+                        (_, ItemKind::Changed) => style::EDGE_SIDEWAYS,
+                        (_, ItemKind::Removed) => style::EDGE_UP,
+                    };
+                    ui.horizontal(|ui| {
+                        ui.spacing_mut().item_spacing.x = 2.0;
+                        let mut done = state == MarkState::Reviewed;
+                        if ui.checkbox(&mut done, "").on_hover_text("Reviewed (R)").changed() {
+                            review_toggle = Some(i);
+                        }
+                        let hover = if with_group { format!("{}\n{}", item.group, item.detail) } else { item.detail.clone() };
+                        if ui.selectable_label(rv.cursor == Some(i), egui::RichText::new(&item.label).color(color)).on_hover_text(hover).clicked() {
+                            review_pick = Some(i);
                         }
                     });
+                    ui.horizontal_wrapped(|ui| {
+                        ui.add_space(22.0);
+                        ui.spacing_mut().item_spacing.x = 6.0;
+                        let shown = if item.risks.iter().any(|r| matches!(r, Risk::Complexity(..))) { item.detail.split(" · ").next().unwrap_or("") } else { item.detail.as_str() };
+                        ui.label(egui::RichText::new(shown).small().color(style::MUTED));
+                        if state == MarkState::ChangedSince {
+                            ui.label(egui::RichText::new("changed since review").small().color(style::ACCENT));
+                        }
+                        for r in &item.risks {
+                            ui.label(egui::RichText::new(r.label()).small().color(if *r == Risk::Untested { style::MUTED } else { style::EDGE_SIDEWAYS }));
+                        }
+                    });
+                };
+                if rv.by_package {
+                    let mut groups: Vec<(&str, Vec<usize>)> = Vec::new();
+                    for &i in &visible {
+                        let item = &rv.items[i];
+                        match groups.last_mut() {
+                            Some((g0, v)) if *g0 == item.group.as_str() => v.push(i),
+                            _ => groups.push((item.group.as_str(), vec![i])),
+                        }
+                    }
+                    for (group, idx) in groups {
+                        egui::CollapsingHeader::new(format!("{group} ({})", idx.len())).id_salt(("review", group)).default_open(true).show(ui, |ui| {
+                            for i in idx {
+                                row(ui, i, false);
+                            }
+                        });
+                    }
+                } else {
+                    for &i in &visible {
+                        row(ui, i, true);
+                    }
                 }
                 if !rv.review.new_arrows.is_empty() {
                     ui.add_space(6.0);
                     ui.label(egui::RichText::new(format!("NEW DEPENDENCIES ({})", rv.review.new_arrows.len())).small().color(style::ACCENT));
-                    for &(a, b) in &rv.review.new_arrows {
-                        if ui.selectable_label(false, egui::RichText::new(format!("{} uses {}", g.name(a), g.name(b))).color(style::REACH)).on_hover_text(format!("{} uses {}", full_path(g, a), full_path(g, b))).clicked() {
-                            fly = Some(a);
-                        }
+                    let mut arrows = rv.review.new_arrows.clone();
+                    arrows.sort_by_key(|a| !rv.upward.contains(a));
+                    for (a, b) in arrows {
+                        let up = rv.upward.contains(&(a, b));
+                        ui.horizontal_wrapped(|ui| {
+                            if ui.selectable_label(false, egui::RichText::new(format!("{} uses {}", g.name(a), g.name(b))).color(style::REACH)).on_hover_text(format!("{} uses {}", full_path(g, a), full_path(g, b))).clicked() {
+                                fly = Some(a);
+                            }
+                            if up {
+                                ui.label(egui::RichText::new("upward dependency").small().color(style::EDGE_UP));
+                            }
+                        });
                     }
                 }
                 if !rv.review.removed_arrows.is_empty() {
@@ -1017,6 +1172,21 @@ impl Project {
                     for (a, b) in &rv.review.removed_arrows {
                         ui.label(egui::RichText::new(format!("{} uses {}", a.rsplit('/').next().unwrap_or(a), b.rsplit('/').next().unwrap_or(b))).color(style::MUTED)).on_hover_text(format!("{a} uses {b}"));
                     }
+                }
+                ui.add_space(12.0);
+            } else if let Some(a) = self.analysis.as_ref().filter(|_| self.settings.settings().view(View::Unused).value) {
+                let mut unused: Vec<(Usage, String, NodeId)> =
+                    (0..g.node_count() as NodeId).filter(|&n| a.usage[n as usize] != Usage::Used).map(|n| (a.usage[n as usize], full_path(g, n), n)).collect();
+                unused.sort_by(|x, y| (x.0 != Usage::Unused, &x.1).cmp(&(y.0 != Usage::Unused, &y.1)));
+                ui.label(egui::RichText::new(format!("UNUSED CODE ({})", unused.len())).small().color(style::EDGE_UP));
+                for (u, path, n) in unused.iter().take(400) {
+                    ui.horizontal_wrapped(|ui| {
+                        ui.spacing_mut().item_spacing.x = 4.0;
+                        if ui.selectable_label(self.selected == Some(*n), g.name(*n)).on_hover_text(path).clicked() {
+                            fly = Some(*n);
+                        }
+                        ui.label(egui::RichText::new(u.label().unwrap_or("")).small().color(if *u == Usage::Unused { style::EDGE_UP } else { style::MUTED }));
+                    });
                 }
                 ui.add_space(12.0);
             }
@@ -1074,6 +1244,14 @@ impl Project {
         if let Some(i) = review_pick {
             self.goto_review_item(i);
         }
+        if let (Some(i), Some(rv)) = (review_toggle, self.review.as_mut()) {
+            self.review_error = rv.toggle(i);
+        }
+        if let (Some((hide, grouped)), Some(rv)) = (review_switches, self.review.as_mut()) {
+            rv.hide_reviewed = hide;
+            rv.by_package = grouped;
+            rv.reorder();
+        }
         if let Some(i) = select {
             self.select_entry(i);
         }
@@ -1084,6 +1262,7 @@ impl Project {
     }
 
     fn inspector(&mut self, ui: &mut egui::Ui) {
+        let unused_label = self.selected.and_then(|n| self.unused(n)).and_then(Usage::label);
         let g = self.file.graph();
         egui::ScrollArea::vertical().show(ui, |ui| {
             if let Some(i) = self.selected_entry {
@@ -1131,6 +1310,10 @@ impl Project {
             }
             if let Some(loc) = &h.location {
                 ui.label(egui::RichText::new(loc).small().color(style::MUTED)).on_hover_text(g.file(n).unwrap_or(""));
+            }
+            if let Some(label) = unused_label {
+                ui.label(egui::RichText::new(label).small().color(style::EDGE_UP))
+                    .on_hover_text("Nothing in main code calls, creates or names it outside its own lines. Code reached by reflection or a framework can show up here.");
             }
             let owns_entry = self.app_counts.contains_key(&n) || (0..g.entries().len()).any(|i| g.entries()[i].node.to_native() == n);
             let chips = inspector::chips(g, n, owns_entry);
@@ -1492,7 +1675,12 @@ impl Project {
             Mark::None => {}
         }
         let change = self.review.as_ref().map(|rv| rv.review.change(b.node));
-        if let Some(c) = change {
+        let reviewed = self.review.as_ref().is_some_and(|rv| rv.states.get(&b.node) == Some(&MarkState::Reviewed));
+        let unused = self.unused(b.node);
+        if unused.is_some() {
+            stroke = Stroke::new(1.5, style::EDGE_UP.gamma_multiply(0.8));
+        }
+        if let Some(c) = change.filter(|_| !reviewed) {
             if c.status == Status::New {
                 stroke = Stroke::new(2.0, style::REACH);
             } else if c.status == Status::Changed {
@@ -1519,7 +1707,9 @@ impl Project {
         if self.app_counts.contains_key(&b.node) && b.rect.w > 24.0 {
             painter.circle_filled(Pos2::new(b.rect.right() - 9.0, b.rect.y + 9.0), 4.0, style::ENTRY);
         }
-        if let Some((text, color)) = change.and_then(|c| review_badge(c, b.open)).filter(|_| b.rect.w > 60.0 && b.rect.h > 22.0) {
+        let badge = if reviewed { Some(("reviewed".to_string(), style::MUTED)) } else { change.and_then(|c| review_badge(c, b.open)) };
+        let badge = badge.or_else(|| unused.map(|u| (unused_short(u).to_string(), style::EDGE_UP)));
+        if let Some((text, color)) = badge.filter(|_| b.rect.w > 60.0 && b.rect.h > 22.0) {
             let galley = painter.layout_no_wrap(text, FontId::proportional(10.5), style::BG);
             let size = galley.size() + egui::vec2(10.0, 4.0);
             let card = !(b.rows.is_empty() && b.field_rows.is_empty());
@@ -1737,6 +1927,15 @@ impl Project {
         }
         let mono = FontId::monospace(size);
         let gutter = lines.len().to_string().len() as f32 * advance(size) + 2.0 * advance(size);
+        let diff = self.review.as_ref().and_then(|rv| rv.review.file(path));
+        let full = |y: f32, h: f32| egui::Rect::from_min_size(Pos2::new(b.rect.x + 2.0, y), egui::vec2(b.rect.w - 4.0, h));
+        if let Some(d) = diff {
+            for &l in d.added.iter().filter(|&&l| (first + 1..=last).contains(&(l as usize))) {
+                let band = full(top + (l - 1) as f32 * line_h, line_h);
+                clip.rect_filled(band, 0.0, style::REACH.gamma_multiply(0.14));
+                clip.rect_filled(egui::Rect::from_min_size(band.min, egui::vec2(3.0, line_h)), 0.0, style::REACH);
+            }
+        }
         let text: Vec<&str> = lines[..last].iter().map(String::as_str).collect();
         for (i, segments) in highlight(&text, g.lang(b.node)).into_iter().enumerate().skip(first) {
             let y = top + i as f32 * line_h;
@@ -1752,6 +1951,27 @@ impl Project {
                 job.append(&text, 0.0, egui::TextFormat { font_id: mono.clone(), color, ..Default::default() });
             }
             text_clip.galley(Pos2::new(b.rect.x + gutter + advance(size) - hscroll, y), text_clip.layout_job(job), style::TEXT);
+        }
+        let Some(d) = diff else { return };
+        let mut hovered: Option<(f32, &Vec<String>)> = None;
+        for (before, gone) in d.removed.iter().filter(|(l, _)| (first..=last + 1).contains(&(*l as usize))) {
+            let y = top + (*before - 1) as f32 * line_h;
+            clip.line_segment([Pos2::new(b.rect.x + 2.0, y), Pos2::new(b.rect.right() - 2.0, y)], Stroke::new(2.0, style::EDGE_UP));
+            let chip = egui::Rect::from_min_size(Pos2::new(sheet.left().max(b.rect.x) + 4.0, y - size * 0.6), egui::vec2(advance(size) * (gone.len().to_string().len() as f32 + 2.0), size * 1.2));
+            clip.rect_filled(chip, 3.0, style::EDGE_UP);
+            clip.text(chip.center(), Align2::CENTER_CENTER, format!("−{}", gone.len()), FontId::monospace(size * 0.85), style::BG);
+            if self.pointer.is_some_and(|p| (p.y - y).abs() < line_h * 0.6 && sheet.contains(p)) {
+                hovered = Some((y, gone));
+            }
+        }
+        if let Some((y, gone)) = hovered {
+            let shown = gone.len().min(30);
+            let pop = full(y + 2.0, shown as f32 * line_h + 8.0).intersect(sheet);
+            clip.rect_filled(pop, 3.0, style::tint(style::PANEL, style::EDGE_UP, 0.18));
+            clip.rect_stroke(pop, 3.0, Stroke::new(1.0, style::EDGE_UP), StrokeKind::Inside);
+            for (k, l) in gone.iter().take(shown).enumerate() {
+                text_clip.text(Pos2::new(b.rect.x + gutter + advance(size) - hscroll, y + 6.0 + k as f32 * line_h), Align2::LEFT_TOP, l, mono.clone(), style::TEXT.gamma_multiply(0.8));
+            }
         }
     }
 
@@ -1837,7 +2057,9 @@ impl Project {
             }
             let change = self.review.as_ref().map(|rv| rv.review.change(row.node));
             let card_new = self.review.as_ref().is_some_and(|rv| rv.review.change(b.node).status == Status::New);
-            let delta = change.and_then(row_delta).map(|(d, c)| (if card_new { String::new() } else { d }, c));
+            let row_reviewed = self.review.as_ref().is_some_and(|rv| rv.states.get(&row.node) == Some(&MarkState::Reviewed));
+            let delta = if row_reviewed { Some(("reviewed".to_string(), style::MUTED)) } else { change.and_then(row_delta).map(|(d, c)| (if card_new { String::new() } else { d }, c)) };
+            let delta = delta.or_else(|| self.unused(row.node).map(|u| (unused_short(u).to_string(), style::EDGE_UP)));
             if let Some((_, c)) = &delta {
                 clip.rect_filled(r, 0.0, c.gamma_multiply(0.14));
             }
