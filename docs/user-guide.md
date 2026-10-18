@@ -24,7 +24,7 @@ Nothing is written into the project. The index lives in the user cache folder
 change.
 
 The menu bar sits at the top left: **File** (Open Folder… `Ctrl+O`, Open Recent, Re-index, Project Settings…
-`Ctrl+,`, Close Project) and **View** (what to show, one item per filter, the legend, Jump to… `Ctrl+K`). What you
+`Ctrl+,`, Close Project) and **View** (what to show, one item per filter, the legend, Jump to… `Ctrl+K`, Find in file… `Ctrl+F`, File structure… `Ctrl+F12`). What you
 tick in View is remembered for each project.
 
 ## Navigating
@@ -40,6 +40,8 @@ tick in View is remembered for each project.
 | Walk the code | click a row under *Uses* or *Used by* in the inspector; `Alt+Left` or **Back** retraces |
 | See everything involved | inspector **Show**: *neighbours*, *everything it reaches*, *everywhere it's used* |
 | Jump to a name | `Ctrl+K`, type, `Enter` |
+| Find text in the open file | `Ctrl+F`, type; `Enter` / `Shift+Enter` for the next / previous match |
+| Go to a method of the open file | `Ctrl+F12`, type part of its name, `Enter` |
 | Go back up | click a breadcrumb segment, or the minimap |
 
 Keyboard (press `?` or `F1`, or **Help ▸ Shortcuts**, for the full cheatsheet with mouse gestures):
@@ -54,6 +56,8 @@ Keyboard (press `?` or `F1`, or **Help ▸ Shortcuts**, for the full cheatsheet 
 | `Page Up` `Page Down` `Home` `End` | scroll the file under the pointer or the selected one |
 | `Alt+←` | back to the previous selection |
 | `Ctrl+K` | jump to a name (`↑` `↓` to pick a hit, `Enter` to go) |
+| `Ctrl+F` | find in the open file; matches are highlighted, `Enter` / `Shift+Enter` step through them |
+| `Ctrl+F12` | the open file's methods, fields and nested types in source order; type to filter, `Enter` to go |
 | `S` | sequence diagram of the selected method |
 | `N` / `P` | next / previous change (Review) |
 | `R` | mark the current change reviewed (Review) |

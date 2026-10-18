@@ -50,3 +50,31 @@ pub fn step_selection(current: usize, len: usize, down: bool) -> usize {
         (_, false) => current.min(len - 1).saturating_sub(1),
     }
 }
+
+pub fn file_structure(g: &ArchivedGraph, owner: NodeId) -> Vec<NodeId> {
+    let file = g.file(owner);
+    let mut found = Vec::new();
+    let mut stack: Vec<NodeId> = g.children(owner).collect();
+    while let Some(n) = stack.pop() {
+        if g.file(n) == file && matches!(g.kind(n), NodeKind::Type | NodeKind::Member) {
+            found.push(n);
+        }
+        stack.extend(g.children(n));
+    }
+    found.sort_by_key(|&n| (g.span(n).0, n));
+    found
+}
+
+pub fn filter_structure(g: &ArchivedGraph, nodes: &[NodeId], q: &str) -> Vec<NodeId> {
+    let q = q.trim();
+    if q.is_empty() {
+        return nodes.to_vec();
+    }
+    let pattern = Pattern::parse(q, CaseMatching::Ignore, Normalization::Smart);
+    let mut matcher = Matcher::new(Config::DEFAULT);
+    let mut buf = Vec::new();
+    let mut hits: Vec<(u32, usize, NodeId)> =
+        nodes.iter().enumerate().filter_map(|(i, &n)| Some((pattern.score(Utf32Str::new(g.name(n), &mut buf), &mut matcher)?, i, n))).collect();
+    hits.sort_by(|a, b| b.0.cmp(&a.0).then(a.1.cmp(&b.1)));
+    hits.into_iter().map(|(_, _, n)| n).collect()
+}

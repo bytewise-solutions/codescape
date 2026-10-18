@@ -1,3 +1,4 @@
+mod code_find;
 mod map_panel;
 mod sequence_ui;
 
@@ -35,6 +36,8 @@ const RECENT_LIMIT: usize = 8;
 const OPEN: KeyboardShortcut = KeyboardShortcut::new(Modifiers::COMMAND, Key::O);
 const SETTINGS: KeyboardShortcut = KeyboardShortcut::new(Modifiers::COMMAND, Key::Comma);
 const JUMP: KeyboardShortcut = KeyboardShortcut::new(Modifiers::COMMAND, Key::K);
+const FIND: KeyboardShortcut = KeyboardShortcut::new(Modifiers::COMMAND, Key::F);
+const STRUCTURE: KeyboardShortcut = KeyboardShortcut::new(Modifiers::COMMAND, Key::F12);
 const LEFT_PANEL: KeyboardShortcut = KeyboardShortcut::new(Modifiers::COMMAND, Key::B);
 const RIGHT_PANEL: KeyboardShortcut = KeyboardShortcut::new(Modifiers::COMMAND, Key::I);
 const BOTH_PANELS: KeyboardShortcut = KeyboardShortcut::new(Modifiers::NONE, Key::F11);
@@ -445,6 +448,8 @@ struct Project {
     search: SearchIndex,
     search_text: String,
     search_open: bool,
+    find: Option<code_find::FindBar>,
+    structure: Option<code_find::Structure>,
     search_hits: Vec<NodeId>,
     search_cursor: usize,
     hovered: Option<NodeId>,
@@ -652,6 +657,8 @@ impl Project {
             search,
             search_text: String::new(),
             search_open: false,
+            find: None,
+            structure: None,
             search_hits: Vec::new(),
             search_cursor: 0,
             hovered: None,
@@ -787,6 +794,12 @@ impl Project {
             self.selected = Some(m);
             self.open_sequence(m);
         }
+        if let Some(text) = &plan.find {
+            self.start_find(text);
+        }
+        if plan.structure {
+            self.open_structure();
+        }
         if let Some(n) = plan.fly.as_ref().and_then(|name| self.search.query(self.file.graph(), name, 1).first().copied()) {
             self.fly_to(n);
         }
@@ -826,6 +839,7 @@ impl Project {
             ui.separator();
             let shortcut = |s: &KeyboardShortcut| ui.ctx().format_shortcut(s);
             let (left, right, both) = (shortcut(&LEFT_PANEL), shortcut(&RIGHT_PANEL), shortcut(&BOTH_PANELS));
+            let (find, structure) = (shortcut(&FIND), shortcut(&STRUCTURE));
             if ui.add(egui::Button::selectable(self.show_left, "Left panel").shortcut_text(left)).clicked() {
                 self.show_left = !self.show_left;
             }
@@ -838,6 +852,12 @@ impl Project {
             ui.separator();
             if ui.add(egui::Button::new("Jump to…").shortcut_text(jump)).clicked() {
                 self.search_open = true;
+            }
+            if ui.add(egui::Button::new("Find in file…").shortcut_text(find)).clicked() {
+                self.open_find();
+            }
+            if ui.add(egui::Button::new("File structure…").shortcut_text(structure)).clicked() {
+                self.open_structure();
             }
         });
         if let Some((key, on)) = changed {
@@ -1369,13 +1389,24 @@ impl Project {
             self.apply_plan_targets(&plan);
         }
         let (jump, open, settings) = ui.input_mut(|i| (i.consume_shortcut(&JUMP), i.consume_shortcut(&OPEN), i.consume_shortcut(&SETTINGS)));
+        let (find, structure) = ui.input_mut(|i| (i.consume_shortcut(&FIND), i.consume_shortcut(&STRUCTURE)));
         self.search_open |= jump;
+        if find {
+            self.open_find();
+        }
+        if structure {
+            self.open_structure();
+        }
         self.settings_open |= settings;
         if open {
             action = Some(Action::OpenFolder);
         }
         if ui.input(|i| i.key_pressed(Key::Escape)) {
-            if self.sequence.is_some() && !self.search_open && !self.shortcuts_open {
+            if self.structure.is_some() {
+                self.structure = None;
+            } else if self.find.is_some() && !self.search_open && !self.shortcuts_open {
+                self.find = None;
+            } else if self.sequence.is_some() && !self.search_open && !self.shortcuts_open {
                 self.sequence = None;
             } else if self.search_open || self.shortcuts_open {
                 self.search_open = false;
@@ -1387,7 +1418,7 @@ impl Project {
         }
         if ui.input(|i| i.modifiers.alt && i.key_pressed(Key::ArrowLeft)) {
             self.go_back();
-        } else if !self.search_open && !ui.ctx().egui_wants_keyboard_input() {
+        } else if !self.search_open && self.structure.is_none() && !ui.ctx().egui_wants_keyboard_input() {
             self.keyboard(ui);
         }
         if self.shortcuts_open {
@@ -1479,6 +1510,8 @@ impl Project {
         if self.search_open {
             self.search_window(ui.ctx());
         }
+        self.find_bar(ui.ctx());
+        self.structure_window(ui.ctx());
         if self.settings_open {
             let out = settings_window::show(ui.ctx(), &mut self.settings_open, &mut self.settings, &self.packs, &mut self.form);
             if out.view_changed {
@@ -2665,6 +2698,17 @@ impl Project {
                 let band = full(top + (l - 1) as f32 * line_h, line_h);
                 clip.rect_filled(band, 0.0, style::ADDED.gamma_multiply(0.14));
                 clip.rect_filled(egui::Rect::from_min_size(band.min, egui::vec2(3.0, line_h)), 0.0, style::ADDED);
+            }
+        }
+        if let Some((hits, current)) = self.find_highlights(b.node) {
+            for (k, h) in hits.iter().enumerate().filter(|(_, h)| (first..last).contains(&h.line)) {
+                let x = b.rect.x + gutter + advance(size) * (1.0 + h.col as f32) - hscroll;
+                let r = egui::Rect::from_min_size(Pos2::new(x, top + h.line as f32 * line_h), egui::vec2(advance(size) * h.len as f32, line_h));
+                let now = current == Some(k);
+                text_clip.rect_filled(r, 2.0, style::ACCENT.gamma_multiply(if now { 0.55 } else { 0.22 }));
+                if now {
+                    text_clip.rect_stroke(r, 2.0, Stroke::new(1.0, style::ACCENT), StrokeKind::Inside);
+                }
             }
         }
         let text: Vec<&str> = lines[..last].iter().map(String::as_str).collect();

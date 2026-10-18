@@ -87,6 +87,8 @@ pub const CHEATSHEET: &[(&str, &[(&str, &str)])] = &[
             ("Wheel / Shift + wheel", "scroll the file down / sideways"),
             ("Page Up Page Down Home End", "scroll the file under the pointer or the selected one"),
             ("Drag the scrollbar", "move through the file"),
+            ("Ctrl+F", "find in the open file (Enter / Shift+Enter for next / previous)"),
+            ("Ctrl+F12", "list the file's methods, fields and types; type to filter, Enter to go"),
         ],
     ),
     (

@@ -20,6 +20,8 @@ pub struct ShotPlan {
     pub map_only: bool,
     pub fly: Option<String>,
     pub map_panel: bool,
+    pub find: Option<String>,
+    pub structure: bool,
 }
 
 pub struct Shot {

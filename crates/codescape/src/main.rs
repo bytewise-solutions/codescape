@@ -36,6 +36,10 @@ struct Args {
     fly: Option<String>,
     #[arg(long, help = "With --screenshot: open the What's on the map panel")]
     map_panel: bool,
+    #[arg(long, help = "With --screenshot: search the open file for this text, as Ctrl+F")]
+    find: Option<String>,
+    #[arg(long, help = "With --screenshot: list the open file's structure, as Ctrl+F12")]
+    structure: bool,
 }
 
 fn main() -> eframe::Result {
@@ -60,6 +64,8 @@ fn main() -> eframe::Result {
         map_only: args.map_only,
         fly: args.fly,
         map_panel: args.map_panel,
+        find: args.find,
+        structure: args.structure,
     });
     eframe::run_native("Codescape", options, Box::new(move |cc| Ok(Box::new(codescape::app::CodescapeApp::new(cc, args.dir, args.config, shot)))))
 }
