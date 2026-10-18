@@ -553,7 +553,11 @@ fn panel_toggle(ui: &mut egui::Ui, corner: Align2, text: &str, hint: &str) -> bo
     let panel = ui.max_rect();
     let size = egui::vec2(16.0, 18.0);
     let at = corner.align_size_within_rect(size, panel.shrink2(egui::vec2(0.0, 2.0)));
-    ui.put(at, egui::Button::new(egui::RichText::new(text).small()).small()).on_hover_text(hint).clicked()
+    let resp = ui.interact(at, ui.scope_id().with(("panel_toggle", text)), Sense::click()).on_hover_text(hint);
+    let fill = if resp.hovered() { style::ACCENT.gamma_multiply(0.25) } else { style::BAR };
+    ui.painter().rect_filled(at, 3.0, fill);
+    ui.painter().text(at.center(), Align2::CENTER_CENTER, text, FontId::proportional(11.0), if resp.hovered() { style::ACCENT } else { style::MUTED });
+    resp.clicked()
 }
 
 fn strip_toggle(ui: &mut egui::Ui, text: &str, hint: &str) -> bool {
