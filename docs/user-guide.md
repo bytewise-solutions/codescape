@@ -58,7 +58,7 @@ Keyboard (press `?` or `F1`, or **Help ▸ Shortcuts**, for the full cheatsheet 
 | `Ctrl+K` | jump to a name (`↑` `↓` to pick a hit, `Enter` to go) |
 | `Ctrl+F` | find in the open file; matches are highlighted, `Enter` / `Shift+Enter` step through them |
 | `Ctrl+F12` | the open file's methods, fields and nested types in source order; type to filter, `Enter` to go |
-| `S` | sequence diagram of the selected method, or of a class from its most used method |
+| `S` | sequence diagram of the selected method (click a line in an open file to select its method), or of a class from its most used method |
 | `N` / `P` | next / previous change (Review) |
 | `R` | mark the current change reviewed (Review) |
 | `[` / `]` | previous / next commit, commit by commit (Review) |

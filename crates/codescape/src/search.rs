@@ -78,3 +78,7 @@ pub fn filter_structure(g: &ArchivedGraph, nodes: &[NodeId], q: &str) -> Vec<Nod
     hits.sort_by(|a, b| b.0.cmp(&a.0).then(a.1.cmp(&b.1)));
     hits.into_iter().map(|(_, _, n)| n).collect()
 }
+
+pub fn member_at_line(g: &ArchivedGraph, owner: NodeId, line: u32) -> Option<NodeId> {
+    file_structure(g, owner).into_iter().filter(|&n| (g.span(n).0..=g.span(n).1).contains(&line)).max_by_key(|&n| g.span(n).0)
+}

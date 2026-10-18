@@ -1,5 +1,5 @@
 use codescape::find::{Hit, find_in, hit_from, step_hit};
-use codescape::search::{file_structure, filter_structure};
+use codescape::search::{file_structure, filter_structure, member_at_line};
 use codescape_format::*;
 
 fn lines(text: &str) -> Vec<String> {
@@ -66,4 +66,9 @@ fn the_structure_lists_the_file_members_in_source_order_and_filters_fuzzily() {
     let picked: Vec<&str> = filter_structure(g, &all, "rensc").iter().map(|&n| g.name(n)).collect();
     assert_eq!(picked, ["renderScene"]);
     assert_eq!(filter_structure(g, &all, "  ").len(), 4);
+    let at = |line| member_at_line(g, t, line).map(|n| g.name(n));
+    assert_eq!(at(12), Some("main"));
+    assert_eq!(at(55), Some("render"), "the last line of a method still belongs to it");
+    assert_eq!(at(56), None, "between methods there is no method");
+    assert_eq!(at(85), Some("Scene"));
 }

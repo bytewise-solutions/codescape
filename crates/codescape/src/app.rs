@@ -9,7 +9,7 @@ use crate::input::{CHEATSHEET, Nav, Step, interpret, nearest_in};
 use crate::inspector;
 use crate::panels::{EntryGroupView, group_entries};
 use crate::review_view::{CommitStep, ItemKind, Limits, MarkState, ReviewItem, ReviewMarks, Risk, by_risk, items_with as review_items, step as review_step};
-use crate::search::{self, SearchIndex};
+use crate::search::{self, SearchIndex, member_at_line};
 use crate::settings_window::{self, SettingsForm};
 use crate::shot::{Shot, ShotPlan, ShotStep};
 use crate::source::{LINE_SPACING, SourceCache, Token, advance, file_font, highlight, hscroll_by, initial_scroll, merge_spans, scroll_at, scroll_by, thumb};
@@ -2091,7 +2091,9 @@ impl Project {
         self.view = rect_of(resp.rect);
         let g = self.file.graph();
         if resp.secondary_clicked() {
-            self.context_node = resp.interact_pointer_pos().and_then(|p| self.scene.row_at([p.x, p.y]).or_else(|| self.scene.box_at([p.x, p.y])));
+            self.context_node = resp
+                .interact_pointer_pos()
+                .and_then(|p| self.code_member_at(p).or_else(|| self.scene.row_at([p.x, p.y])).or_else(|| self.scene.box_at([p.x, p.y])));
         }
         if let Some(n) = self.context_node {
             let mut hide = None;
@@ -2186,7 +2188,8 @@ impl Project {
             {
                 details_toggle = Some((b.node, b.hidden_details > 0));
             } else {
-                clicked_box = self.file_page_at(p).or_else(|| self.scene.row_at([p.x, p.y])).or_else(|| self.scene.box_at([p.x, p.y]));
+                clicked_box =
+                    self.code_member_at(p).or_else(|| self.file_page_at(p)).or_else(|| self.scene.row_at([p.x, p.y])).or_else(|| self.scene.box_at([p.x, p.y]));
             }
         }
         let mut fly = None;
@@ -2628,6 +2631,15 @@ impl Project {
         self.scene.boxes.iter().rev().filter(|b| b.source).find(|b| self.file_page(b).contains(p)).map(|b| b.node)
     }
 
+    fn code_member_at(&self, p: Pos2) -> Option<NodeId> {
+        let node = self.file_page_at(p)?;
+        let b = self.scene.boxes.iter().find(|b| b.node == node && b.source)?;
+        let line_h = file_font(b.rect.w)? * LINE_SPACING;
+        let top = self.file_page(b).top() + 6.0 - self.file_scroll.get(&node).copied().unwrap_or(0.0) * line_h;
+        let line = ((p.y - top) / line_h).floor();
+        (line >= 0.0).then(|| member_at_line(self.file.graph(), node, line as u32 + 1)).flatten()
+    }
+
     fn file_metrics(&self, node: NodeId) -> Option<(f32, usize, usize)> {
         let b = self.scene.boxes.iter().find(|b| b.node == node && b.source)?;
         let line_h = file_font(b.rect.w)? * LINE_SPACING;
@@ -2683,6 +2695,13 @@ impl Project {
             let band =
                 egui::Rect::from_min_size(Pos2::new(b.rect.x + 2.0, top + (*s - 1) as f32 * line_h), egui::vec2(b.rect.w - 4.0, (*e - *s + 1) as f32 * line_h));
             clip.rect_filled(band, 0.0, style::BOX_STROKE.gamma_multiply(0.10));
+        }
+        if let Some(m) = self.selected.filter(|&m| m != b.node && g.file(m) == Some(path) && g.path(m).contains(&b.node)) {
+            let (s, e) = g.span(m);
+            let band =
+                egui::Rect::from_min_size(Pos2::new(b.rect.x + 2.0, top + (s - 1) as f32 * line_h), egui::vec2(b.rect.w - 4.0, (e - s + 1) as f32 * line_h));
+            clip.rect_filled(band, 0.0, style::ACCENT.gamma_multiply(0.08));
+            clip.rect_filled(egui::Rect::from_min_size(band.min, egui::vec2(3.0, band.height())), 0.0, style::ACCENT);
         }
         self.paint_scrollbar(&clip, sheet, b.node, scroll, lines.len(), (sheet.height() / line_h) as usize);
         let text_clip = painter.with_clip_rect(self.file_text_area(b, size, lines.len()));
