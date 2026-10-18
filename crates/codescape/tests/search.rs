@@ -18,7 +18,7 @@ fn search_ranks_exact_type_name_first() {
     assert_eq!(g.name(hits[0]), "ViewManager");
     assert!(hits.iter().all(|&h| g.name(h) != "Unrelated"));
     assert_eq!(hits.len(), 3);
-    let fuzzy = idx.query(g, "scrmgrimpl", 5);
+    let fuzzy = idx.query(g, "vwmgrimpl", 5);
     assert_eq!(g.name(fuzzy[0]), "ViewManagerImpl");
     assert!(idx.query(g, "", 5).is_empty());
 }

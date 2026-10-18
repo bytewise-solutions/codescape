@@ -61,11 +61,7 @@ fn links_are_grouped_by_package_with_the_own_type_apart() {
     let shape: Vec<(&str, Vec<&str>)> = groups.iter().map(|gr| (gr.label.as_str(), gr.items.iter().map(|(_, s)| s.as_str()).collect())).collect();
     assert_eq!(
         shape,
-        [
-            ("internal/jobs", vec!["NewJobDTO", "NewJobEntity"]),
-            ("messaging", vec!["QueueClient.PublishRetrying"]),
-            ("this type", vec!["handleFailure"]),
-        ]
+        [("internal/jobs", vec!["NewJobDTO", "NewJobEntity"]), ("messaging", vec!["QueueClient.PublishRetrying"]), ("this type", vec!["handleFailure"]),]
     );
 }
 
