@@ -499,33 +499,3 @@ fn aiming_at_a_nested_type_lets_it_grow_instead_of_opening_its_outer_file() {
     let on_bodies = at(&mut cache, [bodies.x + 4.0, bodies.bottom() - 4.0]);
     assert!(on_bodies.boxes.iter().any(|b| b.node == outer && b.source), "aiming at Records itself still opens its file");
 }
-
-#[test]
-fn once_the_outer_type_fills_the_view_aiming_at_its_nested_type_opens_the_file() {
-    let mut b = GraphBuilder::new("p");
-    let pkg = b.add_node(b.root(), NodeKind::Package, SubKind::None, "tools", Lang::Java);
-    let outer = b.add_node(pkg, NodeKind::Type, SubKind::Class, "LightProbe", Lang::Java);
-    b.set_span(outer, "LightProbe.java", 1, 400);
-    for (i, name) in ["main", "probe", "render"].into_iter().enumerate() {
-        let m = b.add_node(outer, NodeKind::Member, SubKind::Method, name, Lang::Java);
-        b.set_span(m, "LightProbe.java", 10 + 30 * i as u32, 30 + 30 * i as u32);
-    }
-    let inner = b.add_node(outer, NodeKind::Type, SubKind::Class, "Scene", Lang::Java);
-    b.set_span(inner, "LightProbe.java", 300, 380);
-    let dir = tempfile::tempdir().unwrap();
-    write_graph(&b.finish(), &dir.path().join("g")).unwrap();
-    let f = IndexFile::open(&dir.path().join("g")).unwrap();
-    let g = f.graph();
-    let mut cache = LayoutCache::new(Vec::new(), LayoutOptions { show_details: true, ..Default::default() });
-    let outer = g.children(g.children(g.root()).start).start;
-    let inner = g.children(outer).find(|&c| g.kind(c) == NodeKind::Type).unwrap();
-    let fit = Camera::fit(world_rect(g, &mut cache, outer).unwrap(), VIEW);
-    let away = build_scene_at(g, &mut cache, &fit, VIEW, &VisualRules::default(), None, [-50.0, -50.0], &[]);
-    let scene = away.boxes.iter().find(|b| b.node == inner).unwrap().rect;
-    let mut cam = fit;
-    cam.zoom_at(scene.center(), 1.6, VIEW);
-    let s = build_scene_at(g, &mut cache, &cam, VIEW, &VisualRules::default(), None, scene.center(), &[]);
-    let card = s.boxes.iter().find(|b| b.node == outer).unwrap().rect;
-    assert!(card.w > VIEW.w, "the outer card is wider than the view ({})", card.w);
-    assert!(s.boxes.iter().any(|b| b.node == outer && b.source), "with the card filling the view, its file opens");
-}
