@@ -141,3 +141,12 @@ fn types_extending_a_matching_supertype_are_hidden_through_the_known_chain() {
     let fault = (0..g.node_count() as NodeId).find(|&n| g.name(n) == "Fault").unwrap();
     assert_eq!(codescape::view::supertypes(g, fault), ["CartException", "java.lang.RuntimeException"]);
 }
+
+#[test]
+fn hidden_paths_are_shortened_to_their_last_parts() {
+    use codescape::view::short_path;
+    assert_eq!(short_path("app/src/legacy/Old"), "…/legacy/Old");
+    assert_eq!(short_path("spring-petclinic/org.springframework.samples.petclinic.system"), "…petclinic.system");
+    assert_eq!(short_path("spring-petclinic/org.x.system/Clock"), "…/org.x.system/Clock");
+    assert_eq!(short_path("core/Main"), "core/Main");
+}

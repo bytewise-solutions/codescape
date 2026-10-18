@@ -1915,7 +1915,7 @@ impl Project {
                         if ui.small_button("Always show").on_hover_text("Show it whatever the switches say").clicked() {
                             self.pending_hide = Some(map_panel::HideRequest::AlwaysShow(path.clone()));
                         }
-                    } else if ui.small_button("Hide").on_hover_text("Leave it off the map; undo in View ▸ What's on the map").clicked() {
+                    } else if ui.small_button("Hide").on_hover_text("Leave it off the map; undo in View, What's on the map").clicked() {
                         self.pending_hide = Some(map_panel::HideRequest::Block(path.clone()));
                     }
                 });

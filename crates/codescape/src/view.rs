@@ -112,3 +112,15 @@ pub fn toggle(store: &mut SettingsStore, key: &Key, on: bool) {
         _ => {}
     }
 }
+
+pub fn short_path(path: &str) -> String {
+    let parts: Vec<&str> = path.rsplitn(3, '/').collect();
+    match parts.as_slice() {
+        [name, parent, _] => format!("…/{parent}/{name}"),
+        [name, _] if name.matches('.').count() > 1 => {
+            let tail: Vec<&str> = name.rsplitn(3, '.').take(2).collect();
+            format!("…{}.{}", tail[1], tail[0])
+        }
+        _ => path.to_string(),
+    }
+}

@@ -48,8 +48,8 @@ method from the entry point that reaches it.
 | **The map.** ripgrep's crates laid out top-down by dependency, entry point on top. | **UML cards.** Controllers above the repositories they call, with fields, methods, visibility and calls. |
 | ![An HTTP route selected, its controller's file open](docs/images/code.png) | ![A changed method with its added and removed lines](docs/images/diff.png) |
 | **Reading code.** Picking the route `GET /owners/{ownerId}` opens its controller and lists what it uses and what reaches it. | **Line diff in review.** `run_one` as changed between two ripgrep releases: added lines in green, removed ones marked in red. |
-| ![A sequence diagram from main through run to search_parallel](docs/images/sequence.png) | |
-| **Sequence diagrams.** `search_parallel` told from `main`, crossing into the `ignore` crate. | |
+| ![A sequence diagram from main through run to search_parallel](docs/images/sequence.png) | ![The What's on the map panel with a package, a name pattern and a supertype hidden](docs/images/map-panel.png) |
+| **Sequence diagrams.** `search_parallel` told from `main`, crossing into the `ignore` crate. | **Your map, your rules.** Switch kinds of code, card rows and arrows on or off, and hide a package, every `…Validator`, or every type extending `Exception`. |
 
 The screenshots show [ripgrep](https://github.com/BurntSushi/ripgrep) (MIT / Unlicense) and
 [Spring PetClinic](https://github.com/spring-projects/spring-petclinic) (Apache-2.0), opened as they are.
