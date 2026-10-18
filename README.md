@@ -22,7 +22,7 @@ method from the entry point that reaches it.
   and visibility. Only architectural types are drawn at first; data types and helpers wait behind `+ N details`.
 - **Follow the code.** Click a box or a method: what it uses turns pink, what uses it blue, the rest dims. Walk the
   calls from the inspector, jump to any name with `Ctrl+K`, or double-click a method to open its file at that line.
-  In an open file, `Ctrl+F` finds text and `Ctrl+F12` lists its methods to jump to.
+  In an open file, `Ctrl+F` finds text and `Ctrl+Shift+O` lists its methods to jump to.
 - **Review mode.** Compare any two versions: a branch with where it left `main`, two branches, or commit by
   commit. New blocks are green, changed ones amber with their line counts, new dependencies are drawn, and the list
   of changes is sorted by risk (complexity jumps, many callers, public signatures, untested, unused). Tick changes

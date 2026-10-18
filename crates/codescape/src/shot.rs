@@ -22,6 +22,7 @@ pub struct ShotPlan {
     pub map_panel: bool,
     pub find: Option<String>,
     pub structure: bool,
+    pub keys: bool,
 }
 
 pub struct Shot {

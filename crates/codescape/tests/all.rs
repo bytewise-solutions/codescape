@@ -3,6 +3,7 @@ mod find;
 mod focus;
 mod input;
 mod inspector;
+mod keys;
 mod panels;
 mod reach;
 mod review;

@@ -88,6 +88,12 @@ impl Project {
         }
     }
 
+    pub(super) fn step_find(&mut self, forward: bool) {
+        let Some(bar) = self.find.as_mut() else { return };
+        bar.current = step_hit(bar.hits.len(), bar.current, forward);
+        self.show_hit();
+    }
+
     pub(super) fn find_highlights(&self, node: NodeId) -> Option<(&[Hit], Option<usize>)> {
         self.find.as_ref().filter(|f| f.node == Some(node)).map(|f| (f.hits.as_slice(), f.current))
     }
@@ -129,8 +135,7 @@ impl Project {
             });
         });
         if let Some(forward) = step {
-            bar.current = step_hit(bar.hits.len(), bar.current, forward);
-            self.show_hit();
+            self.step_find(forward);
         }
         if changed {
             self.refresh_find();
@@ -165,9 +170,13 @@ impl Project {
         let Some(st) = self.structure.as_mut() else { return };
         let (mut open, mut pick) = (true, None);
         let title = g.file(st.owner).and_then(|f| f.rsplit('/').next()).unwrap_or(g.name(st.owner)).to_string();
-        egui::Window::new(format!("Structure of {title}")).open(&mut open).collapsible(false).resizable(false).anchor(Align2::CENTER_TOP, [0.0, 60.0]).show(
-            ctx,
-            |ui| {
+        egui::Window::new(format!("Structure of {title}"))
+            .id(super::windows::Win::Structure.id())
+            .open(&mut open)
+            .collapsible(false)
+            .resizable(false)
+            .anchor(Align2::CENTER_TOP, [0.0, 60.0])
+            .show(ctx, |ui| {
                 let (down, up) = ui.input_mut(|i| (i.consume_key(egui::Modifiers::NONE, Key::ArrowDown), i.consume_key(egui::Modifiers::NONE, Key::ArrowUp)));
                 let moved = down || up;
                 if moved {
@@ -203,8 +212,7 @@ impl Project {
                         }
                     }
                 });
-            },
-        );
+            });
         let owner = st.owner;
         if let Some(n) = pick {
             self.structure = None;

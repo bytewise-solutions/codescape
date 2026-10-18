@@ -1,12 +1,15 @@
 mod code_find;
+mod keys_ui;
 mod map_panel;
 mod sequence_ui;
+mod windows;
 
 use crate::camera::Camera;
 use crate::canvas::{Scene, build_scene_at, fit_label, root_world, world_rect};
 use crate::focus::{Focus, FocusMode, History, Mark, UsageIndex, focus};
 use crate::input::{CHEATSHEET, Nav, Step, interpret, nearest_in};
 use crate::inspector;
+use crate::keys::{Action as KeyAction, Keymap};
 use crate::panels::{EntryGroupView, group_entries};
 use crate::review_view::{CommitStep, ItemKind, Limits, MarkState, ReviewItem, ReviewMarks, Risk, by_risk, items_with as review_items, step as review_step};
 use crate::search::{self, SearchIndex, member_at_line};
@@ -25,7 +28,8 @@ use codescape_index::{
 };
 use codescape_layout::{Direction, LayoutCache, Rect};
 use codescape_rules::{PackSelection, VisualRules, load_packs, user_rules_dir};
-use egui::{Align2, Color32, FontId, Key, KeyboardShortcut, Modifiers, Pos2, Sense, Shape, Stroke, StrokeKind};
+use egui::{Align2, Color32, FontId, Key, Pos2, Sense, Shape, Stroke, StrokeKind};
+use keys_ui::{load_keys, shown as key_text, take_pressed};
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
@@ -33,14 +37,6 @@ use std::sync::mpsc::{Receiver, channel};
 use std::time::Instant;
 
 const RECENT_LIMIT: usize = 8;
-const OPEN: KeyboardShortcut = KeyboardShortcut::new(Modifiers::COMMAND, Key::O);
-const SETTINGS: KeyboardShortcut = KeyboardShortcut::new(Modifiers::COMMAND, Key::Comma);
-const JUMP: KeyboardShortcut = KeyboardShortcut::new(Modifiers::COMMAND, Key::K);
-const FIND: KeyboardShortcut = KeyboardShortcut::new(Modifiers::COMMAND, Key::F);
-const STRUCTURE: KeyboardShortcut = KeyboardShortcut::new(Modifiers::COMMAND, Key::F12);
-const LEFT_PANEL: KeyboardShortcut = KeyboardShortcut::new(Modifiers::COMMAND, Key::B);
-const RIGHT_PANEL: KeyboardShortcut = KeyboardShortcut::new(Modifiers::COMMAND, Key::I);
-const BOTH_PANELS: KeyboardShortcut = KeyboardShortcut::new(Modifiers::NONE, Key::F11);
 
 enum Msg {
     Progress(Progress),
@@ -58,6 +54,7 @@ pub struct CodescapeApp {
     config: Option<PathBuf>,
     recent: Vec<PathBuf>,
     shot: Option<Shot>,
+    keys: Keymap,
 }
 
 fn recent_file() -> Option<PathBuf> {
@@ -86,7 +83,7 @@ fn save_recent(list: &[PathBuf]) {
 impl CodescapeApp {
     pub fn new(cc: &eframe::CreationContext<'_>, dir: Option<PathBuf>, config: Option<PathBuf>, shot: Option<ShotPlan>) -> CodescapeApp {
         cc.egui_ctx.set_visuals(style::visuals());
-        let mut app = CodescapeApp { state: State::Start { error: None }, config, recent: load_recent(), shot: shot.map(Shot::new) };
+        let mut app = CodescapeApp { state: State::Start { error: None }, config, recent: load_recent(), shot: shot.map(Shot::new), keys: load_keys() };
         if let Some(d) = dir {
             app.open(d);
         }
@@ -145,8 +142,7 @@ impl CodescapeApp {
 
     fn file_menu(&self, ui: &mut egui::Ui, project: bool) -> Option<Action> {
         let mut action = None;
-        let shortcut = |s: &KeyboardShortcut| ui.ctx().format_shortcut(s);
-        let (open, settings) = (shortcut(&OPEN), shortcut(&SETTINGS));
+        let (open, settings) = (key_text(&self.keys, KeyAction::OpenFolder), key_text(&self.keys, KeyAction::Settings));
         ui.menu_button("File", |ui| {
             if ui.add(egui::Button::new("Open Folder…").shortcut_text(open)).clicked() {
                 action = Some(Action::OpenFolder);
@@ -204,7 +200,7 @@ impl CodescapeApp {
     fn start_screen(&mut self, ui: &mut egui::Ui, error: Option<String>) {
         let mut chosen: Option<PathBuf> = None;
         let mut action = None;
-        if ui.input_mut(|i| i.consume_shortcut(&OPEN)) {
+        if take_pressed(ui.ctx(), &self.keys).contains(&KeyAction::OpenFolder) {
             action = Some(Action::OpenFolder);
         }
         egui::Panel::top("top").show(ui, |ui| {
@@ -286,6 +282,7 @@ impl eframe::App for CodescapeApp {
                 }
             }
             State::Open(mut project) => {
+                self.keys = project.keys.clone();
                 let menu = egui::Panel::top("top")
                     .show(ui, |ui| {
                         egui::MenuBar::new()
@@ -296,6 +293,9 @@ impl eframe::App for CodescapeApp {
                                 ui.menu_button("Help", |ui| {
                                     if ui.add(egui::Button::new("Shortcuts").shortcut_text("? / F1")).clicked() {
                                         project.shortcuts_open = true;
+                                    }
+                                    if ui.button("Change shortcuts…").clicked() {
+                                        project.keys_open = true;
                                     }
                                 });
                                 project.mode_switch(ui);
@@ -454,6 +454,11 @@ struct Project {
     search_cursor: usize,
     hovered: Option<NodeId>,
     shortcuts_open: bool,
+    keys: Keymap,
+    keys_open: bool,
+    windows: Vec<windows::Win>,
+    capturing: Option<KeyAction>,
+    keys_note: Option<String>,
     settings: SettingsStore,
     packs: Vec<String>,
     settings_open: bool,
@@ -663,6 +668,11 @@ impl Project {
             search_cursor: 0,
             hovered: None,
             shortcuts_open: false,
+            keys: load_keys(),
+            keys_open: false,
+            windows: Vec::new(),
+            capturing: None,
+            keys_note: None,
             settings,
             packs,
             settings_open: false,
@@ -750,6 +760,7 @@ impl Project {
         self.settings_open |= plan.settings;
         self.map_panel_open |= plan.map_panel;
         self.shortcuts_open |= plan.shortcuts;
+        self.keys_open |= plan.keys;
         let reviewing = plan.review.is_some() || plan.review_target.is_some() || plan.review_by_commit;
         if reviewing {
             self.deferred_plan = Some(plan.clone());
@@ -818,7 +829,7 @@ impl Project {
     }
 
     fn view_menu(&mut self, ui: &mut egui::Ui) {
-        let jump = ui.ctx().format_shortcut(&JUMP);
+        let jump = key_text(&self.keys, KeyAction::Jump);
         let mut changed = None;
         ui.menu_button("View", |ui| {
             let items = view_items(self.settings.settings());
@@ -837,9 +848,9 @@ impl Project {
                 self.map_panel_open = !self.map_panel_open;
             }
             ui.separator();
-            let shortcut = |s: &KeyboardShortcut| ui.ctx().format_shortcut(s);
-            let (left, right, both) = (shortcut(&LEFT_PANEL), shortcut(&RIGHT_PANEL), shortcut(&BOTH_PANELS));
-            let (find, structure) = (shortcut(&FIND), shortcut(&STRUCTURE));
+            let shortcut = |a: KeyAction| key_text(&self.keys, a);
+            let (left, right, both) = (shortcut(KeyAction::LeftPanel), shortcut(KeyAction::RightPanel), shortcut(KeyAction::BothPanels));
+            let (find, structure) = (shortcut(KeyAction::Find), shortcut(KeyAction::Structure));
             if ui.add(egui::Button::selectable(self.show_left, "Left panel").shortcut_text(left)).clicked() {
                 self.show_left = !self.show_left;
             }
@@ -1388,8 +1399,20 @@ impl Project {
         {
             self.apply_plan_targets(&plan);
         }
-        let (jump, open, settings) = ui.input_mut(|i| (i.consume_shortcut(&JUMP), i.consume_shortcut(&OPEN), i.consume_shortcut(&SETTINGS)));
-        let (find, structure) = ui.input_mut(|i| (i.consume_shortcut(&FIND), i.consume_shortcut(&STRUCTURE)));
+        let pressed = if self.capture_key(ui.ctx()) { Vec::new() } else { take_pressed(ui.ctx(), &self.keys) };
+        let key = |a: KeyAction| pressed.contains(&a);
+        let (jump, open, settings, find, structure) =
+            (key(KeyAction::Jump), key(KeyAction::OpenFolder), key(KeyAction::Settings), key(KeyAction::Find), key(KeyAction::Structure));
+        let step = if key(KeyAction::FindNext) {
+            Some(true)
+        } else if key(KeyAction::FindPrevious) {
+            Some(false)
+        } else {
+            None
+        };
+        if let Some(forward) = step {
+            self.step_find(forward);
+        }
         self.search_open |= jump;
         if find {
             self.open_find();
@@ -1402,15 +1425,9 @@ impl Project {
             action = Some(Action::OpenFolder);
         }
         if ui.input(|i| i.key_pressed(Key::Escape)) {
-            if self.structure.is_some() {
-                self.structure = None;
-            } else if self.find.is_some() && !self.search_open && !self.shortcuts_open {
-                self.find = None;
-            } else if self.sequence.is_some() && !self.search_open && !self.shortcuts_open {
+            if self.close_top_window() {
+            } else if self.sequence.is_some() {
                 self.sequence = None;
-            } else if self.search_open || self.shortcuts_open {
-                self.search_open = false;
-                self.shortcuts_open = false;
             } else {
                 self.clear_focus();
                 self.selected = None;
@@ -1432,7 +1449,10 @@ impl Project {
                                     ui.label(egui::RichText::new(*section).strong().color(style::TEXT));
                                     egui::Grid::new(*section).num_columns(2).spacing([14.0, 4.0]).show(ui, |ui| {
                                         for (keys, what) in rows.iter() {
-                                            ui.label(egui::RichText::new(*keys).monospace().color(style::ACCENT));
+                                            let bound = KeyAction::ALL.into_iter().find(|a| crate::keys::format(&a.default_key()) == *keys);
+                                            let keys = bound
+                                                .map_or(keys.to_string(), |a| Some(key_text(&self.keys, a)).filter(|k| !k.is_empty()).unwrap_or("none".into()));
+                                            ui.label(egui::RichText::new(keys).monospace().color(style::ACCENT));
                                             ui.label(egui::RichText::new(*what).color(style::MUTED));
                                             ui.end_row();
                                         }
@@ -1453,7 +1473,7 @@ impl Project {
         }
         egui::Panel::top("breadcrumb").show(ui, |ui| ui.horizontal(|ui| self.breadcrumb(ui)));
         egui::Panel::bottom("status").show(ui, |ui| self.status_bar(ui));
-        let (left, right, both) = ui.input_mut(|i| (i.consume_shortcut(&LEFT_PANEL), i.consume_shortcut(&RIGHT_PANEL), i.consume_shortcut(&BOTH_PANELS)));
+        let (left, right, both) = (key(KeyAction::LeftPanel), key(KeyAction::RightPanel), key(KeyAction::BothPanels));
         self.show_left ^= left;
         self.show_right ^= right;
         if both {
@@ -1462,13 +1482,13 @@ impl Project {
         if self.show_left {
             egui::Panel::left("entries").resizable(true).default_size(270.0).min_size(230.0).show(ui, |ui| {
                 self.entries_panel(ui);
-                if panel_toggle(ui, Align2::RIGHT_BOTTOM, "<", "Hide this panel (Ctrl+B)") {
+                if panel_toggle(ui, Align2::RIGHT_BOTTOM, "<", &format!("Hide this panel ({})", key_text(&self.keys, KeyAction::LeftPanel))) {
                     self.show_left = false;
                 }
             });
         } else {
             egui::Panel::left("entries_strip").resizable(false).exact_size(18.0).show(ui, |ui| {
-                if strip_toggle(ui, ">", "Show the left panel (Ctrl+B)") {
+                if strip_toggle(ui, ">", &format!("Show the left panel ({})", key_text(&self.keys, KeyAction::LeftPanel))) {
                     self.show_left = true;
                 }
             });
@@ -1476,13 +1496,13 @@ impl Project {
         if self.show_right {
             egui::Panel::right("inspector").resizable(true).default_size(290.0).show(ui, |ui| {
                 self.inspector(ui);
-                if panel_toggle(ui, Align2::LEFT_BOTTOM, ">", "Hide this panel (Ctrl+I)") {
+                if panel_toggle(ui, Align2::LEFT_BOTTOM, ">", &format!("Hide this panel ({})", key_text(&self.keys, KeyAction::RightPanel))) {
                     self.show_right = false;
                 }
             });
         } else {
             egui::Panel::right("inspector_strip").resizable(false).exact_size(18.0).show(ui, |ui| {
-                if strip_toggle(ui, "<", "Show the right panel (Ctrl+I)") {
+                if strip_toggle(ui, "<", &format!("Show the right panel ({})", key_text(&self.keys, KeyAction::RightPanel))) {
                     self.show_right = true;
                 }
             });
@@ -1512,6 +1532,8 @@ impl Project {
         }
         self.find_bar(ui.ctx());
         self.structure_window(ui.ctx());
+        self.keys_window(ui.ctx());
+        self.track_windows(ui.ctx());
         if self.settings_open {
             let out = settings_window::show(ui.ctx(), &mut self.settings_open, &mut self.settings, &self.packs, &mut self.form);
             if out.view_changed {

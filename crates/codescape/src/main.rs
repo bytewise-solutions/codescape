@@ -40,6 +40,8 @@ struct Args {
     find: Option<String>,
     #[arg(long, help = "With --screenshot: list the open file's structure, as Ctrl+F12")]
     structure: bool,
+    #[arg(long, help = "With --screenshot: open the keyboard shortcuts editor")]
+    keys: bool,
 }
 
 fn main() -> eframe::Result {
@@ -66,6 +68,7 @@ fn main() -> eframe::Result {
         map_panel: args.map_panel,
         find: args.find,
         structure: args.structure,
+        keys: args.keys,
     });
     eframe::run_native("Codescape", options, Box::new(move |cc| Ok(Box::new(codescape::app::CodescapeApp::new(cc, args.dir, args.config, shot)))))
 }

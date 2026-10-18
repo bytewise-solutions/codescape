@@ -24,7 +24,7 @@ Nothing is written into the project. The index lives in the user cache folder
 change.
 
 The menu bar sits at the top left: **File** (Open Folder… `Ctrl+O`, Open Recent, Re-index, Project Settings…
-`Ctrl+,`, Close Project) and **View** (what to show, one item per filter, the legend, Jump to… `Ctrl+K`, Find in file… `Ctrl+F`, File structure… `Ctrl+F12`). What you
+`Ctrl+,`, Close Project) and **View** (what to show, one item per filter, the legend, Jump to… `Ctrl+K`, Find in file… `Ctrl+F`, File structure… `Ctrl+Shift+O`). What you
 tick in View is remembered for each project.
 
 ## Navigating
@@ -41,23 +41,26 @@ tick in View is remembered for each project.
 | See everything involved | inspector **Show**: *neighbours*, *everything it reaches*, *everywhere it's used* |
 | Jump to a name | `Ctrl+K`, type, `Enter` |
 | Find text in the open file | `Ctrl+F`, type; `Enter` / `Shift+Enter` for the next / previous match |
-| Go to a method of the open file | `Ctrl+F12`, type part of its name, `Enter` |
+| Go to a method of the open file | `Ctrl+Shift+O`, type part of its name, `Enter` |
 | Go back up | click a breadcrumb segment, or the minimap |
 
-Keyboard (press `?` or `F1`, or **Help ▸ Shortcuts**, for the full cheatsheet with mouse gestures):
+Keyboard (press `?` or `F1`, or **Help ▸ Shortcuts**, for the full cheatsheet with mouse gestures). The shortcuts
+with `Ctrl`, `F3` and `F11` can be rebound in **Help ▸ Change shortcuts…**: click one, press the new keys. They are
+saved for every project in `~/.config/codescape/keys.toml` (only the ones you changed):
 
 | Keys | Action |
 |---|---|
 | `←` `→` `↑` `↓` | select the nearest box in that direction |
 | `Enter` / `Backspace` | zoom into the selected box / go up to its parent |
-| `Esc` | clear the selection |
+| `Esc` | close the window on top; with none open, leave the sequence diagram or clear the selection |
 | `1` `2` `3` | show neighbours / everything it reaches / everywhere it's used |
 | `+` `−` / `F` | zoom in / out / fit the whole project |
 | `Page Up` `Page Down` `Home` `End` | scroll the file under the pointer or the selected one |
 | `Alt+←` | back to the previous selection |
 | `Ctrl+K` | jump to a name (`↑` `↓` to pick a hit, `Enter` to go) |
 | `Ctrl+F` | find in the open file; matches are highlighted, `Enter` / `Shift+Enter` step through them |
-| `Ctrl+F12` | the open file's methods, fields and nested types in source order; type to filter, `Enter` to go |
+| `F3` / `Shift+F3` | next / previous match while the find bar is open |
+| `Ctrl+Shift+O` | the open file's methods, fields and nested types in source order; type to filter, `Enter` to go |
 | `S` | sequence diagram of the selected method (click a line in an open file to select its method), or of a class from its most used method |
 | `N` / `P` | next / previous change (Review) |
 | `R` | mark the current change reviewed (Review) |

@@ -76,7 +76,7 @@ pub const CHEATSHEET: &[(&str, &[(&str, &str)])] = &[
             ("Alt+←", "back to the previous selection"),
             ("Esc", "clear the selection"),
             ("Ctrl+K", "jump to a name (Up / Down to pick, Enter to go)"),
-            ("S", "sequence diagram of the selected method, or of a class from its most used method (also on right-click)"),
+            ("S", "sequence diagram of the selected method or class"),
         ],
     ),
     (
@@ -84,12 +84,14 @@ pub const CHEATSHEET: &[(&str, &[(&str, &str)])] = &[
         &[
             ("Zoom in close", "a type or function opens its whole file; zoom out to close it"),
             ("Double-click a method row", "open the file at that method"),
-            ("Click in the code", "select the method under the pointer; S or right-click for its sequence diagram"),
+            ("Click in the code", "select the method there; S for its sequence diagram"),
             ("Wheel / Shift + wheel", "scroll the file down / sideways"),
             ("Page Up Page Down Home End", "scroll the file under the pointer or the selected one"),
             ("Drag the scrollbar", "move through the file"),
-            ("Ctrl+F", "find in the open file (Enter / Shift+Enter for next / previous)"),
-            ("Ctrl+F12", "list the file's methods, fields and types; type to filter, Enter to go"),
+            ("Ctrl+F", "find in the open file"),
+            ("Ctrl+Shift+O", "the file's methods; type to filter, Enter to go"),
+            ("F3", "next match of the find bar"),
+            ("Shift+F3", "previous match of the find bar"),
         ],
     ),
     (
@@ -108,8 +110,8 @@ pub const CHEATSHEET: &[(&str, &[(&str, &str)])] = &[
             ("Ctrl+,", "project settings"),
             ("Ctrl+B", "hide / show the left panel"),
             ("Ctrl+I", "hide / show the right panel"),
-            ("F11", "hide / show both: the whole window for the map"),
-            ("? or F1", "this cheatsheet"),
+            ("F11", "hide / show both panels"),
+            ("? or F1", "this cheatsheet; rebind keys in the Help menu"),
         ],
     ),
 ];
