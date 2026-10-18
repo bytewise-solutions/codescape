@@ -330,7 +330,7 @@ impl Builder<'_> {
         let wide = rect.w >= FILE_VIEW_SHARE * self.view.w;
         let nested = shown.iter().any(|&c| g.kind(c) == NodeKind::Type);
         let chosen = if self.open_files.is_empty() {
-            rect.contains(self.anchor) && !(nested && file_level && wide && self.anchor_on_nested_type(node, world))
+            rect.contains(self.anchor) && !(nested && file_level && wide && rect.w < self.view.w && self.anchor_on_nested_type(node, world))
         } else {
             self.open_files.contains(&node)
         };
