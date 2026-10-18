@@ -1925,7 +1925,7 @@ impl Project {
                     "Nothing in main code calls, creates or names it outside its own lines. Code reached by reflection or a framework can show up here.",
                 );
             }
-            if g.kind(n) == NodeKind::Member && ui.small_button("Sequence diagram (S)").clicked() {
+            if matches!(g.kind(n), NodeKind::Member | NodeKind::Type) && ui.small_button("Sequence diagram (S)").clicked() {
                 self.pending_sequence = Some(n);
             }
             let owns_entry = self.app_counts.contains_key(&n) || (0..g.entries().len()).any(|i| g.entries()[i].node.to_native() == n);
@@ -2097,6 +2097,9 @@ impl Project {
             let mut hide = None;
             resp.context_menu(|ui| {
                 ui.label(egui::RichText::new(g.name(n)).strong());
+                if g.kind(n) == NodeKind::Type && ui.add(egui::Button::new("Sequence diagram").shortcut_text("S")).clicked() {
+                    self.pending_sequence = Some(n);
+                }
                 if g.kind(n) == NodeKind::Member {
                     if ui.add(egui::Button::new("Sequence diagram").shortcut_text("S")).clicked() {
                         self.pending_sequence = Some(n);

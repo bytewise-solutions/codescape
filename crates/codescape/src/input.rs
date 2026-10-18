@@ -76,7 +76,7 @@ pub const CHEATSHEET: &[(&str, &[(&str, &str)])] = &[
             ("Alt+←", "back to the previous selection"),
             ("Esc", "clear the selection"),
             ("Ctrl+K", "jump to a name (Up / Down to pick, Enter to go)"),
-            ("S", "sequence diagram of the selected method (also on right-click)"),
+            ("S", "sequence diagram of the selected method, or of a class from its most used method (also on right-click)"),
         ],
     ),
     (

@@ -73,3 +73,16 @@ fn callers_can_be_listed_to_pick_another_chain() {
 fn named_in(g: &ArchivedGraph, owner: &str, name: &str) -> NodeId {
     (0..g.node_count() as NodeId).find(|&n| g.name(n) == name && g.parent(n).is_some_and(|p| g.name(p) == owner)).unwrap()
 }
+
+#[test]
+fn a_type_is_told_from_the_method_its_outside_callers_use() {
+    let (_t, file) = project();
+    let g = file.graph();
+    let calls = CallIndex::new(g);
+    let service = (0..g.node_count() as NodeId).find(|&n| g.name(n) == "Service" && g.kind(n) == NodeKind::Type).unwrap();
+    assert_eq!(calls.lead_method(g, service), Some(named(g, "Checkout")));
+    let methods: Vec<&str> = calls.methods(g, service).iter().map(|&m| g.name(m)).collect();
+    assert_eq!(methods, ["NewService", "Checkout", "validate", "total", "sum"], "in source order");
+    let store = (0..g.node_count() as NodeId).find(|&n| g.name(n) == "Store" && g.kind(n) == NodeKind::Type).unwrap();
+    assert_eq!(calls.lead_method(g, store), Some(named_in(g, "Store", "Save")));
+}

@@ -101,6 +101,22 @@ impl CallIndex {
         chain
     }
 
+    pub fn methods(&self, g: &ArchivedGraph, owner: NodeId) -> Vec<NodeId> {
+        let mut found: Vec<NodeId> = g
+            .children(owner)
+            .filter(|&c| g.kind(c) == NodeKind::Member && matches!(g.sub_kind(c), SubKind::Method | SubKind::Function | SubKind::Constructor))
+            .collect();
+        found.sort_by_key(|&m| (g.span(m).0, m));
+        found
+    }
+
+    pub fn lead_method(&self, g: &ArchivedGraph, owner: NodeId) -> Option<NodeId> {
+        let methods = self.methods(g, owner);
+        let outside = |m: NodeId| self.callers(m).iter().filter(|&&c| g.parent(c) != Some(owner)).count();
+        let rank = |m: NodeId| (self.entries.contains(&m), outside(m), self.calls(m).len());
+        methods.iter().copied().rev().max_by_key(|&m| rank(m))
+    }
+
     pub fn implementations(&self, g: &ArchivedGraph, member: NodeId) -> Vec<NodeId> {
         let Some(owner) = g.parent(member).filter(|&p| g.kind(p) == NodeKind::Type) else { return Vec::new() };
         let name = g.name(member);

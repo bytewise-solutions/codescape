@@ -36,11 +36,16 @@ impl Project {
     }
 
     pub(super) fn open_sequence(&mut self, focus: NodeId) {
-        let g = self.file.graph();
-        if g.kind(focus) != NodeKind::Member {
-            return;
-        }
         let calls = self.calls();
+        let g = self.file.graph();
+        let focus = match g.kind(focus) {
+            NodeKind::Member => focus,
+            NodeKind::Type => match calls.lead_method(g, focus) {
+                Some(m) => m,
+                None => return,
+            },
+            _ => return,
+        };
         let query = Query::new(focus, calls.default_chain(self.file.graph(), focus));
         let diagram = diagram(self.file.graph(), &calls, &query);
         self.sequence = Some(SequenceView { query, diagram });
@@ -101,6 +106,18 @@ impl Project {
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                     if ui.button("Back to map").on_hover_text("Esc").clicked() {
                         act = Some(Act::Close);
+                    }
+                    let owner = g.parent(q.focus).filter(|&p| g.kind(p) == NodeKind::Type);
+                    let siblings = owner.map(|o| calls.methods(g, o)).unwrap_or_default();
+                    if siblings.len() > 1 {
+                        egui::ComboBox::from_id_salt("sibling").selected_text(g.name(q.focus)).show_ui(ui, |ui| {
+                            for &m in &siblings {
+                                if ui.selectable_label(m == q.focus, g.name(m)).clicked() && m != q.focus {
+                                    act = Some(Act::Recentre(m));
+                                }
+                            }
+                        });
+                        ui.label(egui::RichText::new(format!("method of {}", owner.map_or("", |o| g.name(o)))).small().color(style::MUTED));
                     }
                 });
             });
