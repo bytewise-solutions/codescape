@@ -203,7 +203,20 @@ pub struct Agg {
     pub implements: u16,
     pub links: u16,
     pub scope_mask: u8,
-    pub undeclared: bool,
+    pub marks: u8,
+}
+
+pub const AGG_UNDECLARED: u8 = 1;
+pub const AGG_GUESSED: u8 = 2;
+
+impl ArchivedAgg {
+    pub fn undeclared(&self) -> bool {
+        self.marks & AGG_UNDECLARED != 0
+    }
+
+    pub fn guessed(&self) -> bool {
+        self.marks & AGG_GUESSED != 0
+    }
 }
 
 #[derive(Archive, Serialize, Deserialize, Debug)]

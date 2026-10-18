@@ -24,6 +24,7 @@ struct SibEdge {
     implements: u32,
     links: u32,
     undeclared: bool,
+    guessed: bool,
     test_only: bool,
     layering: bool,
     back: bool,
@@ -109,6 +110,7 @@ fn add_wiring(g: &ArchivedGraph, node: NodeId, mut l: ContainerLayout, opts: &La
             links: 0,
             dir: Direction::Down,
             undeclared: false,
+            guessed: false,
             test_only: false,
             points: vec![from, to],
         });
@@ -157,7 +159,8 @@ fn layout_structure(g: &ArchivedGraph, node: NodeId, frames: &[FrameRule], opts:
             wiring,
             implements,
             links: agg.links.to_native() as u32,
-            undeclared: agg.undeclared,
+            undeclared: agg.undeclared(),
+            guessed: agg.guessed(),
             test_only,
             layering: structural && !pinned[b],
             back: false,
@@ -336,7 +339,11 @@ fn layout_structure(g: &ArchivedGraph, node: NodeId, frames: &[FrameRule], opts:
     }
 
     let row_of: HashMap<usize, usize> = rows.iter().enumerate().flat_map(|(ri, (_, r))| r.iter().map(move |&v| (v, ri))).collect();
-    let drawn = |e: &&SibEdge| (opts.implements_arrows || e.calls + e.deps > 0) && (opts.import_arrows || e.calls + e.implements > 0 || e.wiring > 0);
+    let drawn = |e: &&SibEdge| {
+        (opts.guessed_calls || !e.guessed)
+            && (opts.implements_arrows || e.calls + e.deps > 0)
+            && (opts.import_arrows || e.calls + e.implements > 0 || e.wiring > 0)
+    };
     let laid_edges = edges
         .iter()
         .filter(drawn)
@@ -384,6 +391,7 @@ fn layout_structure(g: &ArchivedGraph, node: NodeId, frames: &[FrameRule], opts:
                 links: e.links,
                 dir,
                 undeclared: e.undeclared,
+                guessed: e.guessed,
                 test_only: e.test_only,
                 points,
             }

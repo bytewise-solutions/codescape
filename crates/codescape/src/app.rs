@@ -2316,6 +2316,10 @@ impl Project {
             painter.extend(Shape::dashed_line(&pts, Stroke::new(1.0, style::WIRING.gamma_multiply(0.7)), 2.0, 4.0));
             return;
         }
+        if e.guessed && e.mark == Mark::None && !introduced {
+            painter.extend(Shape::dashed_line(&pts, Stroke::new(width.min(1.2), color), 1.5, 3.5));
+            return;
+        }
         let stroke = Stroke::new(width, color);
         if dashed || implements_only {
             painter.extend(Shape::dashed_line(&pts, stroke, if implements_only { 3.0 } else { 6.0 }, 4.0));
@@ -2391,6 +2395,8 @@ impl Project {
                 on.arrow_wiring = true;
             } else if e.weight == 0 && e.implements > 0 {
                 on.arrow_implements = true;
+            } else if e.guessed {
+                on.arrow_guessed = true;
             } else if e.test_only {
                 on.arrow_test = true;
             } else if e.undeclared {

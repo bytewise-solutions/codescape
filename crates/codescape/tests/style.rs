@@ -49,6 +49,7 @@ fn legend_explains_every_style() {
         "reviewed",
         "arrow the change adds",
         "lines added / removed",
+        "only guessed calls",
     ] {
         assert!(labels.contains(&needed), "legend misses {needed}");
     }

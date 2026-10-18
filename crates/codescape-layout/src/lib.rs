@@ -202,6 +202,7 @@ pub struct LaidEdge {
     pub links: u32,
     pub dir: Direction,
     pub undeclared: bool,
+    pub guessed: bool,
     pub test_only: bool,
     pub points: Vec<[f32; 2]>,
 }

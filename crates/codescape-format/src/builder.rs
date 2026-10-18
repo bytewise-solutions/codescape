@@ -378,6 +378,7 @@ impl GraphBuilder {
         }
         let mut linked: HashSet<(u32, u32, u32, u32, u32)> = HashSet::new();
         let mut agg_map: HashMap<(u32, u32, u32), Agg> = HashMap::new();
+        let mut guessed: HashMap<(u32, u32, u32), u32> = HashMap::new();
         for (from, e) in &sorted {
             if EdgeFlags(e.flags).contains(EdgeFlags::NOISE) {
                 continue;
@@ -397,17 +398,7 @@ impl GraphBuilder {
                 b = parent_new[b as usize];
             }
             let container = parent_new[a as usize];
-            let agg = agg_map.entry((container, a, b)).or_insert(Agg {
-                a,
-                b,
-                calls: 0,
-                deps: 0,
-                wiring: 0,
-                implements: 0,
-                links: 0,
-                scope_mask: 0,
-                undeclared: false,
-            });
+            let agg = agg_map.entry((container, a, b)).or_insert(Agg { a, b, calls: 0, deps: 0, wiring: 0, implements: 0, links: 0, scope_mask: 0, marks: 0 });
             let kind = EdgeKind::from_u8(e.kind);
             let structural = !EdgeFlags(e.flags).contains(EdgeFlags::WIRING) && !matches!(kind, EdgeKind::Implements | EdgeKind::Inherits);
             if structural && Scope::from_u8(e.scope) == Scope::Main && linked.insert((container, a, b, carrier[*from as usize], carrier[e.to as usize])) {
@@ -425,7 +416,18 @@ impl GraphBuilder {
             };
             *slot = slot.saturating_add(add);
             agg.scope_mask |= Scope::from_u8(e.scope).mask();
-            agg.undeclared |= EdgeFlags(e.flags).contains(EdgeFlags::UNDECLARED);
+            if EdgeFlags(e.flags).contains(EdgeFlags::UNDECLARED) {
+                agg.marks |= AGG_UNDECLARED;
+            }
+            if kind.is_call_like() && !EdgeFlags(e.flags).contains(EdgeFlags::WIRING) && e.confidence == Confidence::Guessed as u8 {
+                *guessed.entry((container, a, b)).or_default() += u32::from(add);
+            }
+        }
+        for (key, agg) in agg_map.iter_mut() {
+            let only_guesses = guessed.get(key).is_some_and(|&n| n == u32::from(agg.calls));
+            if only_guesses && agg.calls > 0 && agg.deps == 0 && agg.implements == 0 && agg.wiring == 0 {
+                agg.marks |= AGG_GUESSED;
+            }
         }
         let mut agg_list: Vec<((u32, u32, u32), Agg)> = agg_map.into_iter().collect();
         agg_list.sort_by_key(|(k, _)| *k);

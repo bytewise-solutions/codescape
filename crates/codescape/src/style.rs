@@ -105,6 +105,7 @@ pub struct LegendShown {
     pub arrow_implements: bool,
     pub arrow_test: bool,
     pub arrow_wiring: bool,
+    pub arrow_guessed: bool,
 }
 
 impl LegendShown {
@@ -140,6 +141,7 @@ impl LegendShown {
             arrow_implements: true,
             arrow_test: true,
             arrow_wiring: true,
+            arrow_guessed: true,
         }
     }
 }
@@ -193,6 +195,7 @@ pub fn legend(on: LegendShown) -> Vec<LegendItem> {
         (on.arrow_implements, item("implements / extends", arrow(EDGE, true, false, true))),
         (on.arrow_test, item("test-only dependency", arrow(EDGE, true, false, false))),
         (on.arrow_wiring, item("wiring arrow", arrow(WIRING, false, true, false))),
+        (on.arrow_guessed, item("only guessed calls", arrow(EDGE, false, true, false))),
     ];
     candidates.into_iter().filter(|(shown, _)| *shown).map(|(_, it)| it).collect()
 }

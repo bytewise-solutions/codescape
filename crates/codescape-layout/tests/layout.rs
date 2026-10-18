@@ -847,3 +847,22 @@ fn implements_only_and_import_only_arrows_can_be_left_out() {
     assert_eq!(arrows(&LayoutOptions { implements_arrows: false, ..Default::default() }), [("web".to_string(), "util".to_string())]);
     assert_eq!(arrows(&LayoutOptions { import_arrows: false, ..Default::default() }), [("web".to_string(), "api".to_string())]);
 }
+
+#[test]
+fn arrows_made_only_of_guessed_calls_are_marked_and_can_be_left_out() {
+    let mut b = GraphBuilder::new("p");
+    let root = b.root();
+    let [m1, m2, m3] = ["web", "api", "util"].map(|n| b.add_node(root, NodeKind::Module, SubKind::None, n, Lang::Go));
+    let [f1, f2, f3] = [m1, m2, m3].map(|m| b.add_node(m, NodeKind::Member, SubKind::Function, "f", Lang::Go));
+    b.add_edge(f1, f2, EdgeKind::Calls, Scope::Main, Confidence::Guessed, EdgeFlags::NONE);
+    b.add_edge(f1, f3, EdgeKind::Calls, Scope::Main, Confidence::Resolved, EdgeFlags::NONE);
+    let (_d, f) = open(b);
+    let g = f.graph();
+    let edges = |opts: &LayoutOptions| {
+        let mut v: Vec<(String, bool)> = layout_container(g, g.root(), &[], opts).edges.iter().map(|e| (g.name(e.b).to_string(), e.guessed)).collect();
+        v.sort();
+        v
+    };
+    assert_eq!(edges(&LayoutOptions::default()), [("api".to_string(), true), ("util".to_string(), false)]);
+    assert_eq!(edges(&LayoutOptions { guessed_calls: false, ..Default::default() }), [("util".to_string(), false)]);
+}

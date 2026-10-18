@@ -106,7 +106,23 @@ fn undeclared_flag_reaches_aggregate() {
     b.add_edge(f, g, EdgeKind::DependsOn, Scope::Main, Confidence::Resolved, EdgeFlags::UNDECLARED);
     let (_d, file) = roundtrip(b);
     let gr = file.graph();
-    assert!(gr.aggregates(gr.root())[0].undeclared);
+    assert!(gr.aggregates(gr.root())[0].undeclared());
+    assert!(!gr.aggregates(gr.root())[0].guessed());
+}
+
+#[test]
+fn an_arrow_made_only_of_guessed_calls_is_marked_guessed() {
+    let (mut b, [_, _, _, f, g, h]) = two_module_graph();
+    b.add_edge(f, g, EdgeKind::Calls, Scope::Main, Confidence::Guessed, EdgeFlags::NONE);
+    b.add_edge(f, h, EdgeKind::Calls, Scope::Main, Confidence::Guessed, EdgeFlags::NONE);
+    b.add_edge(f, h, EdgeKind::Calls, Scope::Main, Confidence::Resolved, EdgeFlags::NONE);
+    let (_d, file) = roundtrip(b);
+    let gr = file.graph();
+    let agg = |container: NodeId, to: &str| gr.aggregates(container).iter().find(|a| gr.name(a.b.to_native()) == to).unwrap();
+    let root = gr.root();
+    let m1 = find(gr, root, "m1");
+    assert!(agg(root, "m2").guessed(), "every call from m1 to m2 is a guess");
+    assert!(!agg(m1, "p2").guessed(), "p1 to p2 has a resolved call");
 }
 
 #[test]
