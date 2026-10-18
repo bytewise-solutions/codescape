@@ -301,6 +301,16 @@ impl Builder<'_> {
         ((rows, members.len() - shown), (field_rows, more_fields))
     }
 
+    fn anchor_on_nested_type(&mut self, node: NodeId, world: WRect) -> bool {
+        let layout = self.cache.shared(self.g, node);
+        let xf = Xform::fit(&layout, world);
+        layout
+            .children
+            .iter()
+            .filter(|c| self.g.kind(c.node) == NodeKind::Type)
+            .any(|c| self.cam.world_to_screen_rect(xf.rect(c.rect), self.view).contains(self.anchor))
+    }
+
     fn visit(&mut self, node: NodeId, world: WRect, depth: u32) {
         let rect = self.cam.world_to_screen_rect(world, self.view);
         if rect.w < MIN_DRAW_PX || !rect.intersects(&self.view) {
@@ -318,7 +328,12 @@ impl Builder<'_> {
             _ => false,
         };
         let wide = rect.w >= FILE_VIEW_SHARE * self.view.w;
-        let chosen = if self.open_files.is_empty() { rect.contains(self.anchor) } else { self.open_files.contains(&node) };
+        let nested = shown.iter().any(|&c| g.kind(c) == NodeKind::Type);
+        let chosen = if self.open_files.is_empty() {
+            rect.contains(self.anchor) && !(nested && file_level && wide && self.anchor_on_nested_type(node, world))
+        } else {
+            self.open_files.contains(&node)
+        };
         let source = file_level && wide && chosen && g.file(node).is_some() && file_font(rect.w).is_some();
         let open = !source && has_children && rect.w >= OPEN_THRESHOLD_PX;
         let tag_color = g.tags(node).find_map(|t| self.vis.style_for(t).map(|s| s.color));

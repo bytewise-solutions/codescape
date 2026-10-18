@@ -365,7 +365,9 @@ fn a_class_with_a_nested_class_still_opens_as_a_file() {
     let mut cache = LayoutCache::new(Vec::new(), LayoutOptions { show_details: true, ..Default::default() });
     let outer = g.children(g.children(g.root()).start).start;
     let cam = Camera::fit(world_rect(g, &mut cache, outer).unwrap(), VIEW);
-    let s = scene(g, &mut cache, &cam);
+    let away = build_scene_at(g, &mut cache, &cam, VIEW, &VisualRules::default(), None, [-50.0, -50.0], &[]);
+    let r = away.boxes.iter().find(|b| b.node == outer).unwrap().rect;
+    let s = build_scene_at(g, &mut cache, &cam, VIEW, &VisualRules::default(), None, [r.x + 4.0, r.bottom() - 4.0], &[]);
     assert!(s.boxes.iter().any(|b| b.node == outer && b.source), "the nested class is part of the same file");
 }
 
@@ -467,4 +469,33 @@ fn cards_list_fields_above_methods() {
     assert_eq!(names, ["lines", "currency"]);
     assert_eq!(card.field_rows[0].ty, "List<Line>");
     assert!(card.rows[0].rect.y > card.field_rows[1].rect.bottom(), "methods come after the fields compartment");
+}
+
+#[test]
+fn aiming_at_a_nested_type_lets_it_grow_instead_of_opening_its_outer_file() {
+    let mut b = GraphBuilder::new("p");
+    let pkg = b.add_node(b.root(), NodeKind::Package, SubKind::None, "people", Lang::Java);
+    let outer = b.add_node(pkg, NodeKind::Type, SubKind::Class, "Records", Lang::Java);
+    b.set_span(outer, "Records.java", 1, 800);
+    let m = b.add_node(outer, NodeKind::Member, SubKind::Method, "bury", Lang::Java);
+    b.set_span(m, "Records.java", 10, 40);
+    let inner = b.add_node(outer, NodeKind::Type, SubKind::Class, "Note", Lang::Java);
+    b.set_span(inner, "Records.java", 700, 720);
+    let dir = tempfile::tempdir().unwrap();
+    write_graph(&b.finish(), &dir.path().join("g")).unwrap();
+    let f = IndexFile::open(&dir.path().join("g")).unwrap();
+    let g = f.graph();
+    let mut cache = LayoutCache::new(Vec::new(), LayoutOptions { show_details: true, ..Default::default() });
+    let outer = g.children(g.children(g.root()).start).start;
+    let inner = g.children(outer).find(|&c| g.kind(c) == NodeKind::Type).unwrap();
+    let cam = Camera::fit(world_rect(g, &mut cache, outer).unwrap(), VIEW);
+    let at = |cache: &mut LayoutCache, anchor: [f32; 2]| build_scene_at(g, cache, &cam, VIEW, &VisualRules::default(), None, anchor, &[]);
+    let away = at(&mut cache, [-50.0, -50.0]);
+    let note = away.boxes.iter().find(|b| b.node == inner).expect("the nested type is drawn inside its outer type").rect;
+    let on_note = at(&mut cache, note.center());
+    assert!(!on_note.boxes.iter().any(|b| b.node == outer && b.source), "aiming at Note must not open Records' file");
+    assert!(on_note.boxes.iter().any(|b| b.node == inner), "Note stays reachable");
+    let bodies = away.boxes.iter().find(|b| b.node == outer).unwrap().rect;
+    let on_bodies = at(&mut cache, [bodies.x + 4.0, bodies.bottom() - 4.0]);
+    assert!(on_bodies.boxes.iter().any(|b| b.node == outer && b.source), "aiming at Records itself still opens its file");
 }
