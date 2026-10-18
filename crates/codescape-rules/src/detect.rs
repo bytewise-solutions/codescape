@@ -203,15 +203,19 @@ impl<'a> Ctx<'a> {
             } else {
                 continue;
             };
+            let why = if flag == NodeFlags::TEST { "why:test:a test helper" } else { "why:wiring:in a dependency-injection file" };
             for t in &file.types {
                 b.add_flags(t.node, flag);
+                b.add_tag(t.node, why);
             }
             for f in &file.functions {
                 b.add_flags(f.node, flag);
+                b.add_tag(f.node, why);
             }
         }
         for n in wiring_nodes {
             b.add_flags(n, NodeFlags::WIRING);
+            b.add_tag(n, "why:wiring:dependency-injection setup");
         }
         self.mark_noise(b);
         let mut importers: HashMap<(NodeId, NodeId), (bool, bool)> = HashMap::new();
@@ -264,12 +268,17 @@ impl<'a> Ctx<'a> {
                 let Rule::Noise { name_suffixes, supertype_suffixes, methods } = rule else { continue };
                 for t in &file.types {
                     let simple = t.fqn.rsplit('.').next().unwrap_or(&t.fqn);
-                    let by_name = name_suffixes.iter().any(|s| simple.ends_with(s.as_str()) && simple.len() > s.len());
+                    let by_name = name_suffixes.iter().find(|s| simple.ends_with(s.as_str()) && simple.len() > s.len());
                     let by_super = self.supertype_ends_with(&t.fqn, supertype_suffixes);
-                    let by_method = file.functions.iter().any(|f| f.owner == Some(t.node) && methods.contains(&f.name));
-                    if by_name || by_super || by_method {
-                        b.add_flags(t.node, NodeFlags::NOISE);
-                    }
+                    let by_method = file.functions.iter().find(|f| f.owner == Some(t.node) && methods.contains(&f.name));
+                    let why = match (by_name, by_super, by_method) {
+                        (Some(suffix), _, _) => format!("why:error:name ends with {suffix}"),
+                        (None, true, _) => "why:error:extends an error type".to_string(),
+                        (None, false, Some(f)) => format!("why:error:has an {}() method", f.name),
+                        (None, false, None) => continue,
+                    };
+                    b.add_flags(t.node, NodeFlags::NOISE);
+                    b.add_tag(t.node, &why);
                 }
             }
         }
@@ -328,10 +337,16 @@ impl<'a> Ctx<'a> {
             .map(|e| e.to)
             .collect();
         let entry_nodes: Vec<NodeId> = b.entries().iter().map(|e| e.node).collect();
-        let mut details: Vec<NodeId> = Vec::new();
+        let mut details: Vec<(NodeId, String)> = Vec::new();
+        let mut accessors: Vec<NodeId> = Vec::new();
         for file in &self.facts.files {
             for t in &file.types {
                 let n = t.node;
+                if let Some(re) = &accessor {
+                    accessors.extend(
+                        b.children(n).iter().copied().filter(|&c| b.sub_kind(c) == SubKind::Method && !b.name(c).starts_with('<') && re.is_match(b.name(c))),
+                    );
+                }
                 if b.flags(n).intersects(set_aside) {
                     continue;
                 }
@@ -357,9 +372,24 @@ impl<'a> Ctx<'a> {
                 let accessors_only = accessor.as_ref().is_some_and(|re| methods.iter().all(|m| re.is_match(m)));
                 let helper_pkg = detail_pkgs.as_ref().is_some_and(|re| package_of(b, n).is_some_and(|p| re.is_match(b.name(p))));
                 let hub = users.get(&n).is_some_and(|u| u.len() >= hub_min);
-                if model || nested || data_kind || no_methods || accessors_only || helper_pkg || !hub {
-                    details.push(n);
-                }
+                let why = if model {
+                    "a model (DTO, request, response…)".to_string()
+                } else if nested {
+                    "nested in another type".to_string()
+                } else if data_kind {
+                    "a record, enum or annotation".to_string()
+                } else if no_methods {
+                    "has no methods".to_string()
+                } else if accessors_only {
+                    "only getters and setters".to_string()
+                } else if helper_pkg {
+                    "in a helper package".to_string()
+                } else if !hub {
+                    format!("used from fewer than {hub_min} other packages")
+                } else {
+                    continue;
+                };
+                details.push((n, why));
             }
         }
         for file in &self.facts.files {
@@ -371,12 +401,16 @@ impl<'a> Ctx<'a> {
                 let entry = entry_nodes.contains(&n);
                 let shared = users.get(&n).is_some_and(|u| u.len() >= hub_min);
                 if !entry && !shared && !f.is_main {
-                    details.push(n);
+                    details.push((n, format!("a package function used from fewer than {hub_min} other packages")));
                 }
             }
         }
-        for n in details {
+        for (n, why) in details {
             b.add_flags(n, NodeFlags::DETAIL);
+            b.add_tag(n, &format!("why:detail:{why}"));
+        }
+        for n in accessors {
+            b.add_tag(n, "accessor");
         }
     }
 

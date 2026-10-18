@@ -595,6 +595,10 @@ fn error_types_are_noise() {
     for n in [service, plain] {
         assert!(!fx.b.flags(n).contains(NodeFlags::NOISE), "{} is real", fx.b.name(n));
     }
+    assert!(fx.b.has_tag(not_found, "why:error:name ends with Exception"));
+    assert!(fx.b.has_tag(custom, "why:error:extends an error type"));
+    assert!(fx.b.has_tag(by_method, "why:error:has an Error() method"));
+    assert!(fx.b.has_tag(by_name, "why:error:name ends with Error"));
 }
 
 #[test]
@@ -729,6 +733,20 @@ fn significance_keeps_components_and_sets_details_aside() {
     ] {
         assert!(detail(n), "{} is a detail ({why})", fx.b.name(n));
     }
+    for (n, why) in [
+        (dto, "has no methods"),
+        (response, "a model (DTO, request, response…)"),
+        (local, "used from fewer than 2 other packages"),
+        (record, "a record, enum or annotation"),
+        (bean, "only getters and setters"),
+        (nested, "nested in another type"),
+    ] {
+        assert!(fx.b.has_tag(n, &format!("why:detail:{why}")), "{} should say why: {why}", fx.b.name(n));
+    }
+    let bean_rows: Vec<(String, bool)> = fx.b.children(bean).iter().map(|&m| (fx.b.name(m).to_string(), fx.b.has_tag(m, "accessor"))).collect();
+    assert_eq!(bean_rows, [("getName".into(), true), ("setName".into(), true), ("isActive".into(), true), ("toString".into(), true), ("<init>".into(), false)]);
+    let charge = fx.b.children(comp).iter().copied().find(|&m| fx.b.name(m) == "charge").unwrap();
+    assert!(!fx.b.has_tag(charge, "accessor"));
 }
 
 #[test]
