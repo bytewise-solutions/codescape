@@ -36,7 +36,14 @@ names = ["Migration$"]         # regexes on type and function names
 shown = false                  # default for View ▸ migrations
 
 [view]
-details = true                 # tests, test_deps, details, errors, wiring, legend
+details = true                 # tests, test_deps, details, errors, wiring, generated, legend, ...
+private_members = false        # cards: private_members, fields, accessors, constructors
+guessed_calls = false          # arrows: guessed_calls, implements_arrows, import_arrows, quiet_arrows
+complexity_hint = 12           # also complexity_high, many_callers, keep_versions_days
+hidden = ["app/legacy"]        # blocks by path (module/package/Type/member)
+hidden_names = ["Exception$"]  # every block whose name matches
+always_shown = ["app/cart/CartError"]
+shown_again = ["app/legacy"]   # cancels a hide made in a lower layer
 filters = { migrations = true }
 
 [remove]                       # drop entries inherited from an earlier layer
@@ -110,7 +117,7 @@ Each rule has exactly one matcher:
 | `test_code = { file_imports, dir_names, paths }` | marks test helpers as test code |
 
 Lifecycles: `once`, `repeating`, `on-event`, `later`, `unknown`. Visual rules (`tag_style`, `frame` with
-`auto_prefix` or `pattern`, `hide_tags`, `fold_tags`, `entry_group`) apply without re-indexing; detection rules
+`auto_prefix` or `pattern`, `hide_tags`, `entry_group`) apply without re-indexing; detection rules
 trigger a new index automatically.
 
 Without a pack, a method that overrides a method of an external type, on a type a main creates, is still listed as

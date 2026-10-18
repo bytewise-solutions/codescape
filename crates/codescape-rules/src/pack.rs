@@ -462,8 +462,6 @@ fn name_label() -> String {
 struct VisualFile {
     #[serde(default)]
     hide_tags: Vec<String>,
-    #[serde(default)]
-    fold_tags: Vec<String>,
     #[serde(default, rename = "tag_style")]
     tag_styles: Vec<TagStyleFile>,
     #[serde(default, rename = "frame")]
@@ -699,7 +697,6 @@ impl Pack {
             tag_styles: v.tag_styles.into_iter().map(|t| TagStyle { tag: t.tag, color: t.color, icon: t.icon, badge: t.badge }).collect(),
             frames,
             hide_tags: v.hide_tags,
-            fold_tags: v.fold_tags,
             entry_groups,
         };
         Ok(Pack { name: file.name, version: file.version, languages, rules, visual, hash: blake3::hash(src.as_bytes()).to_hex()[..16].to_string(), dir })
@@ -762,11 +759,6 @@ impl Packs {
             for t in &p.visual.hide_tags {
                 if !v.hide_tags.contains(t) {
                     v.hide_tags.push(t.clone());
-                }
-            }
-            for t in &p.visual.fold_tags {
-                if !v.fold_tags.contains(t) {
-                    v.fold_tags.push(t.clone());
                 }
             }
             if !p.visual.entry_groups.is_empty() {

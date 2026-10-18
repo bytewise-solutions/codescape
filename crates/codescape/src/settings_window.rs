@@ -1,7 +1,7 @@
 use crate::style;
 use crate::view::toggle;
 use codescape_format::Category;
-use codescape_index::{CategoryOverride, Filter, Key, Layer, SettingsStore, Sourced, View};
+use codescape_index::{CategoryOverride, Filter, Key, Layer, SettingsStore, Sourced, Threshold, View};
 use std::collections::HashMap;
 
 pub struct SettingsForm {
@@ -148,6 +148,27 @@ pub fn show(ctx: &egui::Context, open: &mut bool, store: &mut SettingsStore, pac
                         ui.label(egui::RichText::new(format!("filter default ({})", cur.layer.label())).small().color(style::MUTED));
                     }
                 });
+                ui.end_row();
+            }
+            for t in Threshold::ALL {
+                let cur = s.threshold(t);
+                ui.label(format!("{} {}", t.label(), cur.value));
+                ui.horizontal(|ui| origin(ui, cur.layer, &Key::Threshold(t), &mut ops));
+                ui.end_row();
+            }
+            for h in &s.hidden {
+                ui.label(format!("Hidden: {}", h.value));
+                ui.horizontal(|ui| origin(ui, h.layer, &Key::Hidden(h.value.clone()), &mut ops));
+                ui.end_row();
+            }
+            for h in &s.hidden_names {
+                ui.label(format!("Hidden names: {}", h.value));
+                ui.horizontal(|ui| origin(ui, h.layer, &Key::HiddenName(h.value.clone()), &mut ops));
+                ui.end_row();
+            }
+            for a in &s.always_shown {
+                ui.label(format!("Always shown: {}", a.value));
+                ui.horizontal(|ui| origin(ui, a.layer, &Key::AlwaysShown(a.value.clone()), &mut ops));
                 ui.end_row();
             }
         });

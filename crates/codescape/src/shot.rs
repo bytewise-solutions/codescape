@@ -19,6 +19,7 @@ pub struct ShotPlan {
     pub sequence: Option<String>,
     pub map_only: bool,
     pub fly: Option<String>,
+    pub map_panel: bool,
 }
 
 pub struct Shot {

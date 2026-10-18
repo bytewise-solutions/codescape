@@ -33,7 +33,6 @@ pub struct VisualRules {
     pub tag_styles: Vec<TagStyle>,
     pub frames: Vec<FrameRule>,
     pub hide_tags: Vec<String>,
-    pub fold_tags: Vec<String>,
     pub entry_groups: Vec<EntryGroup>,
 }
 

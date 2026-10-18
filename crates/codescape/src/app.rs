@@ -1,3 +1,4 @@
+mod map_panel;
 mod sequence_ui;
 
 use crate::camera::Camera;
@@ -6,7 +7,7 @@ use crate::focus::{Focus, FocusMode, History, Mark, UsageIndex, focus};
 use crate::input::{CHEATSHEET, Nav, Step, interpret, nearest_in};
 use crate::inspector;
 use crate::panels::{EntryGroupView, group_entries};
-use crate::review_view::{CommitStep, ItemKind, MarkState, ReviewItem, ReviewMarks, Risk, by_risk, items as review_items, step as review_step};
+use crate::review_view::{CommitStep, ItemKind, Limits, MarkState, ReviewItem, ReviewMarks, Risk, by_risk, items_with as review_items, step as review_step};
 use crate::search::{self, SearchIndex};
 use crate::settings_window::{self, SettingsForm};
 use crate::shot::{Shot, ShotPlan, ShotStep};
@@ -19,7 +20,7 @@ use codescape_index::review::{
     Change, Counts, Review, Status, base_for, branches, clean_versions, commits, compare, current_branch, has_uncommitted, index_revision, is_git,
 };
 use codescape_index::{
-    Key as SettingKey, Progress, ProjectConfig, SettingsPaths, SettingsStore, View, index_path, index_project, needs_reindex, project_packs,
+    Key as SettingKey, Progress, ProjectConfig, SettingsPaths, SettingsStore, Threshold, View, index_path, index_project, needs_reindex, project_packs,
 };
 use codescape_layout::{Direction, LayoutCache, Rect};
 use codescape_rules::{PackSelection, VisualRules, load_packs, user_rules_dir};
@@ -36,7 +37,6 @@ const SETTINGS: KeyboardShortcut = KeyboardShortcut::new(Modifiers::COMMAND, Key
 const JUMP: KeyboardShortcut = KeyboardShortcut::new(Modifiers::COMMAND, Key::K);
 const LEFT_PANEL: KeyboardShortcut = KeyboardShortcut::new(Modifiers::COMMAND, Key::B);
 const RIGHT_PANEL: KeyboardShortcut = KeyboardShortcut::new(Modifiers::COMMAND, Key::I);
-const UNUSED_VERSIONS: std::time::Duration = std::time::Duration::from_secs(14 * 24 * 3600);
 const BOTH_PANELS: KeyboardShortcut = KeyboardShortcut::new(Modifiers::NONE, Key::F11);
 
 enum Msg {
@@ -479,6 +479,10 @@ struct Project {
     pending_sequence: Option<NodeId>,
     pending_open: Option<NodeId>,
     deferred_plan: Option<ShotPlan>,
+    map_panel_open: bool,
+    hide_pattern: String,
+    flag_counts: Option<map_panel::FlagCounts>,
+    pending_hide: Option<map_panel::HideRequest>,
     show_left: bool,
     show_right: bool,
     review_error: Option<String>,
@@ -674,6 +678,10 @@ impl Project {
             pending_sequence: None,
             pending_open: None,
             deferred_plan: None,
+            map_panel_open: false,
+            hide_pattern: String::new(),
+            flag_counts: None,
+            pending_hide: None,
             show_left: true,
             show_right: true,
             review_bar: None,
@@ -684,6 +692,16 @@ impl Project {
             details_in: Vec::new(),
             pointer: None,
         })
+    }
+
+    fn levels(&self) -> (u16, u16) {
+        let s = self.settings.settings();
+        let level = |t: Threshold| s.threshold(t).value.min(u16::MAX as u32) as u16;
+        (level(Threshold::ComplexityHint), level(Threshold::ComplexityHigh))
+    }
+
+    fn limits(&self) -> Limits {
+        Limits { complexity_hint: self.levels().0, many_callers: self.settings.settings().threshold(Threshold::ManyCallers).value }
     }
 
     fn toggle_both_panels(&mut self) {
@@ -719,6 +737,7 @@ impl Project {
             self.toggle_both_panels();
         }
         self.settings_open |= plan.settings;
+        self.map_panel_open |= plan.map_panel;
         self.shortcuts_open |= plan.shortcuts;
         let reviewing = plan.review.is_some() || plan.review_target.is_some() || plan.review_by_commit;
         if reviewing {
@@ -795,6 +814,10 @@ impl Project {
                 if ui.checkbox(&mut on, &item.label).clicked() {
                     changed = Some((item.key.clone(), on));
                 }
+            }
+            ui.separator();
+            if ui.add(egui::Button::selectable(self.map_panel_open, "What's on the map…")).clicked() {
+                self.map_panel_open = !self.map_panel_open;
             }
             ui.separator();
             let shortcut = |s: &KeyboardShortcut| ui.ctx().format_shortcut(s);
@@ -923,11 +946,12 @@ impl Project {
         let cfg = self.settings.config();
         let cache = codescape_index::cache_path(&dir).parent().map(Path::to_path_buf).unwrap_or_else(std::env::temp_dir);
         let shown = format!("{} to {}", short_rev(base.as_deref().unwrap_or("main")), target.as_deref().map_or("working copy".into(), short_rev));
+        let keep = std::time::Duration::from_secs(u64::from(self.settings.settings().threshold(Threshold::KeepVersionsDays).value) * 24 * 3600);
         let (tx, rx) = channel();
         let label = shown.clone();
         std::thread::spawn(move || {
             let result = (|| -> anyhow::Result<ReviewDone> {
-                let _ = clean_versions(&dir, &cache, UNUSED_VERSIONS);
+                let _ = clean_versions(&dir, &cache, keep);
                 let base_rev = match &base {
                     Some(r) => r.clone(),
                     None => base_for(&dir, target.as_deref())?,
@@ -993,7 +1017,7 @@ impl Project {
                 }
                 self.version = done.version;
                 let g = self.file.graph();
-                let items = review_items(g, &done.review, &done.analysis);
+                let items = review_items(g, &done.review, &done.analysis, self.limits());
                 let new_arrows = done.review.new_arrows.iter().copied().collect();
                 let upward: std::collections::HashSet<(NodeId, NodeId)> = done
                     .review
@@ -1431,6 +1455,10 @@ impl Project {
         if let Some(n) = self.pending_sequence.take() {
             self.open_sequence(n);
         }
+        if let Some(r) = self.pending_hide.take() {
+            self.apply_hide(r);
+        }
+        self.map_panel(ui.ctx());
         if let Some(n) = self.pending_open.take() {
             self.open_member(n);
         }
@@ -1768,6 +1796,18 @@ impl Project {
     fn inspector(&mut self, ui: &mut egui::Ui) {
         let unused_label = self.selected.and_then(|n| self.unused(n)).and_then(Usage::label);
         let g = self.file.graph();
+        let shown_state = self.selected.map(|n| {
+            let opts = self.cache.options();
+            let s = self.settings.settings();
+            let path = block_path(g, n);
+            let mut why: Vec<String> = g.tags(n).filter_map(|t| t.strip_prefix("why:")).map(|t| t.replacen(':', ": ", 1)).collect();
+            let by_path = s.hidden.iter().any(|h| h.value == path);
+            if !by_path && opts.hidden_nodes.contains(&n) {
+                let pattern = s.hidden_names.iter().find(|p| regex::Regex::new(&p.value).is_ok_and(|r| r.is_match(g.name(n))));
+                why.extend(pattern.map(|p| format!("you hid names matching {}", p.value)));
+            }
+            (path, by_path, opts.always_shown.contains(&n), opts.hides(g, n), why)
+        });
         egui::ScrollArea::vertical().show(ui, |ui| {
             if let Some(i) = self.selected_entry {
                 ui.label(egui::RichText::new("ENTRY POINT").small().color(style::MUTED));
@@ -1814,6 +1854,30 @@ impl Project {
             }
             if let Some(loc) = &h.location {
                 ui.label(egui::RichText::new(loc).small().color(style::MUTED)).on_hover_text(g.file(n).unwrap_or(""));
+            }
+            if let Some((path, by_you, always, hidden, why)) = &shown_state {
+                for w in why {
+                    ui.label(egui::RichText::new(format!("Set aside: {w}")).small().color(style::MUTED));
+                }
+                ui.horizontal(|ui| {
+                    if *by_you {
+                        ui.label(egui::RichText::new("hidden by you").small().color(style::ACCENT));
+                        if ui.small_button("Show again").clicked() {
+                            self.pending_hide = Some(map_panel::HideRequest::ShowAgain(path.clone()));
+                        }
+                    } else if *always {
+                        if ui.small_button("Stop always showing").clicked() {
+                            self.pending_hide = Some(map_panel::HideRequest::StopAlwaysShowing(path.clone()));
+                        }
+                    } else if *hidden {
+                        ui.label(egui::RichText::new("not on the map").small().color(style::MUTED));
+                        if ui.small_button("Always show").on_hover_text("Show it whatever the switches say").clicked() {
+                            self.pending_hide = Some(map_panel::HideRequest::AlwaysShow(path.clone()));
+                        }
+                    } else if ui.small_button("Hide").on_hover_text("Leave it off the map; undo in View ▸ What's on the map").clicked() {
+                        self.pending_hide = Some(map_panel::HideRequest::Block(path.clone()));
+                    }
+                });
             }
             if let Some(label) = unused_label {
                 ui.label(egui::RichText::new(label).small().color(style::EDGE_UP)).on_hover_text(
@@ -1989,6 +2053,7 @@ impl Project {
             self.context_node = resp.interact_pointer_pos().and_then(|p| self.scene.row_at([p.x, p.y]).or_else(|| self.scene.box_at([p.x, p.y])));
         }
         if let Some(n) = self.context_node {
+            let mut hide = None;
             resp.context_menu(|ui| {
                 ui.label(egui::RichText::new(g.name(n)).strong());
                 if g.kind(n) == NodeKind::Member {
@@ -1999,7 +2064,11 @@ impl Project {
                         self.pending_open = Some(n);
                     }
                 }
+                hide = map_panel::hide_menu(g, ui, n);
             });
+            if hide.is_some() {
+                self.pending_hide = hide;
+            }
         }
         if self.needs_fit {
             self.target = None;
@@ -2344,6 +2413,7 @@ impl Project {
         let g = self.file.graph();
         let rv = self.review.as_ref();
         let hints = self.settings.settings().view(View::Complexity).value;
+        let levels = self.levels();
         let mut on = style::LegendShown::default();
         for b in &self.scene.boxes {
             match (b.kind, b.sub) {
@@ -2371,7 +2441,7 @@ impl Project {
             }
             for n in std::iter::once(b.node).chain(b.rows.iter().map(|r| r.node)) {
                 on.selected |= self.selected == Some(n);
-                match g.complexity(n).filter(|_| hints).and_then(style::complexity_hint) {
+                match g.complexity(n).filter(|_| hints).and_then(|v| style::complexity_hint(v, levels.0, levels.1)) {
                     Some(c) if c == style::EDGE_UP => on.complexity_high = true,
                     Some(_) => on.complexity = true,
                     None => {}
@@ -2781,7 +2851,9 @@ impl Project {
     }
 
     fn complexity_pill(&self, painter: &egui::Painter, right_center: Pos2, value: Option<u16>, size: f32) -> f32 {
-        let Some((v, color)) = value.filter(|_| self.settings.settings().view(View::Complexity).value).and_then(|v| style::complexity_hint(v).map(|c| (v, c)))
+        let Some((v, color)) = value
+            .filter(|_| self.settings.settings().view(View::Complexity).value)
+            .and_then(|v| style::complexity_hint(v, self.levels().0, self.levels().1).map(|c| (v, c)))
         else {
             return 0.0;
         };

@@ -88,5 +88,18 @@ fn hidden_paths_and_name_patterns_resolve_to_blocks() {
     };
     assert_eq!(names(&hidden), ["CartException", "Coupon"]);
     assert_eq!(names(&always), ["Cart"]);
+    let (_t2, s2) = store("[view]\nhidden_names = [\"^Ca\"]\nalways_shown = [\"app/cart/Cart\"]\n");
+    let (hidden, _) = codescape::view::resolve_hidden(g, s2.settings());
+    assert_eq!(names(&hidden), ["CartException"], "always showing a block beats a name pattern that matches it");
     assert_eq!(codescape::view::block_path(g, (0..g.node_count() as NodeId).find(|&n| g.name(n) == "Coupon").unwrap()), "app/cart/Coupon");
+}
+
+#[test]
+fn a_name_offers_its_last_word_to_hide_alike_names() {
+    use codescape::view::name_suffix;
+    assert_eq!(name_suffix("CartException"), Some("Exception"));
+    assert_eq!(name_suffix("HTTPError"), Some("Error"));
+    assert_eq!(name_suffix("getUserName"), Some("Name"));
+    assert_eq!(name_suffix("Cart"), None);
+    assert_eq!(name_suffix("toDo"), None, "too short to be a family of names");
 }

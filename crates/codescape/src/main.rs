@@ -34,6 +34,8 @@ struct Args {
     map_only: bool,
     #[arg(long, help = "With --screenshot: frame the first node matching this name without selecting it")]
     fly: Option<String>,
+    #[arg(long, help = "With --screenshot: open the What's on the map panel")]
+    map_panel: bool,
 }
 
 fn main() -> eframe::Result {
@@ -57,6 +59,7 @@ fn main() -> eframe::Result {
         sequence: args.sequence,
         map_only: args.map_only,
         fly: args.fly,
+        map_panel: args.map_panel,
     });
     eframe::run_native("Codescape", options, Box::new(move |cc| Ok(Box::new(codescape::app::CodescapeApp::new(cc, args.dir, args.config, shot)))))
 }

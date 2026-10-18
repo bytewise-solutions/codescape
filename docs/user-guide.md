@@ -146,6 +146,25 @@ enough to read.
   as `testutil`/`testdata`, globs under `[test] paths`) and test mains are not drawn or listed. Tick **View ▸ Tests**
   to draw them and **View ▸ Test dependencies** to see test-only dependencies.
 
+## Choosing what's on the map
+
+**View ▸ What's on the map…** gathers every choice in one panel, each with how many blocks it concerns:
+
+- **Code:** tests, test dependencies, generated code, errors and exceptions, dependency-injection wiring, details.
+- **Cards:** private members, fields, getters and setters, constructors.
+- **Arrows:** quiet arrows, guessed calls (arrows made only of calls guessed by name, drawn dotted), implements /
+  extends, imports without calls. Hiding an arrow kind never moves a box.
+- **Hints:** complexity hints and their two levels, unused code, how many callers make a change risky, how long
+  compared versions are kept.
+- **Hidden by you:** right-click any box ▸ **Hide this**, **Hide package …** or **Hide every name ending in …**
+  (`…Exception`, `…Dto`), or type a pattern in the panel. Each entry says which settings file holds it and has
+  **show again**.
+
+The right panel says why a block is set aside (for example `detail: only getters and setters` or
+`error: name ends with Exception`) and offers **Always show** for one that is hidden, **Hide** for one that is
+not. Everything here is a display setting: it applies at once, is kept in your file for the project, and can be
+moved to `codescape.toml` for the team from **File ▸ Project Settings…**.
+
 ## Room for the map
 
 `Ctrl+B` hides or shows the left panel, `Ctrl+I` the right one and `F11` both. With the mouse: the small arrow at

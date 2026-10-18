@@ -3,7 +3,6 @@ version = "0.1.0"
 
 [visual]
 hide_tags = []
-fold_tags = ["noise:logging"]
 
 [[visual.frame]]
 auto_prefix = "-"

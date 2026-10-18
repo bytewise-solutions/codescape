@@ -83,10 +83,10 @@ fn uml_stereotypes_name_the_kind_of_type() {
 #[test]
 fn complexity_hints_appear_from_ten_and_turn_red_from_twenty() {
     use codescape::style::{EDGE_SIDEWAYS, EDGE_UP, complexity_hint};
-    assert_eq!(complexity_hint(9), None);
-    assert_eq!(complexity_hint(10), Some(EDGE_SIDEWAYS));
-    assert_eq!(complexity_hint(19), Some(EDGE_SIDEWAYS));
-    assert_eq!(complexity_hint(20), Some(EDGE_UP));
+    assert_eq!(complexity_hint(9, 10, 20), None);
+    assert_eq!(complexity_hint(10, 10, 20), Some(EDGE_SIDEWAYS));
+    assert_eq!(complexity_hint(19, 10, 20), Some(EDGE_SIDEWAYS));
+    assert_eq!(complexity_hint(20, 10, 20), Some(EDGE_UP));
 }
 
 #[test]
@@ -123,4 +123,13 @@ fn the_legend_lists_only_what_is_on_screen() {
         ["class / struct / package"]
     );
     assert_eq!(with(|s| s.added = true), ["new"]);
+}
+
+#[test]
+fn complexity_hints_use_the_given_levels() {
+    use codescape::style::{EDGE_SIDEWAYS, EDGE_UP, complexity_hint};
+    assert_eq!(complexity_hint(9, 10, 20), None);
+    assert_eq!(complexity_hint(10, 10, 20), Some(EDGE_SIDEWAYS));
+    assert_eq!(complexity_hint(20, 10, 20), Some(EDGE_UP));
+    assert_eq!(complexity_hint(12, 15, 30), None);
 }

@@ -41,6 +41,12 @@ pub fn map_options(g: &ArchivedGraph, s: &Settings, visual: &VisualRules) -> Lay
     opts
 }
 
+pub fn name_suffix(name: &str) -> Option<&str> {
+    let start = name.char_indices().rev().find(|&(i, c)| i > 0 && c.is_uppercase()).map(|(i, _)| i)?;
+    let suffix = &name[start..];
+    (suffix.len() >= 3 && suffix.len() < name.len()).then_some(suffix)
+}
+
 pub fn block_path(g: &ArchivedGraph, n: NodeId) -> String {
     g.path(n).iter().skip(1).map(|&p| g.name(p)).collect::<Vec<_>>().join("/")
 }
@@ -56,10 +62,11 @@ pub fn resolve_hidden(g: &ArchivedGraph, s: &Settings) -> (HashSet<NodeId>, Hash
             continue;
         }
         let path = (!paths.is_empty() || !always.is_empty()).then(|| block_path(g, n));
-        if path.as_deref().is_some_and(|p| paths.contains(p)) || patterns.iter().any(|r| r.is_match(g.name(n))) {
+        let always_shown = path.as_deref().is_some_and(|p| always.contains(p));
+        if path.as_deref().is_some_and(|p| paths.contains(p)) || (!always_shown && patterns.iter().any(|r| r.is_match(g.name(n)))) {
             hidden.insert(n);
         }
-        if path.as_deref().is_some_and(|p| always.contains(p)) {
+        if always_shown {
             shown.insert(n);
         }
     }

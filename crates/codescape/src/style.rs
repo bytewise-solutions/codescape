@@ -242,13 +242,10 @@ pub fn stereotype(sub: codescape_format::SubKind, lang: codescape_format::Lang) 
     }
 }
 
-pub const COMPLEXITY_HINT: u16 = 10;
-pub const COMPLEXITY_HIGH: u16 = 20;
-
-pub fn complexity_hint(value: u16) -> Option<Color32> {
+pub fn complexity_hint(value: u16, hint: u16, high: u16) -> Option<Color32> {
     match value {
-        v if v >= COMPLEXITY_HIGH => Some(EDGE_UP),
-        v if v >= COMPLEXITY_HINT => Some(EDGE_SIDEWAYS),
+        v if v >= high => Some(EDGE_UP),
+        v if v >= hint => Some(EDGE_SIDEWAYS),
         _ => None,
     }
 }

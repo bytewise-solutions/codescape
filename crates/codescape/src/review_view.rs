@@ -4,8 +4,17 @@ use codescape_index::review::{Change, Review, Status};
 use std::collections::HashMap;
 use std::path::Path;
 
-const COMPLEXITY_HINT: u16 = 10;
-const MANY_CALLERS: u32 = 5;
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Limits {
+    pub complexity_hint: u16,
+    pub many_callers: u32,
+}
+
+impl Default for Limits {
+    fn default() -> Self {
+        Limits { complexity_hint: 10, many_callers: 5 }
+    }
+}
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum Risk {
@@ -41,13 +50,13 @@ impl Risk {
     }
 }
 
-fn risks(g: &ArchivedGraph, n: NodeId, c: &Change, a: &Analysis) -> Vec<Risk> {
+fn risks(g: &ArchivedGraph, n: NodeId, c: &Change, a: &Analysis, limits: Limits) -> Vec<Risk> {
     let mut out = Vec::new();
-    if let Some((before, after)) = c.complexity.filter(|&(b, a)| a > b && a >= COMPLEXITY_HINT) {
+    if let Some((before, after)) = c.complexity.filter(|&(b, a)| a > b && a >= limits.complexity_hint) {
         out.push(Risk::Complexity(before, after));
     }
     let callers = a.callers[n as usize];
-    if c.status == Status::Changed && callers >= MANY_CALLERS {
+    if c.status == Status::Changed && callers >= limits.many_callers {
         out.push(Risk::Callers(callers));
     }
     if c.status == Status::Changed && c.signature && g.visibility(n) == Visibility::Public {
@@ -151,6 +160,10 @@ fn under_new(g: &ArchivedGraph, r: &Review, n: NodeId) -> bool {
 }
 
 pub fn items(g: &ArchivedGraph, r: &Review, a: &Analysis) -> Vec<ReviewItem> {
+    items_with(g, r, a, Limits::default())
+}
+
+pub fn items_with(g: &ArchivedGraph, r: &Review, a: &Analysis, limits: Limits) -> Vec<ReviewItem> {
     let mut out = Vec::new();
     for n in (0..g.node_count() as NodeId).filter(|&n| matches!(g.kind(n), NodeKind::Type | NodeKind::Member)) {
         let c = r.change(n);
@@ -163,7 +176,7 @@ pub fn items(g: &ArchivedGraph, r: &Review, a: &Analysis) -> Vec<ReviewItem> {
             detail,
             key: key_of(g, n),
             fingerprint: c.fingerprint,
-            risks: risks(g, n, c, a),
+            risks: risks(g, n, c, a, limits),
         };
         match c.status {
             Status::New if !under_new(g, r, n) => out.push(item(ItemKind::New, format!("+{} lines", c.added))),

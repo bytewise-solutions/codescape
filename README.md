@@ -30,6 +30,10 @@ method from the entry point that reaches it.
   then its calls in the order they are written. Every arrow opens the code at that call.
 - **Code quality hints.** Cyclomatic complexity on every function (amber from 10, red from 20), and unused code:
   blocks nothing calls, kept apart from public API and from code only tests use.
+- **Make the map yours.** One panel decides what is drawn: tests, generated code, exceptions, wiring, details,
+  what cards list (private members, fields, getters and setters), which arrows (guessed calls, implements,
+  imports) and the hint thresholds. Right-click any box to hide it, its package or every name like it; the
+  right panel says why something is hidden and can always show it.
 - **Framework knowledge in rule packs.** Spring Boot, libGDX, Dagger, Google Wire, Fiber, RabbitMQ, Angular, Express
   and more are plain TOML files, so you can describe your own framework's entry points and routes.
 - **Nothing written into your project.** The index (a memory-mapped file, about a quarter of the source size) and

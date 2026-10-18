@@ -96,3 +96,15 @@ fn each_commit_step_compares_a_commit_with_its_parent() {
     assert_eq!(steps[0].label(), "add A");
     assert_eq!(steps[1].label(), "Uncommitted changes");
 }
+
+#[test]
+fn risk_thresholds_follow_the_settings() {
+    let (b, t) = (side(&[("cart/cart.go", BASE)]), side(&[("cart/cart.go", TANGLED)]));
+    let tg = t.file.graph();
+    let r = compare(b.file.graph(), &b.dir, tg, &t.dir);
+    let a = analyse(tg, &t.dir);
+    let add = |items: &[ReviewItem]| items.iter().find(|i| i.label == "Cart.Add").unwrap().risks.clone();
+    assert_eq!(add(&items(tg, &r, &a)), [Risk::Complexity(1, 10)]);
+    let strict = Limits { complexity_hint: 11, ..Limits::default() };
+    assert!(add(&items_with(tg, &r, &a, strict)).is_empty(), "10 is below a hint level of 11");
+}
