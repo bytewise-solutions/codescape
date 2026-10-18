@@ -138,6 +138,7 @@ pub enum Key {
     Threshold(Threshold),
     Hidden(String),
     HiddenName(String),
+    HiddenSupertype(String),
     AlwaysShown(String),
     FilterShown(String),
     Exclude(String),
@@ -149,7 +150,10 @@ pub enum Key {
 
 impl Key {
     pub fn is_display(&self) -> bool {
-        matches!(self, Key::View(_) | Key::Threshold(_) | Key::Hidden(_) | Key::HiddenName(_) | Key::AlwaysShown(_) | Key::FilterShown(_))
+        matches!(
+            self,
+            Key::View(_) | Key::Threshold(_) | Key::Hidden(_) | Key::HiddenName(_) | Key::HiddenSupertype(_) | Key::AlwaysShown(_) | Key::FilterShown(_)
+        )
     }
 }
 
@@ -255,6 +259,8 @@ struct ViewFile {
     hidden: Vec<String>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     hidden_names: Vec<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    hidden_supertypes: Vec<String>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     always_shown: Vec<String>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
@@ -380,6 +386,10 @@ impl SettingsFile {
                 out.view.hidden_names = drain_eq(&mut self.view.hidden_names, p);
                 out.view.shown_again = drain_eq(&mut self.view.shown_again, p);
             }
+            Key::HiddenSupertype(p) => {
+                out.view.hidden_supertypes = drain_eq(&mut self.view.hidden_supertypes, p);
+                out.view.shown_again = drain_eq(&mut self.view.shown_again, p);
+            }
             Key::AlwaysShown(p) => out.view.always_shown = drain_eq(&mut self.view.always_shown, p),
             Key::FilterShown(n) => out.view.filters.extend(self.view.filters.remove_entry(n)),
             Key::Exclude(g) => {
@@ -419,6 +429,7 @@ impl SettingsFile {
         }
         self.view.hidden.extend(frag.view.hidden);
         self.view.hidden_names.extend(frag.view.hidden_names);
+        self.view.hidden_supertypes.extend(frag.view.hidden_supertypes);
         self.view.always_shown.extend(frag.view.always_shown);
         self.view.shown_again.extend(frag.view.shown_again);
         self.view.filters.extend(frag.view.filters);
@@ -441,7 +452,7 @@ impl SettingsFile {
             Key::Category(g) => out.remove.category.push(g.clone()),
             Key::TestPath(p) => out.remove.test_paths.push(p.clone()),
             Key::Filter(n) => out.remove.filter.push(n.clone()),
-            Key::Hidden(p) | Key::HiddenName(p) => out.view.shown_again.push(p.clone()),
+            Key::Hidden(p) | Key::HiddenName(p) | Key::HiddenSupertype(p) => out.view.shown_again.push(p.clone()),
             Key::View(_) | Key::Threshold(_) | Key::AlwaysShown(_) | Key::FilterShown(_) | Key::Pack(_) => {}
         }
         out
@@ -466,6 +477,7 @@ pub struct Settings {
     pub thresholds: [Sourced<u32>; Threshold::ALL.len()],
     pub hidden: Vec<Sourced<String>>,
     pub hidden_names: Vec<Sourced<String>>,
+    pub hidden_supertypes: Vec<Sourced<String>>,
     pub always_shown: Vec<Sourced<String>>,
     pub filter_views: BTreeMap<String, Sourced<bool>>,
     pub removed: Vec<Sourced<Key>>,
@@ -490,6 +502,7 @@ impl Settings {
             thresholds: Threshold::ALL.map(|t| at(t.default_value(), Layer::Default)),
             hidden: Vec::new(),
             hidden_names: Vec::new(),
+            hidden_supertypes: Vec::new(),
             always_shown: Vec::new(),
             filter_views: BTreeMap::new(),
             removed: Vec::new(),
@@ -512,6 +525,7 @@ impl Settings {
             Key::Filter(n) => self.filters.retain(|f| &f.value.name != n),
             Key::Hidden(p) => self.hidden.retain(|h| &h.value != p),
             Key::HiddenName(p) => self.hidden_names.retain(|h| &h.value != p),
+            Key::HiddenSupertype(p) => self.hidden_supertypes.retain(|h| &h.value != p),
             Key::AlwaysShown(p) => self.always_shown.retain(|h| &h.value != p),
             Key::View(_) | Key::Threshold(_) | Key::FilterShown(_) | Key::Pack(_) => {}
         }
@@ -598,13 +612,19 @@ impl Settings {
         for p in &f.view.shown_again {
             self.hidden.retain(|h| &h.value != p);
             self.hidden_names.retain(|h| &h.value != p);
+            self.hidden_supertypes.retain(|h| &h.value != p);
         }
-        for p in &f.view.hidden_names {
-            regex::Regex::new(p).with_context(|| format!("bad name pattern `{p}` under [view] hidden_names"))?;
+        for (key, patterns) in [("hidden_names", &f.view.hidden_names), ("hidden_supertypes", &f.view.hidden_supertypes)] {
+            for p in patterns {
+                regex::Regex::new(p).with_context(|| format!("bad name pattern `{p}` under [view] {key}"))?;
+            }
         }
-        for (list, entries) in
-            [(&mut self.hidden, &f.view.hidden), (&mut self.hidden_names, &f.view.hidden_names), (&mut self.always_shown, &f.view.always_shown)]
-        {
+        for (list, entries) in [
+            (&mut self.hidden, &f.view.hidden),
+            (&mut self.hidden_names, &f.view.hidden_names),
+            (&mut self.hidden_supertypes, &f.view.hidden_supertypes),
+            (&mut self.always_shown, &f.view.always_shown),
+        ] {
             for p in entries {
                 list.retain(|h| &h.value != p);
                 list.push(at(p.clone(), layer));
@@ -637,6 +657,7 @@ impl Settings {
             Key::Filter(n) => self.filters.iter().any(|f| &f.value.name == n),
             Key::Hidden(p) => self.hidden.iter().any(|h| &h.value == p),
             Key::HiddenName(p) => self.hidden_names.iter().any(|h| &h.value == p),
+            Key::HiddenSupertype(p) => self.hidden_supertypes.iter().any(|h| &h.value == p),
             Key::AlwaysShown(p) => self.always_shown.iter().any(|h| &h.value == p),
             Key::View(_) | Key::Threshold(_) | Key::FilterShown(_) | Key::Pack(_) => false,
         }
@@ -802,6 +823,12 @@ impl SettingsStore {
         self.replace(Key::HiddenName(pattern.into()), frag)
     }
 
+    pub fn hide_supertypes(&mut self, pattern: &str) -> Result<()> {
+        regex::Regex::new(pattern).with_context(|| format!("bad name pattern `{pattern}`"))?;
+        let frag = SettingsFile { view: ViewFile { hidden_supertypes: vec![pattern.into()], ..Default::default() }, ..Default::default() };
+        self.replace(Key::HiddenSupertype(pattern.into()), frag)
+    }
+
     pub fn always_show(&mut self, path: &str) -> Result<()> {
         let frag = SettingsFile { view: ViewFile { always_shown: vec![path.into()], ..Default::default() }, ..Default::default() };
         self.replace(Key::AlwaysShown(path.into()), frag)
@@ -810,6 +837,8 @@ impl SettingsStore {
     pub fn unhide(&mut self, entry: &str) -> Result<()> {
         if self.settings.hidden.iter().any(|h| h.value == entry) {
             self.remove_entry(Key::Hidden(entry.into()))
+        } else if self.settings.hidden_supertypes.iter().any(|h| h.value == entry) {
+            self.remove_entry(Key::HiddenSupertype(entry.into()))
         } else {
             self.remove_entry(Key::HiddenName(entry.into()))
         }

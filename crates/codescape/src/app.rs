@@ -1803,8 +1803,12 @@ impl Project {
             let mut why: Vec<String> = g.tags(n).filter_map(|t| t.strip_prefix("why:")).map(|t| t.replacen(':', ": ", 1)).collect();
             let by_path = s.hidden.iter().any(|h| h.value == path);
             if !by_path && opts.hidden_nodes.contains(&n) {
-                let pattern = s.hidden_names.iter().find(|p| regex::Regex::new(&p.value).is_ok_and(|r| r.is_match(g.name(n))));
-                why.extend(pattern.map(|p| format!("you hid names matching {}", p.value)));
+                let matches = |p: &str, name: &str| regex::Regex::new(p).is_ok_and(|r| r.is_match(name));
+                let by_name = s.hidden_names.iter().find(|p| matches(&p.value, g.name(n))).map(|p| format!("you hid names matching {}", p.value));
+                let sups = crate::view::supertypes(g, n);
+                let by_super =
+                    || s.hidden_supertypes.iter().find(|p| sups.iter().any(|t| matches(&p.value, t))).map(|p| format!("you hid types extending {}", p.value));
+                why.extend(by_name.or_else(by_super));
             }
             (path, by_path, opts.always_shown.contains(&n), opts.hides(g, n), why)
         });

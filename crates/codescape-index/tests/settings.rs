@@ -282,3 +282,17 @@ fn a_bad_name_pattern_is_refused() {
     let mut store = SettingsStore::load(e.paths.clone()).unwrap();
     assert!(store.hide_names("(unclosed").is_err());
 }
+
+#[test]
+fn types_can_be_hidden_by_what_they_extend() {
+    let e = env();
+    write(&e.paths.shared, "[view]\nhidden_supertypes = [\"Exception$\"]\n");
+    let mut store = SettingsStore::load(e.paths.clone()).unwrap();
+    store.hide_supertypes("(^|\\.)Discount$").unwrap();
+    let list = |s: &Settings| s.hidden_supertypes.iter().map(|h| (h.value.clone(), h.layer)).collect::<Vec<_>>();
+    assert_eq!(list(store.settings()), [("Exception$".to_string(), Layer::Shared), ("(^|\\.)Discount$".to_string(), Layer::Personal)]);
+    assert!(store.hide_supertypes("(oops").is_err());
+    store.unhide("Exception$").unwrap();
+    assert_eq!(list(store.settings()), [("(^|\\.)Discount$".to_string(), Layer::Personal)]);
+    assert!(!store.index_dirty());
+}

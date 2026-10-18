@@ -1,4 +1,4 @@
-use codescape_format::{ArchivedGraph, NodeFlags, NodeId, NodeKind};
+use codescape_format::{ArchivedGraph, EdgeKind, NodeFlags, NodeId, NodeKind};
 use codescape_index::{Key, Settings, SettingsStore, View, filter_tag};
 use codescape_layout::{CardOptions, LayoutOptions};
 use codescape_rules::VisualRules;
@@ -51,8 +51,25 @@ pub fn block_path(g: &ArchivedGraph, n: NodeId) -> String {
     g.path(n).iter().skip(1).map(|&p| g.name(p)).collect::<Vec<_>>().join("/")
 }
 
+pub fn supertypes(g: &ArchivedGraph, n: NodeId) -> Vec<String> {
+    let mut out = Vec::new();
+    let mut seen = HashSet::from([n]);
+    let mut todo = std::collections::VecDeque::from([n]);
+    while let Some(t) = todo.pop_front() {
+        for e in g.out_edges(t).iter().filter(|e| matches!(EdgeKind::from_u8(e.kind), EdgeKind::Inherits | EdgeKind::Implements)) {
+            let s = e.to.to_native();
+            if seen.insert(s) {
+                out.push(g.name(s).to_string());
+                todo.push_back(s);
+            }
+        }
+    }
+    out
+}
+
 pub fn resolve_hidden(g: &ArchivedGraph, s: &Settings) -> (HashSet<NodeId>, HashSet<NodeId>) {
     let patterns: Vec<regex::Regex> = s.hidden_names.iter().filter_map(|p| regex::Regex::new(&p.value).ok()).collect();
+    let super_patterns: Vec<regex::Regex> = s.hidden_supertypes.iter().filter_map(|p| regex::Regex::new(&p.value).ok()).collect();
     let paths: HashSet<&str> = s.hidden.iter().map(|h| h.value.as_str()).collect();
     let always: HashSet<&str> = s.always_shown.iter().map(|h| h.value.as_str()).collect();
     let (mut hidden, mut shown) = (HashSet::new(), HashSet::new());
@@ -63,7 +80,9 @@ pub fn resolve_hidden(g: &ArchivedGraph, s: &Settings) -> (HashSet<NodeId>, Hash
         }
         let path = (!paths.is_empty() || !always.is_empty()).then(|| block_path(g, n));
         let always_shown = path.as_deref().is_some_and(|p| always.contains(p));
-        if path.as_deref().is_some_and(|p| paths.contains(p)) || (!always_shown && patterns.iter().any(|r| r.is_match(g.name(n)))) {
+        let by_super =
+            || g.kind(n) == NodeKind::Type && !super_patterns.is_empty() && supertypes(g, n).iter().any(|t| super_patterns.iter().any(|r| r.is_match(t)));
+        if path.as_deref().is_some_and(|p| paths.contains(p)) || (!always_shown && (patterns.iter().any(|r| r.is_match(g.name(n))) || by_super())) {
             hidden.insert(n);
         }
         if always_shown {

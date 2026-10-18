@@ -166,6 +166,11 @@ pub fn show(ctx: &egui::Context, open: &mut bool, store: &mut SettingsStore, pac
                 ui.horizontal(|ui| origin(ui, h.layer, &Key::HiddenName(h.value.clone()), &mut ops));
                 ui.end_row();
             }
+            for h in &s.hidden_supertypes {
+                ui.label(format!("Hidden types extending: {}", h.value));
+                ui.horizontal(|ui| origin(ui, h.layer, &Key::HiddenSupertype(h.value.clone()), &mut ops));
+                ui.end_row();
+            }
             for a in &s.always_shown {
                 ui.label(format!("Always shown: {}", a.value));
                 ui.horizontal(|ui| origin(ui, a.layer, &Key::AlwaysShown(a.value.clone()), &mut ops));

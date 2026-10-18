@@ -42,6 +42,7 @@ guessed_calls = false          # arrows: guessed_calls, implements_arrows, impor
 complexity_hint = 12           # also complexity_high, many_callers, keep_versions_days
 hidden = ["app/legacy"]        # blocks by path (module/package/Type/member)
 hidden_names = ["Exception$"]  # every block whose name matches
+hidden_supertypes = ["(^|\\.)Exception$"]  # every type extending a type whose name matches
 always_shown = ["app/cart/CartError"]
 shown_again = ["app/legacy"]   # cancels a hide made in a lower layer
 filters = { migrations = true }

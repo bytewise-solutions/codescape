@@ -9,6 +9,43 @@ use std::path::PathBuf;
 
 pub const EXTERNAL_MODULE: &str = "(external)";
 
+const JAVA_LANG: &[&str] = &[
+    "Object", "String", "Enum", "Record", "Number", "Integer", "Long", "Double", "Float", "Short", "Byte", "Boolean", "Character", "Void", "Class",
+    "Thread", "Runnable", "Comparable", "Iterable", "AutoCloseable", "Cloneable", "CharSequence", "StringBuilder", "Throwable", "Exception",
+    "RuntimeException", "Error", "IllegalStateException", "IllegalArgumentException", "UnsupportedOperationException", "NullPointerException",
+    "IndexOutOfBoundsException", "ArrayIndexOutOfBoundsException", "ArithmeticException", "ClassCastException", "NumberFormatException",
+    "SecurityException", "InterruptedException", "CloneNotSupportedException", "ReflectiveOperationException", "ClassNotFoundException",
+    "AssertionError", "StackOverflowError", "OutOfMemoryError",
+];
+
+const JDK_SUPERTYPES: &[(&str, &str)] = &[
+    ("java.lang.Exception", "java.lang.Throwable"),
+    ("java.lang.Error", "java.lang.Throwable"),
+    ("java.lang.RuntimeException", "java.lang.Exception"),
+    ("java.lang.IllegalStateException", "java.lang.RuntimeException"),
+    ("java.lang.IllegalArgumentException", "java.lang.RuntimeException"),
+    ("java.lang.NumberFormatException", "java.lang.IllegalArgumentException"),
+    ("java.lang.UnsupportedOperationException", "java.lang.RuntimeException"),
+    ("java.lang.NullPointerException", "java.lang.RuntimeException"),
+    ("java.lang.IndexOutOfBoundsException", "java.lang.RuntimeException"),
+    ("java.lang.ArrayIndexOutOfBoundsException", "java.lang.IndexOutOfBoundsException"),
+    ("java.lang.ArithmeticException", "java.lang.RuntimeException"),
+    ("java.lang.ClassCastException", "java.lang.RuntimeException"),
+    ("java.lang.SecurityException", "java.lang.RuntimeException"),
+    ("java.lang.InterruptedException", "java.lang.Exception"),
+    ("java.lang.CloneNotSupportedException", "java.lang.Exception"),
+    ("java.lang.ReflectiveOperationException", "java.lang.Exception"),
+    ("java.lang.ClassNotFoundException", "java.lang.ReflectiveOperationException"),
+    ("java.lang.AssertionError", "java.lang.Error"),
+    ("java.lang.StackOverflowError", "java.lang.Error"),
+    ("java.lang.OutOfMemoryError", "java.lang.Error"),
+    ("java.io.IOException", "java.lang.Exception"),
+    ("java.io.UncheckedIOException", "java.lang.RuntimeException"),
+    ("java.io.FileNotFoundException", "java.io.IOException"),
+    ("java.util.NoSuchElementException", "java.lang.RuntimeException"),
+    ("java.util.ConcurrentModificationException", "java.lang.RuntimeException"),
+];
+
 struct SourceFile {
     module: usize,
     path: PathBuf,
@@ -75,6 +112,7 @@ pub fn extract_java(d: &Discovery, module_nodes: &[NodeId], excludes: &GlobSet, 
     r.visible_test = with_self(r.declared_reach_scoped(false));
     r.declare();
     r.link_supertypes();
+    r.link_known_supertypes();
     r.module_edges();
     r.package_edges();
     r.resolve_calls(facts);
@@ -306,7 +344,21 @@ impl<'a> Resolver<'a> {
         if external_wildcards.len() == 1 {
             return Some(TypeRef::External(external_wildcards.remove(0)));
         }
-        None
+        JAVA_LANG.contains(&raw).then(|| TypeRef::External(format!("java.lang.{raw}")))
+    }
+
+    fn link_known_supertypes(&mut self) {
+        let mut todo: Vec<String> = self.externals.keys().cloned().collect();
+        let mut linked = HashSet::new();
+        while let Some(fqn) = todo.pop() {
+            let Some(&(_, parent)) = JDK_SUPERTYPES.iter().find(|(sub, _)| *sub == fqn) else { continue };
+            if !linked.insert(fqn.clone()) {
+                continue;
+            }
+            let (from, to) = (self.external_node(&fqn), self.external_node(parent));
+            self.b.add_edge(from, to, EdgeKind::Inherits, Scope::Main, Confidence::Resolved, EdgeFlags::NONE);
+            todo.push(parent.to_string());
+        }
     }
 
     fn external_node(&mut self, fqn: &str) -> NodeId {

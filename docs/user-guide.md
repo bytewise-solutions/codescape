@@ -159,6 +159,12 @@ enough to read.
 - **Hidden by you:** right-click any box ▸ **Hide this**, **Hide package …** or **Hide every name ending in …**
   (`…Exception`, `…Dto`), or type a pattern in the panel. Each entry says which settings file holds it and has
   **show again**.
+- **By what a type extends:** right-click a type ▸ **Hide every type extending …** (the type itself, each of its
+  supertypes, or the family such as `…Exception`), or type a pattern and press **Hide types extending**. The match
+  runs along the extends / implements chain the index knows: project types, library types they name directly, and
+  the JDK's exception tree (`IllegalStateException` → `RuntimeException` → `Exception` → `Throwable`). Java and
+  TypeScript record extends and implements; Rust records trait implementations; Go records the project interfaces a
+  type satisfies.
 
 The right panel says why a block is set aside (for example `detail: only getters and setters` or
 `error: name ends with Exception`) and offers **Always show** for one that is hidden, **Hide** for one that is

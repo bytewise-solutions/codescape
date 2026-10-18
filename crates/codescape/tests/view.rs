@@ -103,3 +103,41 @@ fn a_name_offers_its_last_word_to_hide_alike_names() {
     assert_eq!(name_suffix("Cart"), None);
     assert_eq!(name_suffix("toDo"), None, "too short to be a family of names");
 }
+
+#[test]
+fn types_extending_a_matching_supertype_are_hidden_through_the_known_chain() {
+    use codescape_format::*;
+    let mut b = GraphBuilder::new("proj");
+    let root = b.root();
+    let m = b.add_node(root, NodeKind::Module, SubKind::None, "app", Lang::Java);
+    let p = b.add_node(m, NodeKind::Package, SubKind::None, "cart", Lang::Java);
+    let ext_mod = b.add_node(root, NodeKind::Module, SubKind::None, "(external)", Lang::None);
+    b.add_flags(ext_mod, NodeFlags::EXTERNAL);
+    let runtime = b.add_node(ext_mod, NodeKind::External, SubKind::None, "java.lang.RuntimeException", Lang::Java);
+    b.add_flags(runtime, NodeFlags::EXTERNAL);
+    let [cart, cart_ex, fault, coupon, discount] =
+        ["Cart", "CartException", "Fault", "Coupon", "Discount"].map(|t| b.add_node(p, NodeKind::Type, SubKind::Class, t, Lang::Java));
+    b.add_edge(cart_ex, runtime, EdgeKind::Inherits, Scope::Main, Confidence::Resolved, EdgeFlags::NONE);
+    b.add_edge(fault, cart_ex, EdgeKind::Inherits, Scope::Main, Confidence::Resolved, EdgeFlags::NONE);
+    b.add_edge(coupon, discount, EdgeKind::Implements, Scope::Main, Confidence::Resolved, EdgeFlags::NONE);
+    let _ = cart;
+    let dir = tempfile::tempdir().unwrap();
+    write_graph(&b.finish(), &dir.path().join("g")).unwrap();
+    let f = IndexFile::open(&dir.path().join("g")).unwrap();
+    let g = f.graph();
+    let names = |set: &std::collections::HashSet<NodeId>| {
+        let mut v: Vec<&str> = set.iter().map(|&n| g.name(n)).collect();
+        v.sort();
+        v
+    };
+    let (_t, s) = store("[view]\nhidden_supertypes = [\"Exception$\"]\n");
+    assert_eq!(
+        names(&codescape::view::resolve_hidden(g, s.settings()).0),
+        ["CartException", "Fault"],
+        "Fault extends CartException, which extends RuntimeException"
+    );
+    let (_t, s) = store("[view]\nhidden_supertypes = [\"(^|\\\\.)Discount$\"]\nalways_shown = [\"app/cart/Coupon\"]\n");
+    assert!(codescape::view::resolve_hidden(g, s.settings()).0.is_empty(), "always shown beats the supertype rule");
+    let fault = (0..g.node_count() as NodeId).find(|&n| g.name(n) == "Fault").unwrap();
+    assert_eq!(codescape::view::supertypes(g, fault), ["CartException", "java.lang.RuntimeException"]);
+}

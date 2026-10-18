@@ -1,6 +1,6 @@
 use super::Project;
 use crate::style;
-use crate::view::{block_path, name_suffix};
+use crate::view::{block_path, name_suffix, supertypes};
 use codescape_format::{ArchivedGraph, NodeFlags, NodeId, NodeKind};
 use codescape_index::{Key as SettingKey, Layer, Threshold, View};
 
@@ -8,6 +8,7 @@ use codescape_index::{Key as SettingKey, Layer, Threshold, View};
 pub(super) enum HideRequest {
     Block(String),
     Names(String),
+    Supertypes(String),
     ShowAgain(String),
     AlwaysShow(String),
     StopAlwaysShowing(String),
@@ -56,6 +57,23 @@ pub(super) fn hide_menu(g: &ArchivedGraph, ui: &mut egui::Ui, n: NodeId) -> Opti
     {
         pick = Some(HideRequest::Names(format!("{suffix}$")));
     }
+    if g.kind(n) == NodeKind::Type {
+        let simple = |name: &str| name.rsplit('.').next().unwrap_or(name).to_string();
+        let exact = |name: &str| format!("(^|\\.){}$", regex::escape(&simple(name)));
+        let sups = supertypes(g, n);
+        let mut offers: Vec<(String, String)> = vec![(format!("Hide every type extending {}", g.name(n)), exact(g.name(n)))];
+        for sup in sups.iter().take(2) {
+            offers.push((format!("Hide every type extending {}", simple(sup)), exact(sup)));
+        }
+        if let Some(family) = sups.first().and_then(|s| name_suffix(&simple(s)).map(str::to_string)) {
+            offers.push((format!("Hide every type extending …{family}"), format!("{family}$")));
+        }
+        for (label, pattern) in offers {
+            if ui.button(label).clicked() {
+                pick = Some(HideRequest::Supertypes(pattern));
+            }
+        }
+    }
     pick
 }
 
@@ -86,6 +104,7 @@ impl Project {
         let done = match &request {
             HideRequest::Block(p) => self.settings.hide(p),
             HideRequest::Names(p) => self.settings.hide_names(p),
+            HideRequest::Supertypes(p) => self.settings.hide_supertypes(p),
             HideRequest::ShowAgain(p) => self.settings.unhide(p),
             HideRequest::AlwaysShow(p) => self.settings.always_show(p),
             HideRequest::StopAlwaysShowing(p) => self.settings.stop_always_showing(p),
@@ -174,13 +193,20 @@ impl Project {
                         }
                     }
                     heading(ui, "HIDDEN BY YOU");
-                    let hidden =
-                        s.hidden.iter().map(|h| (h.value.clone(), h.layer, false)).chain(s.hidden_names.iter().map(|h| (h.value.clone(), h.layer, true)));
+                    let hidden = s
+                        .hidden
+                        .iter()
+                        .map(|h| (h.value.clone(), h.layer, None))
+                        .chain(s.hidden_names.iter().map(|h| (h.value.clone(), h.layer, Some("names matching"))))
+                        .chain(s.hidden_supertypes.iter().map(|h| (h.value.clone(), h.layer, Some("types extending"))));
                     let mut any = false;
-                    for (entry, layer, names) in hidden {
+                    for (entry, layer, kind) in hidden {
                         any = true;
                         ui.horizontal(|ui| {
-                            let text = if names { format!("names matching {entry}") } else { short_path(&entry) };
+                            let text = match kind {
+                                Some(k) => format!("{k} {entry}"),
+                                None => short_path(&entry),
+                            };
                             ui.label(egui::RichText::new(text).monospace()).on_hover_text(&entry);
                             ui.label(egui::RichText::new(layer_name(layer)).small().color(style::MUTED));
                             if ui.small_button("show again").clicked() {
@@ -193,8 +219,13 @@ impl Project {
                     }
                     ui.horizontal(|ui| {
                         ui.add(egui::TextEdit::singleline(&mut pattern).hint_text("Exception$, ^Mock, Dto$…").desired_width(180.0));
-                        if ui.button("Hide names matching").clicked() && !pattern.trim().is_empty() {
+                        if ui.button("Hide names").on_hover_text("Every block whose name matches").clicked() && !pattern.trim().is_empty() {
                             request = Some(HideRequest::Names(pattern.trim().to_string()));
+                        }
+                        if ui.button("Hide types extending").on_hover_text("Every type with a known supertype whose name matches").clicked()
+                            && !pattern.trim().is_empty()
+                        {
+                            request = Some(HideRequest::Supertypes(pattern.trim().to_string()));
                         }
                     });
                     if !s.always_shown.is_empty() {
@@ -210,7 +241,7 @@ impl Project {
                     }
                 }
             });
-        self.hide_pattern = if matches!(request, Some(HideRequest::Names(_))) { String::new() } else { pattern };
+        self.hide_pattern = if matches!(request, Some(HideRequest::Names(_) | HideRequest::Supertypes(_))) { String::new() } else { pattern };
         self.map_panel_open = open;
         for (key, on) in switches.into_iter().chain(filter_switches) {
             self.set_display(&key, on);

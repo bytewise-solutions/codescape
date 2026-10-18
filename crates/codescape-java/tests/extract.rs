@@ -238,3 +238,27 @@ fn methods_carry_their_cyclomatic_complexity() {
     assert_eq!(b.complexity(at(&b, &["app", "v", "C", "easy"])), 1);
     assert_eq!(b.complexity(at(&b, &["app", "v", "C", "hard"])), 9, "if && for if || case case ?:");
 }
+
+#[test]
+fn java_lang_supertypes_resolve_without_an_import_and_know_their_hierarchy() {
+    let tmp = tempfile::tempdir().unwrap();
+    let root = tmp.path();
+    std::fs::write(root.join("settings.gradle"), "rootProject.name = 'shop'\n").unwrap();
+    std::fs::write(root.join("build.gradle"), "").unwrap();
+    let src = root.join("src/main/java/shop");
+    std::fs::create_dir_all(&src).unwrap();
+    std::fs::write(src.join("NotFound.java"), "package shop;\n\npublic class NotFound extends Exception {}\n").unwrap();
+    std::fs::write(src.join("Mismatch.java"), "package shop;\n\npublic class Mismatch extends IllegalStateException {}\n").unwrap();
+    let d = discover(root, &default_excludes()).unwrap();
+    let mut b = GraphBuilder::new("shop");
+    let module_nodes: Vec<NodeId> = d.modules.iter().map(|m| b.add_node(b.root(), NodeKind::Module, SubKind::None, &m.name, Lang::Java)).collect();
+    let mut facts = ProjectFacts::default();
+    extract_java(&d, &module_nodes, &default_excludes(), &mut b, &mut facts);
+    let ext = |fqn: &str| at(&b, &["(external)", fqn]);
+    let ty = |name: &str| (0..b.node_count() as NodeId).find(|&n| b.name(n) == name && b.node_kind(n) == NodeKind::Type).unwrap();
+    assert!(has_edge(&b, ty("NotFound"), ext("java.lang.Exception"), EdgeKind::Inherits).is_some());
+    assert!(has_edge(&b, ty("Mismatch"), ext("java.lang.IllegalStateException"), EdgeKind::Inherits).is_some());
+    for (sub, sup) in [("java.lang.IllegalStateException", "java.lang.RuntimeException"), ("java.lang.RuntimeException", "java.lang.Exception"), ("java.lang.Exception", "java.lang.Throwable")] {
+        assert!(has_edge(&b, ext(sub), ext(sup), EdgeKind::Inherits).is_some(), "{sub} extends {sup}");
+    }
+}
