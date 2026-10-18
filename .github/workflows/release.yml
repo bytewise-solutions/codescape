@@ -1,0 +1,85 @@
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  check:
+    name: Check the tag and the tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Tag matches the workspace version
+        run: |
+          version=$(grep -m1 '^version' Cargo.toml | cut -d'"' -f2)
+          if [ "${GITHUB_REF_NAME}" != "v${version}" ]; then
+            echo "::error::tag ${GITHUB_REF_NAME} does not match Cargo.toml version ${version}"
+            exit 1
+          fi
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo test --workspace --release --locked
+
+  build:
+    name: Build (${{ matrix.target }})
+    needs: check
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # The oldest supported runner, so the binary runs on older glibc versions too.
+          - os: ubuntu-22.04
+            target: x86_64-unknown-linux-gnu
+          - os: windows-latest
+            target: x86_64-pc-windows-msvc
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: ${{ matrix.target }}
+      - run: cargo build --release --locked --target ${{ matrix.target }} -p codescape -p codescape-index
+      - name: Package
+        shell: bash
+        run: |
+          name="codescape-${GITHUB_REF_NAME}-${{ matrix.target }}"
+          mkdir "$name"
+          cp README.md "$name/"
+          if [ "${{ runner.os }}" = "Windows" ]; then
+            cp target/${{ matrix.target }}/release/codescape.exe target/${{ matrix.target }}/release/codescape-index.exe "$name/"
+            7z a -tzip "$name.zip" "$name" > /dev/null
+            echo "ASSET=$name.zip" >> "$GITHUB_ENV"
+          else
+            cp target/${{ matrix.target }}/release/codescape target/${{ matrix.target }}/release/codescape-index "$name/"
+            tar czf "$name.tar.gz" "$name"
+            echo "ASSET=$name.tar.gz" >> "$GITHUB_ENV"
+          fi
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.target }}
+          path: ${{ env.ASSET }}
+
+  publish:
+    name: Publish the release
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+      - run: cd dist && sha256sum * > SHA256SUMS
+      - name: Create the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create "$GITHUB_REF_NAME" dist/* --repo "$GITHUB_REPOSITORY" --title "Codescape $GITHUB_REF_NAME" --generate-notes --verify-tag

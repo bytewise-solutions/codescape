@@ -56,7 +56,11 @@ The screenshots show [ripgrep](https://github.com/BurntSushi/ripgrep) (MIT / Unl
 
 ## Install
 
-Codescape is built from source with a recent stable Rust (edition 2024) and a C compiler for the tree-sitter
+Download the archive for your system from the [releases page](https://github.com/bytewise-solutions/codescape/releases):
+`…-x86_64-unknown-linux-gnu.tar.gz` for Linux, `…-x86_64-pc-windows-msvc.zip` for Windows (64-bit only). Unpack it and
+run `codescape` (`codescape.exe`); `SHA256SUMS` lists each archive's checksum.
+
+To build from source instead, you need a recent stable Rust (edition 2024) and a C compiler for the tree-sitter
 grammars.
 
 ```sh
@@ -138,7 +142,7 @@ memory-mapped file that the viewer lays out lazily, one container at a time. Des
 
 ```sh
 cargo test --workspace                          # the whole suite, no external project needed
-cargo test --workspace -- --include-ignored     # also the acceptance checks on real projects (paths in the tests)
+cargo test --workspace -- --include-ignored     # also index this repository itself
 cargo fmt --all                                 # max width 160, see rustfmt.toml
 cargo clippy --workspace --all-targets -- -D warnings
 ```
@@ -146,6 +150,10 @@ cargo clippy --workspace --all-targets -- -D warnings
 [CI](.github/workflows/ci.yml) runs on every pull request and on `master`: formatting, clippy with warnings denied,
 the test suite, a headless render of this repository's map and of a sequence diagram (kept as artifacts), and
 builds on macOS and Windows.
+
+[Releases](.github/workflows/release.yml) are cut by pushing a tag that matches the workspace version in
+`Cargo.toml`: bump `version`, commit, then `git tag v0.2.0 && git push origin v0.2.0`. The workflow runs the tests,
+builds Linux and Windows x86-64 archives and publishes them with `SHA256SUMS` as a GitHub release.
 
 ## Limits
 

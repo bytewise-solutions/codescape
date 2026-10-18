@@ -43,7 +43,6 @@ jobs:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
-      # Tests marked #[ignore] index the reference projects, which only exist on a developer machine.
       - run: cargo test --workspace --release --locked
 
   screenshot:
