@@ -420,7 +420,7 @@ fn random_graphs_have_30_percent_fewer_crossings() {
 }
 
 #[test]
-fn pinned_row_never_wraps() {
+fn pinned_boxes_fill_the_top_rows_in_order_above_the_rest() {
     let apps: Vec<String> = (0..14).map(|i| format!("app{i:02}")).collect();
     let mut names: Vec<&str> = apps.iter().map(|s| s.as_str()).collect();
     names.push("core");
@@ -428,9 +428,15 @@ fn pinned_row_never_wraps() {
     let g = with_entries(&names, &deps, &names[..14]);
     let gr = g.file.graph();
     let l = layout_container(gr, gr.root(), &[], &LayoutOptions::default());
-    let ys: Vec<f32> = l.children.iter().filter(|c| c.pinned).map(|c| c.rect.y).collect();
-    assert_eq!(ys.len(), 14);
-    assert!(ys.iter().all(|&y| (y - ys[0]).abs() < 0.5), "pinned boxes share one row: {ys:?}");
+    let mut pinned: Vec<(f32, f32, &str)> = l.children.iter().filter(|c| c.pinned).map(|c| (c.rect.y, c.rect.x, gr.name(c.node))).collect();
+    assert_eq!(pinned.len(), 14);
+    let core = l.child(g.ids["core"]).unwrap().rect.y;
+    assert!(pinned.iter().all(|p| p.0 < core), "every entry owner sits above the rest");
+    pinned.sort_by(|a, b| a.0.total_cmp(&b.0).then(a.1.total_cmp(&b.1)));
+    let reading: Vec<&str> = pinned.iter().map(|p| p.2).collect();
+    let mut sorted = reading.clone();
+    sorted.sort();
+    assert_eq!(reading, sorted, "read row by row, they stay alphabetical");
 }
 
 #[test]
@@ -490,7 +496,7 @@ fn wiring_siblings_never_move_other_boxes() {
     let on = layout_container(g, g.root(), &[], &LayoutOptions { show_wiring: true, ..Default::default() });
     assert_eq!(on.children.len(), off.children.len() + 1);
     for c in &off.children {
-        assert_eq!(on.child(c.node).unwrap().rect, c.rect, "{} moved", g.name(c.node));
+        assert_eq!(under_header(&on, on.child(c.node).unwrap().rect), under_header(&off, c.rect), "{} moved", g.name(c.node));
     }
 }
 
@@ -531,7 +537,7 @@ fn error_types_hidden_by_default_and_shown_without_moving_others() {
     let on = layout_container(g, pkg, &[], &LayoutOptions { show_noise: true, ..Default::default() });
     assert_eq!(on.children.len(), 3);
     for c in &off.children {
-        assert_eq!(on.child(c.node).unwrap().rect, c.rect);
+        assert_eq!(under_header(&on, on.child(c.node).unwrap().rect), under_header(&off, c.rect));
     }
 }
 
@@ -632,7 +638,7 @@ fn details_hidden_counted_and_shown_without_moving() {
     assert!(on.child(g.ids["Price"]).is_some());
     assert_eq!(on.hidden_details, 0);
     for c in &off.children {
-        assert_eq!(on.child(c.node).unwrap().rect, c.rect);
+        assert_eq!(under_header(&on, on.child(c.node).unwrap().rect), under_header(&off, c.rect));
     }
 }
 
@@ -865,4 +871,102 @@ fn arrows_made_only_of_guessed_calls_are_marked_and_can_be_left_out() {
     };
     assert_eq!(edges(&LayoutOptions::default()), [("api".to_string(), true), ("util".to_string(), false)]);
     assert_eq!(edges(&LayoutOptions { guessed_calls: false, ..Default::default() }), [("util".to_string(), false)]);
+}
+
+fn chain_package(leaves: usize) -> (tempfile::TempDir, IndexFile) {
+    chain_package_with(leaves, NodeFlags::NONE)
+}
+
+fn chain_package_with(leaves: usize, leaf_flags: NodeFlags) -> (tempfile::TempDir, IndexFile) {
+    let mut b = GraphBuilder::new("p");
+    let pkg = b.add_node(b.root(), NodeKind::Package, SubKind::None, "people", Lang::Java);
+    let mut prev: Option<NodeId> = None;
+    let mut last = pkg;
+    for i in 0..8 {
+        let t = b.add_node(pkg, NodeKind::Type, SubKind::Class, &format!("Step{i}"), Lang::Java);
+        b.set_span(t, "f", 1, 900);
+        b.set_lines(t, 900);
+        for m in 0..14 {
+            let member = b.add_node(t, NodeKind::Member, SubKind::Method, &format!("m{m}"), Lang::Java);
+            b.set_span(member, "f", m * 10 + 2, m * 10 + 9);
+        }
+        if let Some(p) = prev {
+            b.add_edge(p, t, EdgeKind::Calls, Scope::Main, Confidence::Resolved, EdgeFlags::NONE);
+        }
+        prev = Some(t);
+        last = t;
+    }
+    for i in 0..leaves {
+        let leaf = b.add_node(pkg, NodeKind::Type, SubKind::Class, &format!("Leaf{i}"), Lang::Java);
+        b.add_flags(leaf, leaf_flags);
+        b.add_edge(last, leaf, EdgeKind::Calls, Scope::Main, Confidence::Resolved, EdgeFlags::NONE);
+    }
+    open(b)
+}
+
+#[test]
+fn a_long_chain_folds_instead_of_making_a_thin_column() {
+    let (_d, f) = chain_package(0);
+    let g = f.graph();
+    let pkg = g.children(g.root()).start;
+    let l = layout_container(g, pkg, &[], &LayoutOptions::default());
+    let aspect = l.size[0] / l.size[1];
+    assert!(aspect > 0.6, "8 boxes one per layer made a {:?} column (aspect {aspect:.2})", l.size);
+    let down = l.edges.iter().filter(|e| e.dir == Direction::Down).count();
+    assert_eq!(down, 7, "folded layers keep their arrows pointing down");
+}
+
+#[test]
+fn a_chain_over_many_leaves_stays_close_to_its_box_shape() {
+    let (_d, f) = chain_package(40);
+    let g = f.graph();
+    let pkg = g.children(g.root()).start;
+    let l = layout_container(g, pkg, &[], &LayoutOptions::default());
+    let aspect = l.size[0] / l.size[1];
+    assert!((0.6..2.6).contains(&aspect), "{:?} (aspect {aspect:.2})", l.size);
+}
+
+#[test]
+fn many_entry_owners_wrap_over_several_rows() {
+    let names: Vec<String> = (0..40).map(|i| format!("app{i}")).collect();
+    let modules: Vec<&str> = names.iter().map(String::as_str).collect();
+    let g = with_entries(&modules, &[], &modules);
+    let gr = g.file.graph();
+    let l = layout_container(gr, gr.root(), &[], &LayoutOptions::default());
+    let aspect = l.size[0] / l.size[1];
+    assert!(aspect < 2.6, "40 entry owners in one row: {:?} (aspect {aspect:.2})", l.size);
+    let mut tops: Vec<i32> = l.children.iter().map(|c| c.rect.y as i32).collect();
+    tops.dedup();
+    let first_row: Vec<&str> = l.children.iter().filter(|c| c.rect.y as i32 == tops[0]).map(|c| gr.name(c.node)).collect();
+    assert!(first_row.windows(2).all(|w| w[0] < w[1] || w[0].len() < w[1].len()), "still alphabetical: {first_row:?}");
+}
+
+#[test]
+fn details_shown_on_demand_wrap_instead_of_one_long_row() {
+    let (_d, f) = chain_package_with(40, NodeFlags::DETAIL);
+    let g = f.graph();
+    let pkg = g.children(g.root()).start;
+    let l = layout_container(g, pkg, &[], &LayoutOptions { show_details: true, ..Default::default() });
+    assert_eq!(l.children.len(), 48);
+    let aspect = l.size[0] / l.size[1];
+    assert!(aspect < 2.6, "{:?} (aspect {aspect:.2})", l.size);
+}
+
+#[test]
+fn a_wide_container_keeps_room_for_its_title_once_scaled_into_its_box() {
+    let (_d, f) = chain_package_with(40, NodeFlags::DETAIL);
+    let g = f.graph();
+    let pkg = g.children(g.root()).start;
+    let l = layout_container(g, pkg, &[], &LayoutOptions { show_details: true, ..Default::default() });
+    let share = l.header / l.size[0];
+    assert!(share >= 0.04, "header {} for a {}-wide layout", l.header, l.size[0]);
+    assert!(l.children.iter().all(|c| c.rect.y >= l.header), "nothing sits in the header");
+    let small = with_entries(&["a", "b"], &[("a", "b")], &[]);
+    let gs = small.file.graph();
+    assert_eq!(layout_container(gs, gs.root(), &[], &LayoutOptions::default()).header, 30.0, "small containers keep the plain header");
+}
+
+fn under_header(l: &ContainerLayout, r: Rect) -> Rect {
+    let round = |v: f32| (v * 100.0).round() / 100.0;
+    Rect::new(round(r.x), round(r.y - l.header), round(r.w), round(r.h))
 }

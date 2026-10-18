@@ -14,6 +14,12 @@ const GAP_Y: f32 = 80.0;
 const FRAME_PAD: f32 = 12.0;
 const FRAME_LABEL: f32 = 16.0;
 const MIN_LAYER_CAP: usize = 8;
+const MIN_ASPECT: f32 = 0.6;
+const HEADER_SHARE: f32 = 0.045;
+const BOX_ASPECT: f32 = 1.6;
+const PINNED_TOGETHER: usize = 8;
+const ROLE_LAYERS: usize = 4;
+const FOLDED_ROWS: usize = 3;
 
 struct SibEdge {
     a: usize,
@@ -62,10 +68,33 @@ pub fn layout_container(g: &ArchivedGraph, node: NodeId, frames: &[FrameRule], o
     let shown = opts.details_shown_in(node);
     base.hidden_details = if shown { 0 } else { details };
     base.shown_details = if shown && !opts.show_details { details } else { 0 };
-    if !opts.show_wiring && !opts.show_noise && !shown {
-        return base;
+    let laid = if !opts.show_wiring && !opts.show_noise && !shown { base } else { add_wiring(g, node, base, opts) };
+    if g.kind(node) == NodeKind::Type { laid } else { room_for_title(laid) }
+}
+
+fn room_for_title(mut l: ContainerLayout) -> ContainerLayout {
+    let body = l.size[1] - l.header;
+    let by_width = l.size[0] * HEADER_SHARE;
+    let by_height = BOX_ASPECT * HEADER_SHARE * body / (1.0 - BOX_ASPECT * HEADER_SHARE);
+    let wanted = by_width.max(by_height).max(l.header);
+    let shift = wanted - l.header;
+    if shift <= 0.0 {
+        return l;
     }
-    add_wiring(g, node, base, opts)
+    for c in &mut l.children {
+        c.rect.y += shift;
+    }
+    for f in &mut l.frames {
+        f.rect.y += shift;
+    }
+    for e in &mut l.edges {
+        for p in &mut e.points {
+            p[1] += shift;
+        }
+    }
+    l.header = wanted;
+    l.size[1] += shift;
+    l
 }
 
 fn add_wiring(g: &ArchivedGraph, node: NodeId, mut l: ContainerLayout, opts: &LayoutOptions) -> ContainerLayout {
@@ -73,18 +102,25 @@ fn add_wiring(g: &ArchivedGraph, node: NodeId, mut l: ContainerLayout, opts: &La
         .into_iter()
         .filter(|&c| g.flags(c).intersects(NodeFlags::WIRING | NodeFlags::NOISE | NodeFlags::DETAIL) && !opts.hides(g, c))
         .collect();
-    let top = if l.children.is_empty() { l.header + PAD } else { l.size[1] - PAD + GAP_Y };
+    let mut top = if l.children.is_empty() { l.header + PAD } else { l.size[1] - PAD + GAP_Y };
     let layer = l.children.iter().map(|c| c.layer + 1).max().unwrap_or(0);
-    let mut x = PAD;
-    let mut row_h: f32 = 0.0;
-    for c in extra {
-        let [w, h] = box_size(g, c, opts);
+    let sizes: Vec<[f32; 2]> = extra.iter().map(|&c| box_size(g, c, opts)).collect();
+    let area: f32 = l.children.iter().map(|c| (c.rect.w + GAP_X) * (c.rect.h + GAP_Y)).chain(sizes.iter().map(|s| (s[0] + GAP_X) * (s[1] + GAP_Y))).sum();
+    let widest = sizes.iter().map(|s| s[0]).fold(0.0, f32::max);
+    let max_row = (l.size[0] - 2.0 * PAD).max(area.sqrt() * 1.6).max(widest);
+    let (mut x, mut row_h, mut right) = (PAD, 0.0f32, 0.0f32);
+    for (&c, &[w, h]) in extra.iter().zip(&sizes) {
+        if x > PAD && x + w - PAD > max_row {
+            top += row_h + GAP_Y;
+            (x, row_h) = (PAD, 0.0);
+        }
         l.children.push(ChildBox { node: c, rect: Rect::new(x, top, w, h), layer, pinned: false });
+        right = right.max(x + w);
         x += w + GAP_X;
         row_h = row_h.max(h);
     }
     if row_h > 0.0 {
-        l.size = [l.size[0].max(x - GAP_X + PAD), top + row_h + PAD];
+        l.size = [l.size[0].max(right + PAD), top + row_h + PAD];
     }
     let rect_of: HashMap<NodeId, Rect> = l.children.iter().map(|c| (c.node, c.rect)).collect();
     for agg in g.aggregates(node) {
@@ -236,12 +272,26 @@ fn layout_structure(g: &ArchivedGraph, node: NodeId, frames: &[FrameRule], opts:
     }
     let raw_layer = layer.clone();
     let raw_layers = layer.iter().max().map_or(0, |m| *m as usize + 1);
-    let max_layers = ((n as f32).sqrt().ceil() as usize).max(MIN_LAYER_CAP);
-    if raw_layers > max_layers {
-        for l in layer.iter_mut() {
-            *l = (*l as usize * max_layers / raw_layers) as u32;
+    let sizes: Vec<[f32; 2]> = kids.iter().map(|&k| box_size(g, k, opts)).collect();
+    let area: f32 = sizes.iter().map(|s| (s[0] + GAP_X) * (s[1] + GAP_Y)).sum();
+    let widest = sizes.iter().map(|s| s[0]).fold(0.0, f32::max);
+    let max_row = (area.sqrt() * 1.6).max(widest);
+    let cap = ((n as f32).sqrt().ceil() as usize).max(MIN_LAYER_CAP).min(raw_layers.max(1));
+    let squeeze = |layers_wanted: usize| -> Vec<u32> {
+        if raw_layers > layers_wanted { raw_layer.iter().map(|&l| (l as usize * layers_wanted / raw_layers) as u32).collect() } else { raw_layer.clone() }
+    };
+    let aspect_with = |layers_wanted: usize| {
+        let squeezed = squeeze(layers_wanted);
+        let mut grouped: Vec<Vec<usize>> = vec![Vec::new(); layers_wanted.max(1)];
+        for (v, &l) in squeezed.iter().enumerate() {
+            grouped[l as usize].push(v);
         }
-    }
+        let rows = wrap_rows(&grouped, &pinned, &sizes, max_row);
+        let (w, h) = rows_extent(&rows, &sizes);
+        w / h.max(1.0)
+    };
+    let chosen = if cap > ROLE_LAYERS { (FOLDED_ROWS..=cap).rev().find(|&l| aspect_with(l) >= MIN_ASPECT).unwrap_or(FOLDED_ROWS) } else { cap };
+    layer = squeeze(chosen);
     let layer_count = layer.iter().max().map_or(0, |m| *m as usize + 1);
     let mut layers: Vec<Vec<usize>> = vec![Vec::new(); layer_count];
     for i in 0..n {
@@ -273,32 +323,7 @@ fn layout_structure(g: &ArchivedGraph, node: NodeId, frames: &[FrameRule], opts:
     let order_edges: Vec<(usize, usize)> = edges.iter().filter(|e| e.calls + e.deps + e.implements > 0).map(|e| (e.a, e.b)).collect();
     let layers = minimize(&layers, &layer, &order_edges, &Ordering { first_keys, groups: group_keys, max_sweeps: 0 });
 
-    let sizes: Vec<[f32; 2]> = kids.iter().map(|&k| box_size(g, k, opts)).collect();
-    let area: f32 = sizes.iter().map(|s| (s[0] + GAP_X) * (s[1] + GAP_Y)).sum();
-    let widest = sizes.iter().map(|s| s[0]).fold(0.0, f32::max);
-    let max_row = (area.sqrt() * 1.6).max(widest);
-
-    let mut rows: Vec<(u32, Vec<usize>)> = Vec::new();
-    for (li, l) in layers.iter().enumerate() {
-        let mut row: Vec<usize> = Vec::new();
-        let mut w = 0.0;
-        let pinned_row: Vec<usize> = l.iter().copied().filter(|&v| pinned[v]).collect();
-        if !pinned_row.is_empty() {
-            rows.push((li as u32, pinned_row));
-        }
-        for &v in l.iter().filter(|&&v| !pinned[v]) {
-            let add = sizes[v][0] + if row.is_empty() { 0.0 } else { GAP_X };
-            if !row.is_empty() && w + add > max_row {
-                rows.push((li as u32, std::mem::take(&mut row)));
-                w = 0.0;
-            }
-            w += sizes[v][0] + if row.is_empty() { 0.0 } else { GAP_X };
-            row.push(v);
-        }
-        if !row.is_empty() {
-            rows.push((li as u32, row));
-        }
-    }
+    let rows = wrap_rows(&layers, &pinned, &sizes, max_row);
     let row_widths: Vec<f32> = rows.iter().map(|(_, r)| r.iter().map(|&v| sizes[v][0]).sum::<f32>() + GAP_X * (r.len() as f32 - 1.0)).collect();
     let mut content_w = row_widths.iter().copied().fold(0.0, f32::max);
     if card {
@@ -407,6 +432,37 @@ fn layout_structure(g: &ArchivedGraph, node: NodeId, frames: &[FrameRule], opts:
         hidden_details: 0,
         shown_details: 0,
     }
+}
+
+fn wrap_rows(layers: &[Vec<usize>], pinned: &[bool], sizes: &[[f32; 2]], max_row: f32) -> Vec<(u32, Vec<usize>)> {
+    let mut rows: Vec<(u32, Vec<usize>)> = Vec::new();
+    for (li, l) in layers.iter().enumerate() {
+        for keep_pinned in [true, false] {
+            let together: f32 = l.iter().filter(|&&v| pinned[v]).take(PINNED_TOGETHER).map(|&v| sizes[v][0] + GAP_X).sum::<f32>() - GAP_X;
+            let limit = if keep_pinned { max_row.max(together) } else { max_row };
+            let mut row: Vec<usize> = Vec::new();
+            let mut w = 0.0;
+            for &v in l.iter().filter(|&&v| pinned[v] == keep_pinned) {
+                let add = sizes[v][0] + if row.is_empty() { 0.0 } else { GAP_X };
+                if !row.is_empty() && w + add > limit {
+                    rows.push((li as u32, std::mem::take(&mut row)));
+                    w = 0.0;
+                }
+                w += sizes[v][0] + if row.is_empty() { 0.0 } else { GAP_X };
+                row.push(v);
+            }
+            if !row.is_empty() {
+                rows.push((li as u32, row));
+            }
+        }
+    }
+    rows
+}
+
+fn rows_extent(rows: &[(u32, Vec<usize>)], sizes: &[[f32; 2]]) -> (f32, f32) {
+    let w = rows.iter().map(|(_, r)| r.iter().map(|&v| sizes[v][0]).sum::<f32>() + GAP_X * (r.len() as f32 - 1.0)).fold(0.0, f32::max);
+    let h = rows.iter().map(|(_, r)| r.iter().map(|&v| sizes[v][1]).fold(0.0, f32::max) + GAP_Y).sum::<f32>() - GAP_Y;
+    (w + 2.0 * PAD, h + 2.0 * PAD)
 }
 
 pub fn count_crossings(l: &ContainerLayout) -> usize {
