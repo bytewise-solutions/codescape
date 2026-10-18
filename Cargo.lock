@@ -441,6 +441,7 @@ dependencies = [
  "egui",
  "nucleo-matcher",
  "png",
+ "regex",
  "rfd",
  "serde",
  "tempfile",
