@@ -44,14 +44,39 @@ pub enum View {
     Unused,
     QuietArrows,
     Legend,
+    Generated,
+    PrivateMembers,
+    Fields,
+    Accessors,
+    Constructors,
+    GuessedCalls,
+    ImplementsArrows,
+    ImportArrows,
 }
 
 impl View {
-    pub const ALL: [View; 9] =
-        [View::Tests, View::TestDeps, View::Details, View::Errors, View::Wiring, View::Complexity, View::Unused, View::QuietArrows, View::Legend];
+    pub const ALL: [View; 17] = [
+        View::Tests,
+        View::TestDeps,
+        View::Details,
+        View::Errors,
+        View::Wiring,
+        View::Complexity,
+        View::Unused,
+        View::QuietArrows,
+        View::Legend,
+        View::Generated,
+        View::PrivateMembers,
+        View::Fields,
+        View::Accessors,
+        View::Constructors,
+        View::GuessedCalls,
+        View::ImplementsArrows,
+        View::ImportArrows,
+    ];
 
     pub fn default_value(self) -> bool {
-        matches!(self, View::Complexity | View::QuietArrows | View::Legend)
+        !matches!(self, View::Tests | View::TestDeps | View::Details | View::Errors | View::Wiring | View::Unused | View::Generated)
     }
 
     pub fn label(self) -> &'static str {
@@ -65,6 +90,44 @@ impl View {
             View::Unused => "Unused code",
             View::QuietArrows => "Quiet arrows",
             View::Legend => "Legend",
+            View::Generated => "Generated code",
+            View::PrivateMembers => "Private members",
+            View::Fields => "Fields",
+            View::Accessors => "Getters and setters",
+            View::Constructors => "Constructors",
+            View::GuessedCalls => "Guessed calls",
+            View::ImplementsArrows => "Implements / extends",
+            View::ImportArrows => "Imports without calls",
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum Threshold {
+    ComplexityHint,
+    ComplexityHigh,
+    ManyCallers,
+    KeepVersionsDays,
+}
+
+impl Threshold {
+    pub const ALL: [Threshold; 4] = [Threshold::ComplexityHint, Threshold::ComplexityHigh, Threshold::ManyCallers, Threshold::KeepVersionsDays];
+
+    pub fn default_value(self) -> u32 {
+        match self {
+            Threshold::ComplexityHint => 10,
+            Threshold::ComplexityHigh => 20,
+            Threshold::ManyCallers => 5,
+            Threshold::KeepVersionsDays => 14,
+        }
+    }
+
+    pub fn label(self) -> &'static str {
+        match self {
+            Threshold::ComplexityHint => "Complexity hint from",
+            Threshold::ComplexityHigh => "High complexity from",
+            Threshold::ManyCallers => "Many callers from",
+            Threshold::KeepVersionsDays => "Keep compared versions (days)",
         }
     }
 }
@@ -72,6 +135,10 @@ impl View {
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub enum Key {
     View(View),
+    Threshold(Threshold),
+    Hidden(String),
+    HiddenName(String),
+    AlwaysShown(String),
     FilterShown(String),
     Exclude(String),
     Pack(String),
@@ -82,7 +149,7 @@ pub enum Key {
 
 impl Key {
     pub fn is_display(&self) -> bool {
-        matches!(self, Key::View(_) | Key::FilterShown(_))
+        matches!(self, Key::View(_) | Key::Threshold(_) | Key::Hidden(_) | Key::HiddenName(_) | Key::AlwaysShown(_) | Key::FilterShown(_))
     }
 }
 
@@ -160,6 +227,38 @@ struct ViewFile {
     quiet_arrows: Option<bool>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     legend: Option<bool>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    generated: Option<bool>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    private_members: Option<bool>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    fields: Option<bool>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    accessors: Option<bool>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    constructors: Option<bool>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    guessed_calls: Option<bool>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    implements_arrows: Option<bool>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    import_arrows: Option<bool>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    complexity_hint: Option<u32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    complexity_high: Option<u32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    many_callers: Option<u32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    keep_versions_days: Option<u32>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    hidden: Vec<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    hidden_names: Vec<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    always_shown: Vec<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    shown_again: Vec<String>,
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     filters: BTreeMap<String, bool>,
 }
@@ -220,11 +319,32 @@ impl ViewFile {
             View::Unused => &mut self.unused,
             View::QuietArrows => &mut self.quiet_arrows,
             View::Legend => &mut self.legend,
+            View::Generated => &mut self.generated,
+            View::PrivateMembers => &mut self.private_members,
+            View::Fields => &mut self.fields,
+            View::Accessors => &mut self.accessors,
+            View::Constructors => &mut self.constructors,
+            View::GuessedCalls => &mut self.guessed_calls,
+            View::ImplementsArrows => &mut self.implements_arrows,
+            View::ImportArrows => &mut self.import_arrows,
         }
     }
 
     fn get(&self, v: View) -> Option<bool> {
         self.clone().slot(v).take()
+    }
+
+    fn threshold_slot(&mut self, t: Threshold) -> &mut Option<u32> {
+        match t {
+            Threshold::ComplexityHint => &mut self.complexity_hint,
+            Threshold::ComplexityHigh => &mut self.complexity_high,
+            Threshold::ManyCallers => &mut self.many_callers,
+            Threshold::KeepVersionsDays => &mut self.keep_versions_days,
+        }
+    }
+
+    fn threshold(&self, t: Threshold) -> Option<u32> {
+        self.clone().threshold_slot(t).take()
     }
 }
 
@@ -251,6 +371,16 @@ impl SettingsFile {
         let mut out = SettingsFile::default();
         match key {
             Key::View(v) => *out.view.slot(*v) = self.view.slot(*v).take(),
+            Key::Threshold(t) => *out.view.threshold_slot(*t) = self.view.threshold_slot(*t).take(),
+            Key::Hidden(p) => {
+                out.view.hidden = drain_eq(&mut self.view.hidden, p);
+                out.view.shown_again = drain_eq(&mut self.view.shown_again, p);
+            }
+            Key::HiddenName(p) => {
+                out.view.hidden_names = drain_eq(&mut self.view.hidden_names, p);
+                out.view.shown_again = drain_eq(&mut self.view.shown_again, p);
+            }
+            Key::AlwaysShown(p) => out.view.always_shown = drain_eq(&mut self.view.always_shown, p),
             Key::FilterShown(n) => out.view.filters.extend(self.view.filters.remove_entry(n)),
             Key::Exclude(g) => {
                 out.exclude = drain_eq(&mut self.exclude, g);
@@ -282,6 +412,15 @@ impl SettingsFile {
                 *self.view.slot(v) = Some(b);
             }
         }
+        for t in Threshold::ALL {
+            if let Some(n) = frag.view.threshold(t) {
+                *self.view.threshold_slot(t) = Some(n);
+            }
+        }
+        self.view.hidden.extend(frag.view.hidden);
+        self.view.hidden_names.extend(frag.view.hidden_names);
+        self.view.always_shown.extend(frag.view.always_shown);
+        self.view.shown_again.extend(frag.view.shown_again);
         self.view.filters.extend(frag.view.filters);
         self.exclude.extend(frag.exclude);
         self.remove.exclude.extend(frag.remove.exclude);
@@ -302,7 +441,8 @@ impl SettingsFile {
             Key::Category(g) => out.remove.category.push(g.clone()),
             Key::TestPath(p) => out.remove.test_paths.push(p.clone()),
             Key::Filter(n) => out.remove.filter.push(n.clone()),
-            Key::View(_) | Key::FilterShown(_) | Key::Pack(_) => {}
+            Key::Hidden(p) | Key::HiddenName(p) => out.view.shown_again.push(p.clone()),
+            Key::View(_) | Key::Threshold(_) | Key::AlwaysShown(_) | Key::FilterShown(_) | Key::Pack(_) => {}
         }
         out
     }
@@ -323,6 +463,10 @@ pub struct Settings {
     pub test_paths: Vec<Sourced<String>>,
     pub filters: Vec<Sourced<Filter>>,
     pub views: [Sourced<bool>; View::ALL.len()],
+    pub thresholds: [Sourced<u32>; Threshold::ALL.len()],
+    pub hidden: Vec<Sourced<String>>,
+    pub hidden_names: Vec<Sourced<String>>,
+    pub always_shown: Vec<Sourced<String>>,
     pub filter_views: BTreeMap<String, Sourced<bool>>,
     pub removed: Vec<Sourced<Key>>,
 }
@@ -343,6 +487,10 @@ impl Settings {
             test_paths: Vec::new(),
             filters: Vec::new(),
             views: View::ALL.map(|v| at(v.default_value(), Layer::Default)),
+            thresholds: Threshold::ALL.map(|t| at(t.default_value(), Layer::Default)),
+            hidden: Vec::new(),
+            hidden_names: Vec::new(),
+            always_shown: Vec::new(),
             filter_views: BTreeMap::new(),
             removed: Vec::new(),
         }
@@ -362,7 +510,10 @@ impl Settings {
             Key::Category(g) => self.categories.retain(|c| &c.value.glob != g),
             Key::TestPath(p) => self.test_paths.retain(|t| &t.value != p),
             Key::Filter(n) => self.filters.retain(|f| &f.value.name != n),
-            Key::View(_) | Key::FilterShown(_) | Key::Pack(_) => {}
+            Key::Hidden(p) => self.hidden.retain(|h| &h.value != p),
+            Key::HiddenName(p) => self.hidden_names.retain(|h| &h.value != p),
+            Key::AlwaysShown(p) => self.always_shown.retain(|h| &h.value != p),
+            Key::View(_) | Key::Threshold(_) | Key::FilterShown(_) | Key::Pack(_) => {}
         }
         self.removed.retain(|r| r.value != key);
         self.removed.push(at(key, layer));
@@ -439,11 +590,35 @@ impl Settings {
         for (n, b) in &f.view.filters {
             self.filter_views.insert(n.clone(), at(*b, layer));
         }
+        for t in Threshold::ALL {
+            if let Some(n) = f.view.threshold(t) {
+                self.thresholds[t as usize] = at(n, layer);
+            }
+        }
+        for p in &f.view.shown_again {
+            self.hidden.retain(|h| &h.value != p);
+            self.hidden_names.retain(|h| &h.value != p);
+        }
+        for p in &f.view.hidden_names {
+            regex::Regex::new(p).with_context(|| format!("bad name pattern `{p}` under [view] hidden_names"))?;
+        }
+        for (list, entries) in
+            [(&mut self.hidden, &f.view.hidden), (&mut self.hidden_names, &f.view.hidden_names), (&mut self.always_shown, &f.view.always_shown)]
+        {
+            for p in entries {
+                list.retain(|h| &h.value != p);
+                list.push(at(p.clone(), layer));
+            }
+        }
         Ok(())
     }
 
     pub fn view(&self, v: View) -> Sourced<bool> {
         self.views[v as usize]
+    }
+
+    pub fn threshold(&self, t: Threshold) -> Sourced<u32> {
+        self.thresholds[t as usize]
     }
 
     pub fn pack(&self, name: &str) -> Option<Sourced<bool>> {
@@ -460,7 +635,10 @@ impl Settings {
             Key::Category(g) => self.categories.iter().any(|c| &c.value.glob == g),
             Key::TestPath(p) => self.test_paths.iter().any(|t| &t.value == p),
             Key::Filter(n) => self.filters.iter().any(|f| &f.value.name == n),
-            Key::View(_) | Key::FilterShown(_) | Key::Pack(_) => false,
+            Key::Hidden(p) => self.hidden.iter().any(|h| &h.value == p),
+            Key::HiddenName(p) => self.hidden_names.iter().any(|h| &h.value == p),
+            Key::AlwaysShown(p) => self.always_shown.iter().any(|h| &h.value == p),
+            Key::View(_) | Key::Threshold(_) | Key::FilterShown(_) | Key::Pack(_) => false,
         }
     }
 
@@ -608,6 +786,37 @@ impl SettingsStore {
 
     pub fn set_view(&mut self, v: View, on: bool) {
         let _ = self.edit(|f| *f[PERSONAL].view.slot(v) = Some(on));
+    }
+
+    pub fn set_threshold(&mut self, t: Threshold, value: u32) {
+        let _ = self.edit(|f| *f[PERSONAL].view.threshold_slot(t) = Some(value));
+    }
+
+    pub fn hide(&mut self, path: &str) -> Result<()> {
+        self.replace(Key::Hidden(path.into()), SettingsFile { view: ViewFile { hidden: vec![path.into()], ..Default::default() }, ..Default::default() })
+    }
+
+    pub fn hide_names(&mut self, pattern: &str) -> Result<()> {
+        regex::Regex::new(pattern).with_context(|| format!("bad name pattern `{pattern}`"))?;
+        let frag = SettingsFile { view: ViewFile { hidden_names: vec![pattern.into()], ..Default::default() }, ..Default::default() };
+        self.replace(Key::HiddenName(pattern.into()), frag)
+    }
+
+    pub fn always_show(&mut self, path: &str) -> Result<()> {
+        let frag = SettingsFile { view: ViewFile { always_shown: vec![path.into()], ..Default::default() }, ..Default::default() };
+        self.replace(Key::AlwaysShown(path.into()), frag)
+    }
+
+    pub fn unhide(&mut self, entry: &str) -> Result<()> {
+        if self.settings.hidden.iter().any(|h| h.value == entry) {
+            self.remove_entry(Key::Hidden(entry.into()))
+        } else {
+            self.remove_entry(Key::HiddenName(entry.into()))
+        }
+    }
+
+    pub fn stop_always_showing(&mut self, path: &str) -> Result<()> {
+        self.remove_entry(Key::AlwaysShown(path.into()))
     }
 
     pub fn set_filter_shown(&mut self, name: &str, on: bool) {

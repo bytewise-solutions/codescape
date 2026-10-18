@@ -30,7 +30,8 @@ pub fn layout_options(s: &Settings, visual: &VisualRules) -> LayoutOptions {
 
 pub fn view_items(s: &Settings) -> Vec<ViewItem> {
     let item = |v: View| ViewItem { key: Key::View(v), label: v.label().into(), checked: s.view(v).value };
-    let mut out: Vec<ViewItem> = View::ALL.into_iter().filter(|v| !matches!(v, View::QuietArrows | View::Legend)).map(item).collect();
+    let in_menu = [View::Tests, View::TestDeps, View::Details, View::Errors, View::Wiring, View::Complexity, View::Unused];
+    let mut out: Vec<ViewItem> = in_menu.into_iter().map(item).collect();
     for f in &s.filters {
         let name = &f.value.name;
         out.push(ViewItem { key: Key::FilterShown(name.clone()), label: name.clone(), checked: s.filter_shown(name).is_some_and(|x| x.value) });

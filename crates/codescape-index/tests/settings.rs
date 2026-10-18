@@ -227,3 +227,58 @@ fn quiet_arrows_are_on_by_default() {
     let store = SettingsStore::load(e.paths.clone()).unwrap();
     assert_eq!(store.settings().view(View::QuietArrows), Sourced { value: true, layer: Layer::Default });
 }
+
+#[test]
+fn map_switches_and_thresholds_have_defaults_a_layer_can_change() {
+    let e = env();
+    write(&e.paths.shared, "[view]\nfields = false\ncomplexity_hint = 15\n");
+    let store = SettingsStore::load(e.paths.clone()).unwrap();
+    let s = store.settings();
+    assert!(!s.view(View::Generated).value, "generated code is hidden by default");
+    for v in [View::PrivateMembers, View::Accessors, View::Constructors, View::GuessedCalls, View::ImplementsArrows, View::ImportArrows] {
+        assert!(s.view(v).value, "{v:?} is shown by default");
+    }
+    assert_eq!(s.view(View::Fields), Sourced { value: false, layer: Layer::Shared });
+    assert_eq!(s.threshold(Threshold::ComplexityHint), Sourced { value: 15, layer: Layer::Shared });
+    assert_eq!(s.threshold(Threshold::ComplexityHigh).value, 20);
+    assert_eq!(s.threshold(Threshold::ManyCallers).value, 5);
+    assert_eq!(s.threshold(Threshold::KeepVersionsDays).value, 14);
+}
+
+#[test]
+fn hiding_blocks_is_a_display_setting_that_layers_and_can_be_undone() {
+    let e = env();
+    write(&e.paths.shared, "[view]\nhidden = [\"app/legacy\"]\nhidden_names = [\"Exception$\"]\n");
+    let mut store = SettingsStore::load(e.paths.clone()).unwrap();
+    store.hide("app/cart/Cart").unwrap();
+    store.hide_names("^Mock").unwrap();
+    store.always_show("app/cart/CartError").unwrap();
+    let hidden = |s: &Settings| s.hidden.iter().map(|h| (h.value.clone(), h.layer)).collect::<Vec<_>>();
+    assert_eq!(hidden(store.settings()), [("app/legacy".to_string(), Layer::Shared), ("app/cart/Cart".to_string(), Layer::Personal)]);
+    assert_eq!(store.settings().hidden_names.iter().map(|h| h.value.as_str()).collect::<Vec<_>>(), ["Exception$", "^Mock"]);
+    assert_eq!(store.settings().always_shown.iter().map(|h| h.value.as_str()).collect::<Vec<_>>(), ["app/cart/CartError"]);
+    assert!(!store.index_dirty(), "hiding never needs a new index");
+
+    store.unhide("app/legacy").unwrap();
+    store.unhide("app/cart/Cart").unwrap();
+    store.unhide("Exception$").unwrap();
+    assert!(store.settings().hidden.is_empty(), "{:?}", store.settings().hidden);
+    assert_eq!(store.settings().hidden_names.iter().map(|h| h.value.as_str()).collect::<Vec<_>>(), ["^Mock"]);
+    store.save_view().unwrap();
+    let personal = std::fs::read_to_string(&e.paths.personal).unwrap();
+    assert!(personal.contains("shown_again"), "the team's entry is cancelled in your file, not deleted from theirs: {personal}");
+    let shared = std::fs::read_to_string(&e.paths.shared).unwrap();
+    assert!(shared.contains("app/legacy"));
+    let reloaded = SettingsStore::load(e.paths.clone()).unwrap();
+    assert_eq!(reloaded.settings(), store.settings());
+
+    store.promote(&Key::HiddenName("^Mock".into()), Layer::Shared).unwrap();
+    assert_eq!(store.settings().hidden_names[0].layer, Layer::Shared);
+}
+
+#[test]
+fn a_bad_name_pattern_is_refused() {
+    let e = env();
+    let mut store = SettingsStore::load(e.paths.clone()).unwrap();
+    assert!(store.hide_names("(unclosed").is_err());
+}
