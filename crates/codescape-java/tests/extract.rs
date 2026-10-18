@@ -258,7 +258,11 @@ fn java_lang_supertypes_resolve_without_an_import_and_know_their_hierarchy() {
     let ty = |name: &str| (0..b.node_count() as NodeId).find(|&n| b.name(n) == name && b.node_kind(n) == NodeKind::Type).unwrap();
     assert!(has_edge(&b, ty("NotFound"), ext("java.lang.Exception"), EdgeKind::Inherits).is_some());
     assert!(has_edge(&b, ty("Mismatch"), ext("java.lang.IllegalStateException"), EdgeKind::Inherits).is_some());
-    for (sub, sup) in [("java.lang.IllegalStateException", "java.lang.RuntimeException"), ("java.lang.RuntimeException", "java.lang.Exception"), ("java.lang.Exception", "java.lang.Throwable")] {
+    for (sub, sup) in [
+        ("java.lang.IllegalStateException", "java.lang.RuntimeException"),
+        ("java.lang.RuntimeException", "java.lang.Exception"),
+        ("java.lang.Exception", "java.lang.Throwable"),
+    ] {
         assert!(has_edge(&b, ext(sub), ext(sup), EdgeKind::Inherits).is_some(), "{sub} extends {sup}");
     }
 }
