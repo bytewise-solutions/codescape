@@ -353,7 +353,7 @@ fn constructors_head_their_card() {
     let f = IndexFile::open(&dir.path().join("g")).unwrap();
     let g = f.graph();
     let t = g.children(g.root()).start;
-    let rows: Vec<&str> = card_members(g, t).into_iter().map(|m| g.name(m)).collect();
+    let rows: Vec<&str> = card_members(g, t, &LayoutOptions::default()).into_iter().map(|m| g.name(m)).collect();
     assert_eq!(rows[0], "NewCheckoutService");
     assert_eq!(rows.len(), 3);
 }
@@ -730,9 +730,9 @@ fn types_are_cards_with_room_for_their_method_rows() {
     let port = layout_container(gr, g.ids["Repository"], &[], &opts);
     let kids: Vec<&str> = port.children.iter().map(|c| gr.name(c.node)).collect();
     assert_eq!(kids, ["pgRepository"], "folded implementations are still boxes");
-    assert!(port.children[0].rect.y >= card_rows_bottom(gr, g.ids["Repository"]), "they sit below the method rows");
-    let size = box_size(gr, g.ids["Handler"]);
-    assert!(size[1] >= card_rows_bottom(gr, g.ids["Handler"]), "the card is tall enough for its rows");
+    assert!(port.children[0].rect.y >= card_rows_bottom(gr, g.ids["Repository"], &LayoutOptions::default()), "they sit below the method rows");
+    let size = box_size(gr, g.ids["Handler"], &LayoutOptions::default());
+    assert!(size[1] >= card_rows_bottom(gr, g.ids["Handler"], &LayoutOptions::default()), "the card is tall enough for its rows");
 }
 
 #[test]
@@ -740,7 +740,7 @@ fn a_card_with_nested_boxes_is_as_wide_as_the_card() {
     let g = ports();
     let gr = g.file.graph();
     let port = layout_container(gr, g.ids["Repository"], &[], &LayoutOptions::default());
-    assert!(port.size[0] >= box_size(gr, g.ids["Repository"])[0] - 0.01, "rows keep the card's scale: {:?}", port.size);
+    assert!(port.size[0] >= box_size(gr, g.ids["Repository"], &LayoutOptions::default())[0] - 0.01, "rows keep the card's scale: {:?}", port.size);
 }
 
 #[test]
@@ -756,7 +756,94 @@ fn java_init_counts_as_a_constructor_on_the_card() {
     let f = IndexFile::open(&dir.path().join("g")).unwrap();
     let g = f.graph();
     let t = g.children(g.root()).start;
-    let rows = card_members(g, t);
+    let rows = card_members(g, t, &LayoutOptions::default());
     assert_eq!(g.name(rows[0]), "<init>");
     assert!(is_constructor(g, rows[0]));
+}
+
+fn open(b: GraphBuilder) -> (tempfile::TempDir, IndexFile) {
+    let dir = tempfile::tempdir().unwrap();
+    write_graph(&b.finish(), &dir.path().join("g")).unwrap();
+    let f = IndexFile::open(&dir.path().join("g")).unwrap();
+    (dir, f)
+}
+
+#[test]
+fn cards_list_what_the_options_ask_for() {
+    let mut b = GraphBuilder::new("p");
+    let t = b.add_node(b.root(), NodeKind::Type, SubKind::Class, "Cart", Lang::Java);
+    let mut member = |name: &str, sub: SubKind, vis: Visibility, line: u32| {
+        let m = b.add_node(t, NodeKind::Member, sub, name, Lang::Java);
+        b.set_span(m, "f", line, line + 1);
+        b.set_visibility(m, vis);
+        m
+    };
+    member("<init>", SubKind::Constructor, Visibility::Public, 1);
+    member("total", SubKind::Method, Visibility::Public, 5);
+    member("recompute", SubKind::Method, Visibility::Private, 9);
+    let get = member("getItems", SubKind::Method, Visibility::Public, 13);
+    member("items", SubKind::Field, Visibility::Private, 2);
+    member("name", SubKind::Field, Visibility::Public, 3);
+    b.add_tag(get, "accessor");
+    let (_d, f) = open(b);
+    let g = f.graph();
+    let t = g.children(g.root()).start;
+    let names = |opts: &LayoutOptions| card_members(g, t, opts).into_iter().map(|m| g.name(m)).collect::<Vec<_>>();
+    let all = LayoutOptions::default();
+    assert_eq!(names(&all), ["<init>", "total", "recompute", "getItems"]);
+    let lean = LayoutOptions { card: CardOptions { private: false, fields: true, accessors: false, constructors: false }, ..Default::default() };
+    assert_eq!(names(&lean), ["total"]);
+    assert_eq!(card_field_rows(g, t, &all).0, 2);
+    assert_eq!(card_field_rows(g, t, &lean).0, 1, "the private field is left out");
+    let no_fields = LayoutOptions { card: CardOptions { fields: false, ..CardOptions::default() }, ..Default::default() };
+    assert_eq!(card_field_rows(g, t, &no_fields), (0, 0));
+    assert!(box_size(g, t, &lean)[1] < box_size(g, t, &all)[1], "the card shrinks with its rows");
+}
+
+#[test]
+fn hidden_and_always_shown_blocks_override_the_flags() {
+    let mut b = GraphBuilder::new("p");
+    let pkg = b.add_node(b.root(), NodeKind::Package, SubKind::None, "shop", Lang::Go);
+    let plain = b.add_node(pkg, NodeKind::Type, SubKind::Struct, "Cart", Lang::Go);
+    let detail = b.add_node(pkg, NodeKind::Type, SubKind::Struct, "CartRow", Lang::Go);
+    let generated = b.add_node(pkg, NodeKind::Type, SubKind::Struct, "CartPb", Lang::Go);
+    b.add_flags(detail, NodeFlags::DETAIL);
+    b.add_flags(generated, NodeFlags::GENERATED);
+    let _ = plain;
+    let (_d, f) = open(b);
+    let g = f.graph();
+    let id = |name: &str| (0..g.node_count() as NodeId).find(|&n| g.name(n) == name).unwrap();
+    let mut opts = LayoutOptions::default();
+    assert!(!opts.hides(g, id("Cart")));
+    assert!(opts.hides(g, id("CartRow")), "a detail");
+    assert!(opts.hides(g, id("CartPb")), "generated code is hidden by default");
+    opts.hidden_nodes.insert(id("Cart"));
+    opts.always_shown.insert(id("CartRow"));
+    opts.show_generated = true;
+    assert!(opts.hides(g, id("Cart")), "hidden by the user");
+    assert!(!opts.hides(g, id("CartRow")), "always shown wins over the detail flag");
+    assert!(!opts.hides(g, id("CartPb")));
+}
+
+#[test]
+fn implements_only_and_import_only_arrows_can_be_left_out() {
+    let mut b = GraphBuilder::new("p");
+    let root = b.root();
+    let [m1, m2, m3] = ["web", "api", "util"].map(|n| b.add_node(root, NodeKind::Module, SubKind::None, n, Lang::Java));
+    let impl_ = b.add_node(m1, NodeKind::Type, SubKind::Class, "Handler", Lang::Java);
+    let iface = b.add_node(m2, NodeKind::Type, SubKind::Interface, "Api", Lang::Java);
+    b.add_edge(impl_, iface, EdgeKind::Implements, Scope::Main, Confidence::Resolved, EdgeFlags::NONE);
+    b.add_edge(m1, m3, EdgeKind::DependsOn, Scope::Main, Confidence::Resolved, EdgeFlags::NONE);
+    let (_d, f) = open(b);
+    let g = f.graph();
+    let name = |n: NodeId| g.name(n).to_string();
+    let arrows = |opts: &LayoutOptions| {
+        let mut v: Vec<(String, String)> = layout_container(g, g.root(), &[], opts).edges.iter().map(|e| (name(e.a), name(e.b))).collect();
+        v.sort();
+        v
+    };
+    let all = LayoutOptions::default();
+    assert_eq!(arrows(&all), [("web".to_string(), "api".to_string()), ("web".to_string(), "util".to_string())]);
+    assert_eq!(arrows(&LayoutOptions { implements_arrows: false, ..Default::default() }), [("web".to_string(), "util".to_string())]);
+    assert_eq!(arrows(&LayoutOptions { import_arrows: false, ..Default::default() }), [("web".to_string(), "api".to_string())]);
 }

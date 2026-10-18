@@ -55,3 +55,38 @@ fn view_menu_lists_built_in_toggles_then_filters_then_arrows_and_legend() {
     assert_eq!(items[9], ViewItem { key: Key::View(View::QuietArrows), label: "Quiet arrows".into(), checked: true });
     assert_eq!(items[10], ViewItem { key: Key::View(View::Legend), label: "Legend".into(), checked: true });
 }
+
+#[test]
+fn map_switches_reach_the_layout_options() {
+    let (_t, s) = store(
+        "[view]\ngenerated = true\nprivate_members = false\nfields = false\naccessors = false\nconstructors = false\nimplements_arrows = false\nimport_arrows = false\nguessed_calls = false\n",
+    );
+    let o = layout_options(s.settings(), &VisualRules::default());
+    assert!(o.show_generated && !o.implements_arrows && !o.import_arrows && !o.guessed_calls);
+    assert_eq!(o.card, codescape_layout::CardOptions { private: false, fields: false, accessors: false, constructors: false });
+}
+
+#[test]
+fn hidden_paths_and_name_patterns_resolve_to_blocks() {
+    use codescape_format::*;
+    let mut b = GraphBuilder::new("proj");
+    let m = b.add_node(b.root(), NodeKind::Module, SubKind::None, "app", Lang::Java);
+    let p = b.add_node(m, NodeKind::Package, SubKind::None, "cart", Lang::Java);
+    for t in ["Cart", "CartException", "Coupon"] {
+        b.add_node(p, NodeKind::Type, SubKind::Class, t, Lang::Java);
+    }
+    let dir = tempfile::tempdir().unwrap();
+    write_graph(&b.finish(), &dir.path().join("g")).unwrap();
+    let f = IndexFile::open(&dir.path().join("g")).unwrap();
+    let g = f.graph();
+    let (_t, s) = store("[view]\nhidden = [\"app/cart/Coupon\"]\nhidden_names = [\"Exception$\"]\nalways_shown = [\"app/cart/Cart\"]\n");
+    let (hidden, always) = codescape::view::resolve_hidden(g, s.settings());
+    let names = |set: &std::collections::HashSet<NodeId>| {
+        let mut v: Vec<&str> = set.iter().map(|&n| g.name(n)).collect();
+        v.sort();
+        v
+    };
+    assert_eq!(names(&hidden), ["CartException", "Coupon"]);
+    assert_eq!(names(&always), ["Cart"]);
+    assert_eq!(codescape::view::block_path(g, (0..g.node_count() as NodeId).find(|&n| g.name(n) == "Coupon").unwrap()), "app/cart/Coupon");
+}

@@ -77,7 +77,7 @@ fn add_wiring(g: &ArchivedGraph, node: NodeId, mut l: ContainerLayout, opts: &La
     let mut x = PAD;
     let mut row_h: f32 = 0.0;
     for c in extra {
-        let [w, h] = box_size(g, c);
+        let [w, h] = box_size(g, c, opts);
         l.children.push(ChildBox { node: c, rect: Rect::new(x, top, w, h), layer, pinned: false });
         x += w + GAP_X;
         row_h = row_h.max(h);
@@ -118,7 +118,7 @@ fn add_wiring(g: &ArchivedGraph, node: NodeId, mut l: ContainerLayout, opts: &La
 
 fn layout_structure(g: &ArchivedGraph, node: NodeId, frames: &[FrameRule], opts: &LayoutOptions) -> ContainerLayout {
     let card = g.kind(node) == NodeKind::Type;
-    let header = if card { card_rows_bottom(g, node).max(HEADER) } else { HEADER };
+    let header = if card { card_rows_bottom(g, node, opts).max(HEADER) } else { HEADER };
     let kids: Vec<NodeId> = display_children(g, node).into_iter().filter(|&c| !opts.hides(g, c) && !(card && g.kind(c) == NodeKind::Member)).collect();
     let n = kids.len();
     if n == 0 {
@@ -270,7 +270,7 @@ fn layout_structure(g: &ArchivedGraph, node: NodeId, frames: &[FrameRule], opts:
     let order_edges: Vec<(usize, usize)> = edges.iter().filter(|e| e.calls + e.deps + e.implements > 0).map(|e| (e.a, e.b)).collect();
     let layers = minimize(&layers, &layer, &order_edges, &Ordering { first_keys, groups: group_keys, max_sweeps: 0 });
 
-    let sizes: Vec<[f32; 2]> = kids.iter().map(|&k| box_size(g, k)).collect();
+    let sizes: Vec<[f32; 2]> = kids.iter().map(|&k| box_size(g, k, opts)).collect();
     let area: f32 = sizes.iter().map(|s| (s[0] + GAP_X) * (s[1] + GAP_Y)).sum();
     let widest = sizes.iter().map(|s| s[0]).fold(0.0, f32::max);
     let max_row = (area.sqrt() * 1.6).max(widest);
@@ -299,7 +299,7 @@ fn layout_structure(g: &ArchivedGraph, node: NodeId, frames: &[FrameRule], opts:
     let row_widths: Vec<f32> = rows.iter().map(|(_, r)| r.iter().map(|&v| sizes[v][0]).sum::<f32>() + GAP_X * (r.len() as f32 - 1.0)).collect();
     let mut content_w = row_widths.iter().copied().fold(0.0, f32::max);
     if card {
-        content_w = content_w.max(box_size(g, node)[0] - 2.0 * PAD);
+        content_w = content_w.max(box_size(g, node, opts)[0] - 2.0 * PAD);
     }
     let mut rects = vec![Rect::default(); n];
     let mut y = header + PAD;
@@ -336,8 +336,10 @@ fn layout_structure(g: &ArchivedGraph, node: NodeId, frames: &[FrameRule], opts:
     }
 
     let row_of: HashMap<usize, usize> = rows.iter().enumerate().flat_map(|(ri, (_, r))| r.iter().map(move |&v| (v, ri))).collect();
+    let drawn = |e: &&SibEdge| (opts.implements_arrows || e.calls + e.deps > 0) && (opts.import_arrows || e.calls + e.implements > 0 || e.wiring > 0);
     let laid_edges = edges
         .iter()
+        .filter(drawn)
         .map(|e| {
             let (ra, rb) = (rects[e.a], rects[e.b]);
             let dir = if e.back || raw_layer[e.a] > raw_layer[e.b] {

@@ -1,6 +1,8 @@
+use codescape_format::{ArchivedGraph, NodeFlags, NodeId, NodeKind};
 use codescape_index::{Key, Settings, SettingsStore, View, filter_tag};
-use codescape_layout::LayoutOptions;
+use codescape_layout::{CardOptions, LayoutOptions};
 use codescape_rules::VisualRules;
+use std::collections::HashSet;
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct ViewItem {
@@ -24,8 +26,44 @@ pub fn layout_options(s: &Settings, visual: &VisualRules) -> LayoutOptions {
         show_wiring: on(View::Wiring),
         show_noise: on(View::Errors),
         show_details: on(View::Details),
+        show_generated: on(View::Generated),
+        card: CardOptions { private: on(View::PrivateMembers), fields: on(View::Fields), accessors: on(View::Accessors), constructors: on(View::Constructors) },
+        implements_arrows: on(View::ImplementsArrows),
+        import_arrows: on(View::ImportArrows),
+        guessed_calls: on(View::GuessedCalls),
         ..LayoutOptions::default()
     }
+}
+
+pub fn map_options(g: &ArchivedGraph, s: &Settings, visual: &VisualRules) -> LayoutOptions {
+    let mut opts = layout_options(s, visual);
+    (opts.hidden_nodes, opts.always_shown) = resolve_hidden(g, s);
+    opts
+}
+
+pub fn block_path(g: &ArchivedGraph, n: NodeId) -> String {
+    g.path(n).iter().skip(1).map(|&p| g.name(p)).collect::<Vec<_>>().join("/")
+}
+
+pub fn resolve_hidden(g: &ArchivedGraph, s: &Settings) -> (HashSet<NodeId>, HashSet<NodeId>) {
+    let patterns: Vec<regex::Regex> = s.hidden_names.iter().filter_map(|p| regex::Regex::new(&p.value).ok()).collect();
+    let paths: HashSet<&str> = s.hidden.iter().map(|h| h.value.as_str()).collect();
+    let always: HashSet<&str> = s.always_shown.iter().map(|h| h.value.as_str()).collect();
+    let (mut hidden, mut shown) = (HashSet::new(), HashSet::new());
+    for n in (0..g.node_count() as NodeId).filter(|&n| n != g.root() && !g.flags(n).contains(NodeFlags::EXTERNAL)) {
+        let named = matches!(g.kind(n), NodeKind::Module | NodeKind::Package | NodeKind::Type | NodeKind::Member);
+        if !named {
+            continue;
+        }
+        let path = (!paths.is_empty() || !always.is_empty()).then(|| block_path(g, n));
+        if path.as_deref().is_some_and(|p| paths.contains(p)) || patterns.iter().any(|r| r.is_match(g.name(n))) {
+            hidden.insert(n);
+        }
+        if path.as_deref().is_some_and(|p| always.contains(p)) {
+            shown.insert(n);
+        }
+    }
+    (hidden, shown)
 }
 
 pub fn view_items(s: &Settings) -> Vec<ViewItem> {

@@ -266,15 +266,18 @@ impl Builder<'_> {
             let layout = self.cache.shared(g, node);
             (world.x, world.y, Xform::fit(&layout, world).s, world.w)
         } else {
-            (world.x, world.y, world.w / box_size(g, node)[0] as f64, world.w)
+            (world.x, world.y, world.w / box_size(g, node, self.cache.options())[0] as f64, world.w)
         };
         if (CARD_ROW as f64 * s * self.cam.zoom) < MIN_ROW_PX as f64 {
             return ((Vec::new(), 0), (Vec::new(), 0));
         }
+        let opts = self.cache.options().clone();
+        let opts = &opts;
         let row_rect = |top: f64, i: usize| WRect::new(ox + 8.0 * s, oy + (top + i as f64 * CARD_ROW as f64) * s, (w - 16.0 * s).max(0.0), CARD_ROW as f64 * s);
-        let (field_count, more_fields) = card_field_rows(g, node);
+        let (field_count, more_fields) = card_field_rows(g, node, opts);
         let field_rows: Vec<FieldRow> = g
             .fields(node)
+            .filter(|f| opts.card.private || f.visibility != codescape_format::Visibility::Private)
             .take(field_count)
             .enumerate()
             .map(|(i, f)| FieldRow {
@@ -284,9 +287,8 @@ impl Builder<'_> {
                 rect: self.cam.world_to_screen_rect(row_rect(CARD_TOP as f64, i), self.view),
             })
             .collect();
-        let methods_top = card_methods_top(g, node) as f64;
-        let opts = self.cache.options();
-        let members: Vec<NodeId> = card_members(g, node).into_iter().filter(|&m| !opts.hides(g, m)).collect();
+        let methods_top = card_methods_top(g, node, opts) as f64;
+        let members: Vec<NodeId> = card_members(g, node, opts);
         let shown = members.len().min(CARD_MAX_ROWS);
         let rows = members
             .iter()

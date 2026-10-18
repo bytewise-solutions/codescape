@@ -70,6 +70,20 @@ pub enum Direction {
     Sideways,
 }
 
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct CardOptions {
+    pub private: bool,
+    pub fields: bool,
+    pub accessors: bool,
+    pub constructors: bool,
+}
+
+impl Default for CardOptions {
+    fn default() -> Self {
+        CardOptions { private: true, fields: true, accessors: true, constructors: true }
+    }
+}
+
 #[derive(Clone, Debug, PartialEq)]
 pub struct LayoutOptions {
     pub include_test_edges: bool,
@@ -79,20 +93,34 @@ pub struct LayoutOptions {
     pub show_wiring: bool,
     pub show_noise: bool,
     pub show_details: bool,
+    pub show_generated: bool,
     pub details_in: Vec<NodeId>,
+    pub hidden_nodes: std::collections::HashSet<NodeId>,
+    pub always_shown: std::collections::HashSet<NodeId>,
+    pub card: CardOptions,
+    pub implements_arrows: bool,
+    pub import_arrows: bool,
+    pub guessed_calls: bool,
 }
 
 impl Default for LayoutOptions {
     fn default() -> Self {
         LayoutOptions {
             include_test_edges: false,
-            hidden: NodeFlags::EXTERNAL | NodeFlags::MOCK | NodeFlags::TEST | NodeFlags::WIRING | NodeFlags::NOISE | NodeFlags::DETAIL,
+            hidden: NodeFlags::EXTERNAL | NodeFlags::MOCK | NodeFlags::TEST | NodeFlags::WIRING | NodeFlags::NOISE | NodeFlags::DETAIL | NodeFlags::GENERATED,
             hidden_tags: Vec::new(),
             show_tests: false,
             show_wiring: false,
             show_noise: false,
             show_details: false,
+            show_generated: false,
             details_in: Vec::new(),
+            hidden_nodes: Default::default(),
+            always_shown: Default::default(),
+            card: CardOptions::default(),
+            implements_arrows: true,
+            import_arrows: true,
+            guessed_calls: true,
         }
     }
 }
@@ -112,6 +140,9 @@ impl LayoutOptions {
         if self.show_details {
             keep |= NodeFlags::DETAIL.0;
         }
+        if self.show_generated {
+            keep |= NodeFlags::GENERATED.0;
+        }
         NodeFlags(self.hidden.0 & !keep)
     }
 
@@ -120,6 +151,12 @@ impl LayoutOptions {
     }
 
     pub fn hides(&self, g: &ArchivedGraph, node: NodeId) -> bool {
+        if self.hidden_nodes.contains(&node) {
+            return true;
+        }
+        if self.always_shown.contains(&node) {
+            return false;
+        }
         let mut hidden = self.effective_hidden();
         if g.parent(node).is_some_and(|p| self.details_in.contains(&p)) {
             hidden.0 &= !NodeFlags::DETAIL.0;

@@ -11,7 +11,7 @@ use crate::search::{self, SearchIndex};
 use crate::settings_window::{self, SettingsForm};
 use crate::shot::{Shot, ShotPlan, ShotStep};
 use crate::source::{LINE_SPACING, SourceCache, Token, advance, file_font, highlight, hscroll_by, initial_scroll, merge_spans, scroll_at, scroll_by, thumb};
-use crate::view::{layout_options, toggle, view_items};
+use crate::view::{block_path, map_options, toggle, view_items};
 use crate::{minimap, style};
 use codescape_format::*;
 use codescape_index::analysis::{Analysis, Usage, analyse};
@@ -618,7 +618,7 @@ impl Project {
                 _ => {}
             }
         }
-        let cache = LayoutCache::new(visual.frames.clone(), layout_options(settings.settings(), &visual));
+        let cache = LayoutCache::new(visual.frames.clone(), map_options(g, settings.settings(), &visual));
         Ok(Project {
             dir,
             index_path: path.to_path_buf(),
@@ -775,7 +775,7 @@ impl Project {
     }
 
     fn apply_display(&mut self) {
-        let mut opts = layout_options(self.settings.settings(), &self.visual);
+        let mut opts = map_options(self.file.graph(), self.settings.settings(), &self.visual);
         opts.details_in = self.details_in.clone();
         self.cache.set_options(opts);
         self.form.error = self.settings.save_view().err().map(|e| format!("{e:#}"));
