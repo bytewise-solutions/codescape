@@ -104,7 +104,7 @@ const GLOBAL_FUNCTIONS: &[&str] = &[
     "pending",
 ];
 const NO_TYPE: &[&str] = &["any", "unknown", "void", "never", "object", "null", "undefined", "this", "Function"];
-const PRIMITIVES: &[&str] = &["string", "number", "boolean", "bigint", "symbol"];
+pub(crate) const PRIMITIVES: &[&str] = &["string", "number", "boolean", "bigint", "symbol"];
 
 struct ParsedFile {
     module: usize,

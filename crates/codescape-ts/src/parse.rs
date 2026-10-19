@@ -1128,12 +1128,13 @@ impl<'s> Ctx<'s> {
             self.flatten(v, &mut parts);
         }
         let intersection = parts.len() > 1;
+        let type_params = self.type_param_names(n);
         for p in parts {
             if p.kind() == "object_type" {
                 self.members(p, &mut t);
             } else if intersection {
                 let sup = self.type_name(p);
-                if !sup.is_empty() {
+                if !sup.is_empty() && !type_params.contains(&sup) && !crate::resolve::PRIMITIVES.contains(&sup.as_str()) {
                     t.extends.push(sup);
                 }
             }

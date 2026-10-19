@@ -431,3 +431,30 @@ fn members_of_object_types_and_intersections_resolve() {
     assert_eq!(in_load("http"), 2);
     assert!(f.calls.iter().filter(|c| c.method == "http").all(|c| c.target == Some(call_sig)), "http(..) resolves to the call signature");
 }
+
+#[test]
+fn intersections_with_type_parameters_and_primitives_add_no_supertypes() {
+    let tmp = tempfile::tempdir().unwrap();
+    let r = tmp.path();
+    std::fs::write(r.join("package.json"), "{\"name\":\"p\"}\n").unwrap();
+    std::fs::create_dir_all(r.join("src")).unwrap();
+    std::fs::write(
+        r.join("src/a.ts"),
+        "export type WithId<T> = T & { id: string };\nexport type Id = string & { __brand: 'Id' };\n\
+export function run(w: WithId<object>, i: Id) {\n  w.id.trim();\n  i.toUpperCase();\n}\n",
+    )
+    .unwrap();
+    let d = discover(r, &default_excludes()).unwrap();
+    let mut b = GraphBuilder::new("x");
+    let module_nodes: Vec<NodeId> = d.modules.iter().map(|m| b.add_node(b.root(), NodeKind::Module, SubKind::None, &m.name, m.lang)).collect();
+    let mut facts = ProjectFacts::default();
+    let s = extract_ts(&d, &module_nodes, &default_excludes(), &mut b, &mut facts);
+    for t in ["WithId", "Id"] {
+        let n = at(&b, &["p", "src", t]);
+        let out: Vec<_> = b.edges().iter().filter(|e| e.from == n && e.kind == EdgeKind::Inherits).collect();
+        assert!(out.is_empty(), "{t} must have no supertype edge: {out:?}");
+    }
+    let ext = b.child(b.root(), "(external)").map(|m| b.children(m).iter().map(|&c| b.name(c).to_string()).collect::<Vec<_>>());
+    assert_eq!(ext.unwrap_or_default(), Vec::<String>::new());
+    assert_eq!(s.guessed, 0, "{s:?}");
+}
