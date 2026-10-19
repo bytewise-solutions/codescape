@@ -266,3 +266,24 @@ fn java_lang_supertypes_resolve_without_an_import_and_know_their_hierarchy() {
         assert!(has_edge(&b, ext(sub), ext(sup), EdgeKind::Inherits).is_some(), "{sub} extends {sup}");
     }
 }
+
+fn refs_from(b: &GraphBuilder, from: NodeId) -> Vec<(NodeId, u32, u32, u32)> {
+    b.refs().iter().filter(|r| r.from == from).map(|r| (r.to, r.line, r.col as u32, r.len as u32)).collect()
+}
+
+#[test]
+fn call_and_type_use_positions_are_recorded() {
+    let r = run();
+    let view_user = at(&r.b, &["app", "com.example.app", "ViewUser"]);
+    let go = at(&r.b, &["app", "com.example.app", "ViewUser", "go"]);
+    let set = at(&r.b, &["core", "com.example.core", "ViewManager", "setCurrentView"]);
+    let view_manager = at(&r.b, &["core", "com.example.core", "ViewManager"]);
+    let mq = at(&r.b, &["core", "com.example.core", "MessageQueue"]);
+    let strings = at(&r.b, &["util", "com.example.util", "Strings"]);
+    assert!(refs_from(&r.b, go).contains(&(set, 13, 20, 14)));
+    assert!(refs_from(&r.b, view_user).contains(&(view_manager, 8, 12, 11)));
+    assert!(refs_from(&r.b, go).contains(&(mq, 14, 8, 12)));
+    assert!(refs_from(&r.b, go).contains(&(mq, 14, 29, 12)));
+    assert!(refs_from(&r.b, go).contains(&(strings, 18, 8, 7)));
+    assert!(r.facts.files.iter().any(|f| f.type_uses.iter().any(|u| u.name == "ViewManager" && u.line == 8 && u.col == 12 && u.len == 11)));
+}

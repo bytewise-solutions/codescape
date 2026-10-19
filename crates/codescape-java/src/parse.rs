@@ -26,6 +26,14 @@ pub struct JavaFile {
     pub lines: u32,
 }
 
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct JUse {
+    pub name: String,
+    pub line: u32,
+    pub col: u32,
+    pub len: u32,
+}
+
 #[derive(Clone, Debug, PartialEq)]
 pub struct JType {
     pub name: String,
@@ -38,6 +46,7 @@ pub struct JType {
     pub fields: Vec<(String, String)>,
     pub methods: Vec<JMethod>,
     pub nested: Vec<JType>,
+    pub type_uses: Vec<JUse>,
     pub start_line: u32,
     pub end_line: u32,
 }
@@ -54,6 +63,7 @@ pub struct JMethod {
     pub annotations: Vec<Annotation>,
     pub locals: Vec<(String, String)>,
     pub calls: Vec<JCall>,
+    pub type_uses: Vec<JUse>,
     pub start_line: u32,
     pub end_line: u32,
 }
@@ -79,6 +89,9 @@ pub struct JCall {
     pub is_new: bool,
     pub assigned_to: Option<String>,
     pub line: u32,
+    pub col: u32,
+    pub len: u32,
+    pub receiver_use: Option<JUse>,
 }
 
 pub fn parse_java(src: &[u8]) -> JavaFile {
@@ -114,6 +127,32 @@ fn first_named_of<'t>(node: Node<'t>, kinds: &[&str]) -> Option<Node<'t>> {
 
 fn line(n: Node) -> u32 {
     n.start_position().row as u32 + 1
+}
+
+fn col(n: Node) -> u32 {
+    n.start_position().column as u32
+}
+
+fn len(n: Node) -> u32 {
+    (n.end_byte() - n.start_byte()) as u32
+}
+
+fn span_of(ty: Node) -> Node {
+    let mut cur = ty;
+    loop {
+        let mut c = cur.walk();
+        let next = match cur.kind() {
+            "generic_type" | "annotated_type" | "array_type" => {
+                cur.named_children(&mut c).find(|x| matches!(x.kind(), "type_identifier" | "scoped_type_identifier" | "generic_type"))
+            }
+            "scoped_type_identifier" => cur.named_children(&mut c).filter(|x| x.kind() == "type_identifier").last(),
+            _ => None,
+        };
+        match next {
+            Some(n) => cur = n,
+            None => return cur,
+        }
+    }
 }
 
 fn end_line(n: Node) -> u32 {
@@ -261,15 +300,27 @@ impl<'s> Ctx<'s> {
             fields: Vec::new(),
             methods: Vec::new(),
             nested: Vec::new(),
+            type_uses: Vec::new(),
             start_line: line(n),
             end_line: end_line(n),
         };
         let mut c = n.walk();
         for ch in n.named_children(&mut c) {
             match ch.kind() {
-                "superclass" | "extends_interfaces" => t.extends.extend(self.type_list(ch)),
-                "super_interfaces" => t.implements.extend(self.type_list(ch)),
+                "superclass" | "extends_interfaces" => {
+                    t.extends.extend(self.type_list(ch));
+                    self.type_uses(ch, &mut t.type_uses);
+                }
+                "super_interfaces" => {
+                    t.implements.extend(self.type_list(ch));
+                    self.type_uses(ch, &mut t.type_uses);
+                }
                 _ => {}
+            }
+        }
+        for key in ["type_parameters", "parameters"] {
+            if let Some(p) = n.child_by_field_name(key) {
+                self.type_uses(p, &mut t.type_uses);
             }
         }
         if let Some(body) = n.child_by_field_name("body") {
@@ -287,6 +338,7 @@ impl<'s> Ctx<'s> {
                     let ty = m.child_by_field_name("type").map(|x| self.type_name(x)).unwrap_or_default();
                     let declared = m.child_by_field_name("type").map(|x| self.text(x).to_string()).unwrap_or_default();
                     let vis = self.visibility(m);
+                    self.type_uses(m, &mut t.type_uses);
                     let mut dc = m.walk();
                     for d in m.children_by_field_name("declarator", &mut dc) {
                         if let Some(name) = d.child_by_field_name("name") {
@@ -301,6 +353,7 @@ impl<'s> Ctx<'s> {
                 "static_initializer" => {
                     let mut jm = JMethod { name: "<clinit>".into(), is_static: true, start_line: line(m), end_line: end_line(m), ..Default::default() };
                     self.collect_body(m, &mut jm);
+                    self.type_uses(m, &mut jm.type_uses);
                     t.methods.push(jm);
                 }
                 _ => {
@@ -345,6 +398,7 @@ impl<'s> Ctx<'s> {
         if let Some(body) = m.child_by_field_name("body") {
             self.collect_body(body, &mut jm);
         }
+        self.type_uses(m, &mut jm.type_uses);
         jm
     }
 
@@ -396,7 +450,10 @@ impl<'s> Ctx<'s> {
                             ident_args,
                             is_new: true,
                             assigned_to: self.assigned_to(node),
-                            line: line(node),
+                            line: line(span_of(ty)),
+                            col: col(span_of(ty)),
+                            len: len(span_of(ty)),
+                            receiver_use: None,
                         });
                     }
                 }
@@ -411,6 +468,9 @@ impl<'s> Ctx<'s> {
                         is_new: false,
                         assigned_to: None,
                         line: line(node),
+                        col: node.start_position().column as u32,
+                        len: node.child(0).map_or(0, |c| len(c)),
+                        receiver_use: None,
                     });
                 }
                 "lambda_expression" => {
@@ -483,6 +543,11 @@ impl<'s> Ctx<'s> {
             },
         };
         let (string_args, ident_args) = self.args(node.child_by_field_name("arguments"));
+        let name = node.child_by_field_name("name").unwrap_or(node);
+        let receiver_use = match (&receiver, node.child_by_field_name("object")) {
+            (Receiver::Ident(n), Some(o)) => Some(JUse { name: n.clone(), line: line(o), col: col(o), len: len(o) }),
+            _ => None,
+        };
         JCall {
             receiver,
             method: node.child_by_field_name("name").map(|n| self.text(n).to_string()).unwrap_or_default(),
@@ -490,7 +555,37 @@ impl<'s> Ctx<'s> {
             ident_args,
             is_new: false,
             assigned_to: self.assigned_to(node),
-            line: line(node),
+            line: line(name),
+            col: col(name),
+            len: len(name),
+            receiver_use,
         }
+    }
+
+    fn type_uses(&self, root: Node, out: &mut Vec<JUse>) {
+        let mut stack = vec![root];
+        while let Some(n) = stack.pop() {
+            match n.kind() {
+                "type_identifier" => out.push(self.type_use(n, n)),
+                "scoped_type_identifier" => {
+                    let mut c = n.walk();
+                    if let Some(last) = n.named_children(&mut c).filter(|x| x.kind() == "type_identifier").last() {
+                        out.push(self.type_use(n, last));
+                    }
+                }
+                "type_parameter" => {
+                    let mut c = n.walk();
+                    stack.extend(n.named_children(&mut c).skip(1));
+                }
+                _ => {
+                    let mut c = n.walk();
+                    stack.extend(n.named_children(&mut c));
+                }
+            }
+        }
+    }
+
+    fn type_use(&self, full: Node, at: Node) -> JUse {
+        JUse { name: self.text(full).to_string(), line: line(at), col: col(at), len: len(at) }
     }
 }

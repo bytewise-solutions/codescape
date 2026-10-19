@@ -200,6 +200,10 @@ impl GraphBuilder {
         self.refs.push(Ref { from, to, line, col, len: u16::try_from(len).unwrap_or(u16::MAX) });
     }
 
+    pub fn refs(&self) -> &[Ref] {
+        &self.refs
+    }
+
     pub fn edges(&self) -> &[RawEdge] {
         &self.edges
     }

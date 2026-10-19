@@ -1,6 +1,6 @@
-use crate::parse::{JCall, JMethod, JType, JavaFile, Receiver, parse_java};
+use crate::parse::{JCall, JMethod, JType, JUse, JavaFile, Receiver, parse_java};
 use codescape_build::{Discovery, rel_path, walk_files_under};
-use codescape_facts::{CallFacts, ExtractStats, FileFacts, FnFacts, ProjectFacts, TypeFacts};
+use codescape_facts::{CallFacts, ExtractStats, FileFacts, FnFacts, ProjectFacts, TypeFacts, TypeUse};
 use codescape_format::*;
 use globset::GlobSet;
 use rayon::prelude::*;
@@ -643,6 +643,9 @@ impl<'a> Resolver<'a> {
                     supertypes: self.types[ti].supers.iter().map(|s| self.ref_name(s)).collect(),
                     annotations: jt.annotations.clone(),
                 });
+                let own = self.types[ti].node;
+                let enclosing = self.types[ti].outer.or(Some(ti));
+                self.record_uses(fi, own, enclosing, &jt.type_uses, &mut ff.type_uses);
                 let external = self.external_super(ti);
                 for m in &jt.methods {
                     let node = self.types[ti].methods[&m.name];
@@ -658,6 +661,7 @@ impl<'a> Resolver<'a> {
                         is_main: is_main(m),
                         overrides_external,
                     });
+                    self.record_uses(fi, node, Some(ti), &m.type_uses, &mut ff.type_uses);
                     for call in &m.calls {
                         let cf = self.resolve_call(fi, ti, node, m, call);
                         ff.calls.push(cf);
@@ -665,6 +669,15 @@ impl<'a> Resolver<'a> {
                 }
             }
             facts.files.push(ff);
+        }
+    }
+
+    fn record_uses(&mut self, fi: usize, from: NodeId, enclosing: Option<usize>, uses: &[JUse], out: &mut Vec<TypeUse>) {
+        for u in uses {
+            out.push(TypeUse { owner: from, name: u.name.clone(), line: u.line, col: u.col, len: u.len });
+            if let Some(TypeRef::Project(t)) = self.resolve_type(&u.name, fi, enclosing) {
+                self.b.add_ref(from, self.types[t].node, u.line, u.col, u.len);
+            }
         }
     }
 
@@ -709,6 +722,8 @@ impl<'a> Resolver<'a> {
             ident_args: call.ident_args.clone(),
             assigned_to: call.assigned_to.clone(),
             line: call.line,
+            col: call.col,
+            len: call.len,
             ..Default::default()
         };
         cf.arg_targets = call.ident_args.iter().map(|a| a.as_deref().and_then(|a| self.method_ref(fi, ti, a))).collect();
@@ -733,7 +748,16 @@ impl<'a> Resolver<'a> {
             Receiver::Super => self.types[ti].supers.first().cloned(),
             Receiver::Ident(name) => {
                 cf.receiver_var = Some(name.clone());
-                self.var_type(fi, ti, m, name).or_else(|| self.resolve_type(name, fi, Some(ti)))
+                match self.var_type(fi, ti, m, name) {
+                    Some(t) => Some(t),
+                    None => {
+                        let t = self.resolve_type(name, fi, Some(ti));
+                        if let (Some(TypeRef::Project(p)), Some(u)) = (&t, &call.receiver_use) {
+                            self.b.add_ref(caller, self.types[*p].node, u.line, u.col, u.len);
+                        }
+                        t
+                    }
+                }
             }
             Receiver::Field(name) => {
                 cf.receiver_var = Some(name.clone());
@@ -749,6 +773,7 @@ impl<'a> Resolver<'a> {
             Some(TypeRef::Project(t)) => {
                 if let Some((owner, target)) = self.lookup_method(t, &call.method) {
                     self.b.add_edge_at(caller, target, EdgeKind::Calls, scope, Confidence::Resolved, EdgeFlags::NONE, call.line);
+                    self.b.add_ref(caller, target, call.line, call.col, call.len);
                     cf.target = Some(target);
                     if let Some(imp) = self.single_impl(owner, &call.method, fi) {
                         self.b.add_edge_at(caller, imp, EdgeKind::Calls, scope, Confidence::Resolved, EdgeFlags::NONE, call.line);
@@ -774,6 +799,7 @@ impl<'a> Resolver<'a> {
             [target] => {
                 let target = *target;
                 self.b.add_edge_at(caller, target, EdgeKind::Calls, scope, Confidence::Guessed, EdgeFlags::NONE, cf.line);
+                self.b.add_ref(caller, target, cf.line, cf.col, cf.len);
                 cf.target = Some(target);
                 self.stats.guessed += 1;
             }
