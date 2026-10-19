@@ -17,9 +17,10 @@ method from the entry point that reaches it.
 
 ## Features
 
-- **One map for the whole project.** Modules, packages, types and members nest inside each other and open as you
-  zoom; zoom close enough and the type's file fills the map, where zoom sets the text size. Types are UML cards with their fields, methods
-  and visibility. Only architectural types are drawn at first; data types and helpers wait behind `+ N details`.
+- **One map for the whole project.** Modules, packages, types and members nest inside each other and open as you zoom;
+  zoom close enough and the type's file fills the map, where zoom sets the text size. Types are UML cards with their
+  fields, methods and visibility. Only architectural types are drawn at first; data types and helpers wait behind
+  `+ N details`.
 - **Follow the code.** Click a box or a method: what it uses turns pink, what uses it blue, the rest dims. Walk the
   calls from the inspector, jump to any name with `Ctrl+K`, or double-click a method to open its file at that line.
   In an open file, `Ctrl`+click a name to go to its definition, `Ctrl+F` finds text and `Ctrl+Shift+O` lists its

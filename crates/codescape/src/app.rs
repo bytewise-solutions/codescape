@@ -2292,7 +2292,8 @@ impl Project {
         }
         let mut fly = None;
         let mut open_row: Option<(NodeId, NodeId)> = None;
-        if resp.double_clicked()
+        if follow.is_none()
+            && resp.double_clicked()
             && let Some(p) = resp.interact_pointer_pos()
         {
             if let Some(m) = self.scene.row_at([p.x, p.y]) {

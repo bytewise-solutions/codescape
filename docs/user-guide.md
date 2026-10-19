@@ -126,12 +126,12 @@ enough to read.
   read them. Renamed or moved blocks show as removed plus new.
 - **Sequence diagrams.** Right-click a method (or select it and press `S`, or use the button in the right panel) to
   read it as a UML sequence diagram: one lifeline per class (or file for free functions), the caller one level up
-  (**Whole chain** in the header climbs to the nearest entry point, **One level** goes back), then its calls in the order they are written, two levels deep. `+ open`
-  shows one level more; a method already on the stack is marked `recursive`. A call through an interface follows its
-  only implementation, or offers the implementations to pick from; a caller in the chain with alternatives is a menu
-  to pick another. Click an arrow to open the code at that call, double-click it to tell the called method instead,
-  double-click a lifeline to see that class on the map; **Back to map** or `Esc` returns. In Review mode new and
-  changed calls are coloured as on the map.
+  (**Whole chain** in the header climbs to the nearest entry point, **One level** goes back), then its calls in the
+  order they are written, two levels deep. `+ open` shows one level more; a method already on the stack is marked
+  `recursive`. A call through an interface follows its only implementation, or offers the implementations to pick
+  from; a caller in the chain with alternatives is a menu to pick another. Click an arrow to open the code at that
+  call, double-click it to tell the called method instead, double-click a lifeline to see that class on the map;
+  **Back to map** or `Esc` returns. In Review mode new and changed calls are coloured as on the map.
 - **Reviewed marks.** Tick a change (or press `R`) once you have looked at it; `34 / 91 reviewed` tracks progress and
   **Hide reviewed** leaves the rest. A mark remembers the block's text: when the agent changes it again, the change
   comes back as `changed since review`. Marks are kept per project in the cache folder.

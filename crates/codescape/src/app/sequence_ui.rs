@@ -108,25 +108,23 @@ impl Project {
                     ui.label(egui::RichText::new(format!("({} callers, no entry point found)", calls.callers(q.focus).len())).small().color(style::MUTED));
                 }
                 ui.end_row();
-                {
-                    let label = if view.whole { "One level" } else { "Whole chain" };
-                    if ui.button(label).clicked() {
-                        act = Some(Act::Whole);
-                    }
-                    if ui.button("Back to map").on_hover_text("Esc").clicked() {
-                        act = Some(Act::Close);
-                    }
-                    let owner = g.parent(q.focus).filter(|&p| g.kind(p) == NodeKind::Type);
-                    let siblings = owner.map(|o| calls.methods(g, o)).unwrap_or_default();
-                    if siblings.len() > 1 {
-                        egui::ComboBox::from_id_salt("sibling").selected_text(g.name(q.focus)).show_ui(ui, |ui| {
-                            for &m in &siblings {
-                                if ui.selectable_label(m == q.focus, g.name(m)).clicked() && m != q.focus {
-                                    act = Some(Act::Recentre(m));
-                                }
+                let label = if view.whole { "One level" } else { "Whole chain" };
+                if ui.button(label).clicked() {
+                    act = Some(Act::Whole);
+                }
+                if ui.button("Back to map").on_hover_text("Esc").clicked() {
+                    act = Some(Act::Close);
+                }
+                let owner = g.parent(q.focus).filter(|&p| g.kind(p) == NodeKind::Type);
+                let siblings = owner.map(|o| calls.methods(g, o)).unwrap_or_default();
+                if siblings.len() > 1 {
+                    egui::ComboBox::from_id_salt("sibling").selected_text(g.name(q.focus)).show_ui(ui, |ui| {
+                        for &m in &siblings {
+                            if ui.selectable_label(m == q.focus, g.name(m)).clicked() && m != q.focus {
+                                act = Some(Act::Recentre(m));
                             }
-                        });
-                    }
+                        }
+                    });
                 }
             });
         });
