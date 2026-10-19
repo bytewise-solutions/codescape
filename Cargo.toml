@@ -6,6 +6,9 @@ members = ["crates/*"]
 version = "0.1.0"
 edition = "2024"
 license = "MIT"
+description = "See a whole codebase as one zoomable map, and review what changed on it"
+repository = "https://github.com/bytewise-solutions/codescape"
+homepage = "https://github.com/bytewise-solutions/codescape"
 
 [workspace.dependencies]
 codescape-format = { path = "crates/codescape-format" }

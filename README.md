@@ -142,8 +142,8 @@ rules/                    built-in rule packs
 
 Extractors turn each language into one graph of modules, packages, types and members with call, dependency and
 implementation edges; rule packs add entry points and framework calls; the graph is written once to a compact,
-memory-mapped file that the viewer lays out lazily, one container at a time. Design notes are in
-`docs/superpowers/specs/`, scale numbers in [docs/benchmarks.md](docs/benchmarks.md).
+memory-mapped file that the viewer lays out lazily, one container at a time. Scale numbers are in
+[docs/benchmarks.md](docs/benchmarks.md).
 
 ## Development
 
@@ -160,8 +160,8 @@ builds on macOS and Windows.
 
 [Releases](.github/workflows/release.yml) are cut by pushing a tag that matches the workspace version in
 `Cargo.toml`: bump `version`, commit, then `git tag v0.2.0 && git push origin v0.2.0`. The workflow runs the tests,
-builds the AppImage, the Windows executable and the macOS disk image, and publishes them with `SHA256SUMS` as a
-GitHub release. Run it by hand from the Actions tab to build the same files as artifacts without publishing.
+builds the AppImage, the Windows executable and the macOS disk image, and publishes them with `SHA256SUMS` and the
+licences of every bundled crate (`THIRD-PARTY-LICENSES.txt`, from `cargo about`) as a GitHub release. Run it by hand from the Actions tab to build the same files as artifacts without publishing.
 
 ## Limits
 
@@ -172,3 +172,8 @@ GitHub release. Run it by hand from the Actions tab to build the same files as a
 - Overloaded methods share one row.
 - Maven, Kotlin, Python and other languages are not indexed yet; their build roots are listed as skipped.
 - Review matches blocks by name, so a renamed or moved block shows as removed plus new.
+
+## License
+
+[MIT](LICENSE). The release files bundle third-party crates under their own permissive licences (MIT, Apache-2.0,
+Zlib, BSD and others, plus MPL-2.0 for `nucleo-matcher`); each release lists them in `THIRD-PARTY-LICENSES.txt`.

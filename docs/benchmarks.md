@@ -22,10 +22,3 @@ indexes it, opens it, and scripts a 300-step zoom from the whole map down to a s
 
 Scene build time is the CPU work per frame; egui tessellation and GPU submission come on top and were not
 separately timed.
-
-## Reference projects
-
-| Project | Files | Lines | Index time | Index size |
-|---|---|---|---|---|
-| game-project (Java) | 2,497 | 213k | 1.3 s | 2.4 MiB (29%) |
-| mailapp (Go) | 1,235 | 259k | 1.2 s | 2.2 MiB (26%) |

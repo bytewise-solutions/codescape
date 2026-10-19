@@ -47,6 +47,10 @@ jobs:
           echo "$APPIMAGETOOL_SHA256  appimagetool" | sha256sum -c -
           chmod +x appimagetool
       - run: packaging/linux/appimage.sh target/release/codescape "$GITHUB_REF_NAME" ./appimagetool dist
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-about@0.9.2
+      - run: cargo about generate --locked --manifest-path crates/codescape/Cargo.toml -c packaging/licenses/about.toml packaging/licenses/about.hbs -o dist/THIRD-PARTY-LICENSES.txt
       - uses: actions/upload-artifact@v4
         with:
           name: linux
