@@ -150,6 +150,13 @@ impl Threshold {
         }
     }
 
+    pub fn min(self) -> u32 {
+        match self {
+            Threshold::DuplicateTokens => 10,
+            _ => 1,
+        }
+    }
+
     pub fn label(self) -> &'static str {
         match self {
             Threshold::ComplexityHint => "Complexity hint from",
@@ -648,7 +655,7 @@ impl Settings {
         }
         for t in Threshold::ALL {
             if let Some(n) = f.view.threshold(t) {
-                self.thresholds[t as usize] = at(n, layer);
+                self.thresholds[t as usize] = at(n.max(t.min()), layer);
             }
         }
         for p in &f.view.shown_again {

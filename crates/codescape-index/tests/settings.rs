@@ -328,3 +328,15 @@ fn colouring_by_complexity_is_off_by_default() {
     assert!(!View::ComplexityColour.default_value());
     assert!(View::ALL.contains(&View::ComplexityColour));
 }
+
+#[test]
+fn duplicate_tokens_have_a_floor_of_ten() {
+    let e = env();
+    write(&e.paths.shared, "[view]\nduplicate_tokens = 3\n");
+    let mut store = SettingsStore::load(e.paths.clone()).unwrap();
+    assert_eq!(store.settings().threshold(Threshold::DuplicateTokens).value, 10);
+    store.set_threshold(Threshold::DuplicateTokens, 1);
+    assert_eq!(store.config().duplicate_tokens, 10);
+    assert_eq!(Threshold::DuplicateTokens.min(), 10);
+    assert_eq!(Threshold::ComplexityHint.min(), 1);
+}

@@ -192,9 +192,9 @@ enough to read.
 - **Arrows:** quiet arrows, guessed calls (arrows made only of calls guessed by name, drawn dotted), implements /
   extends, imports without calls. Hiding an arrow kind never moves a box.
 - **Hints:** complexity hints and their two levels, unused code, how many callers make a change risky, how long
-  compared versions are kept, and how many tokens a copy needs to count as duplicated code (50; identifiers and
-  literals are ignored, so a copy with renamed variables still counts; test and generated code are left out; applied
-  at the next index), and how many days of git history count when ranking hotspots (365).
+  compared versions are kept, and how many tokens a copy needs to count as duplicated code (50, at least 10;
+  identifiers and literals are ignored, so a copy with renamed variables still counts; test and generated code are
+  left out; changing it re-indexes the project about a second after the last change), and how many days of git history count when ranking hotspots (365).
 - **Hidden by you:** right-click any box ▸ **Hide this**, **Hide package …** or **Hide every name ending in …**
   (`…Exception`, `…Dto`), or type a pattern in the panel. Each entry says which settings file holds it and has
   **show again**.

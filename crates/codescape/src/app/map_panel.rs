@@ -173,8 +173,11 @@ impl Project {
                         ui.horizontal(|ui| {
                             let mut value = s.threshold(t).value;
                             ui.label(t.label());
-                            if ui.add(egui::DragValue::new(&mut value).range(1..=999)).changed() {
+                            if ui.add(egui::DragValue::new(&mut value).range(t.min()..=999)).changed() {
                                 levels.push((t, value));
+                            }
+                            if t == Threshold::DuplicateTokens {
+                                ui.label(egui::RichText::new("re-indexes").small().color(style::MUTED));
                             }
                         });
                     }
@@ -244,6 +247,9 @@ impl Project {
         if !levels.is_empty() {
             for (t, v) in levels {
                 self.settings.set_threshold(t, v);
+                if t == Threshold::DuplicateTokens {
+                    self.reindex_at = Some(std::time::Instant::now() + std::time::Duration::from_secs(1));
+                }
             }
             self.apply_display();
         }

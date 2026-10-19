@@ -478,6 +478,7 @@ struct Project {
     totals: Totals,
     scene_ms: f32,
     last_frame: Instant,
+    reindex_at: Option<Instant>,
     source: std::cell::RefCell<SourceCache>,
     reading: Option<(NodeId, f32)>,
     file_scroll: HashMap<NodeId, f32>,
@@ -717,6 +718,7 @@ impl Project {
             totals,
             scene_ms: 0.0,
             last_frame: Instant::now(),
+            reindex_at: None,
             source,
             reading: None,
             file_scroll: HashMap::new(),
@@ -1646,6 +1648,15 @@ impl Project {
                     Ok(()) => action = Some(Action::Reindex),
                     Err(e) => self.form.error = Some(format!("{e:#}")),
                 }
+            }
+        }
+        if let Some(at) = self.reindex_at {
+            let now = Instant::now();
+            if now >= at {
+                self.reindex_at = None;
+                action = Some(Action::Reindex);
+            } else {
+                ui.ctx().request_repaint_after(at - now);
             }
         }
         action
