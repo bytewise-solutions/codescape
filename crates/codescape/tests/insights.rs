@@ -75,7 +75,7 @@ fn analysis(g: &ArchivedGraph) -> Analysis {
 }
 
 fn churn() -> HashMap<String, u32> {
-    HashMap::from([("Repo.java".into(), 31), ("Svc.java".into(), 2), ("SvcTest.java".into(), 50)])
+    HashMap::from([("Repo.java".into(), 31), ("Svc.java".into(), 3), ("SvcTest.java".into(), 50)])
 }
 
 fn names(g: &ArchivedGraph, rows: &[Row]) -> Vec<String> {
@@ -102,7 +102,7 @@ fn each_list_is_ranked_by_its_score() {
     assert_eq!(names(g, &i.complex), ["Repo.load", "Svc.total", "Svc.helper"]);
     assert_eq!(i.complex.iter().map(|r| r.score).collect::<Vec<_>>(), [18, 14, 12]);
     assert_eq!(names(g, &i.hotspots), ["Repo.load", "Svc.total", "Svc.helper"]);
-    assert_eq!(i.hotspots.iter().map(|r| r.score).collect::<Vec<_>>(), [31 * 18, 2 * 14, 2 * 12]);
+    assert_eq!(i.hotspots.iter().map(|r| r.score).collect::<Vec<_>>(), [31 * 18, 3 * 14, 3 * 12]);
     assert_eq!(i.hotspots[0].reason, "changed 31× · complexity 18");
     assert_eq!(names(g, &i.depended), ["Svc", "Svc.simple", "Repo"]);
     assert_eq!(names(g, &i.upward), ["Repo"]);
@@ -163,6 +163,17 @@ fn a_hotspot_flag_names_its_commits_period_and_complexity() {
 }
 
 #[test]
+fn fewer_than_three_commits_make_no_hotspot() {
+    let fx = fixture();
+    let g = fx.file.graph();
+    let few = HashMap::from([("Repo.java".to_string(), 2), ("Svc.java".to_string(), 3)]);
+    let i = compute(g, &analysis(g), &few, &LayoutOptions::default(), &Limits::default(), None);
+    assert_eq!(names(g, &i.hotspots), ["Svc.total", "Svc.helper"]);
+    let f = flags(g, &analysis(g), &few, &LayoutOptions::default(), &Limits::default(), node(g, "shop.Repo.load"));
+    assert!(!f.iter().any(|f| f.kind == FlagKind::Hotspot));
+}
+
+#[test]
 fn usage_flags_say_why_the_code_looks_dead() {
     let fx = fixture();
     let g = fx.file.graph();
@@ -204,4 +215,31 @@ fn an_upward_flag_names_the_higher_layer_and_links_it() {
     assert_eq!(f.explanation, "Depends on `Svc`, which sits in a higher layer: this arrow points up and breaks the layering.");
     assert_eq!(f.links, [node(g, "shop.Svc")]);
     assert!(!flags_of(g, "shop.Svc").iter().any(|f| f.kind == FlagKind::Upward));
+}
+
+#[test]
+fn insights_are_recomputed_only_when_an_input_changes() {
+    let fx = fixture();
+    let g = fx.file.graph();
+    let key = || InsightsKey { analysis: 1, churn: 0, opts: LayoutOptions::default(), limits: Limits::default(), scope: None };
+    let mut cache = InsightsCache::default();
+    let runs = std::cell::Cell::new(0);
+    let get = |cache: &mut InsightsCache, key: InsightsKey| {
+        cache.get(key, || {
+            runs.set(runs.get() + 1);
+            all(g, None)
+        });
+    };
+    get(&mut cache, key());
+    get(&mut cache, key());
+    assert_eq!(runs.get(), 1);
+    get(&mut cache, InsightsKey { churn: 7, ..key() });
+    assert_eq!(runs.get(), 2, "churn arrived");
+    get(&mut cache, InsightsKey { churn: 7, scope: Some(3), ..key() });
+    assert_eq!(runs.get(), 3, "scope changed");
+    get(&mut cache, InsightsKey { churn: 7, scope: Some(3), limits: Limits { many_callers: 9, ..Limits::default() }, ..key() });
+    assert_eq!(runs.get(), 4, "threshold changed");
+    let opts = LayoutOptions { hidden: NodeFlags::NONE, ..LayoutOptions::default() };
+    get(&mut cache, InsightsKey { churn: 7, scope: Some(3), limits: Limits { many_callers: 9, ..Limits::default() }, opts, ..key() });
+    assert_eq!(runs.get(), 5, "layout options changed");
 }

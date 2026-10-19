@@ -1,5 +1,6 @@
 mod arrow_ui;
 mod code_find;
+mod insights_ui;
 mod keys_ui;
 mod map_panel;
 mod sequence_ui;
@@ -493,6 +494,9 @@ struct Project {
     git: bool,
     analysis: Option<Arc<Analysis>>,
     analysis_job: Option<Receiver<Analysis>>,
+    churn: insights_ui::ChurnState,
+    insights: crate::insights::InsightsCache,
+    insights_selection: bool,
     unused_rows: Option<(usize, Vec<(Usage, String, NodeId)>)>,
     sequence: Option<sequence_ui::SequenceView>,
     calls: Option<std::rc::Rc<crate::sequence::CallIndex>>,
@@ -709,6 +713,9 @@ impl Project {
             review_job: None,
             analysis: None,
             analysis_job: None,
+            churn: insights_ui::ChurnState::new(),
+            insights: Default::default(),
+            insights_selection: false,
             unused_rows: None,
             sequence: None,
             calls: None,
@@ -1216,7 +1223,7 @@ impl Project {
     }
 
     fn poll_analysis(&mut self, ctx: &egui::Context) {
-        if self.analysis.is_some() || !self.settings.settings().view(View::Unused).value {
+        if self.analysis.is_some() {
             return;
         }
         let Some(rx) = &self.analysis_job else {
@@ -1437,6 +1444,7 @@ impl Project {
         let mut action = None;
         self.poll_review(ui.ctx());
         self.poll_analysis(ui.ctx());
+        self.poll_churn(ui.ctx());
         if self.review_job.is_none()
             && let Some(plan) = self.deferred_plan.take()
         {
@@ -1701,6 +1709,7 @@ impl Project {
         let mut review_pick: Option<usize> = None;
         let mut review_toggle: Option<usize> = None;
         let mut review_switches: Option<(bool, bool)> = None;
+        let mut insights = None;
         if self.unused_rows.as_ref().map(|(at, _)| *at) != self.analysis.as_ref().map(|a| Arc::as_ptr(a) as usize) {
             self.unused_rows = self.analysis.as_ref().map(|a| {
                 let g = self.file.graph();
@@ -1710,6 +1719,7 @@ impl Project {
                 (Arc::as_ptr(a) as usize, rows)
             });
         }
+        self.refresh_insights();
         let g = self.file.graph();
         let list_h = ui.available_height() * 0.6;
         if let Some(rv) = &self.review {
@@ -1886,7 +1896,16 @@ impl Project {
                     }
                 });
             }
+            insights = Some(self.insights_ui(ui));
         });
+        if let Some(i) = insights {
+            if let Some(s) = i.selection {
+                self.insights_selection = s;
+            }
+            if let Some(n) = i.node {
+                self.go_to_insight(n);
+            }
+        }
         if let Some(i) = review_pick {
             self.goto_review_item(i);
         }

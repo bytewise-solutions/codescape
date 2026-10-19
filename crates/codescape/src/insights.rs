@@ -6,6 +6,7 @@ use codescape_layout::{LayoutOptions, upward_edges};
 use std::collections::HashMap;
 
 const CAP: usize = 50;
+pub const HOTSPOT_MIN_COMMITS: u32 = 3;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum FlagKind {
@@ -128,7 +129,7 @@ pub fn compute(g: &ArchivedGraph, analysis: &Analysis, churn: &HashMap<String, u
             reason.push_str(&format!(" · {}", plural(cx.lines(n), "line", "lines")));
             out.complex.push(row(n, reason, c.into()));
             let commits = cx.commits(n);
-            if commits > 0 {
+            if commits >= HOTSPOT_MIN_COMMITS {
                 out.hotspots.push(row(n, format!("changed {commits}× · complexity {c}"), commits * u32::from(c)));
             }
         }
@@ -197,7 +198,7 @@ pub fn flags(g: &ArchivedGraph, analysis: &Analysis, churn: &HashMap<String, u32
         let explanation = format!("Complexity {c} (flagged from {}): {}.", limits.complexity_hint, facts.join("; "));
         out.push(flag(FlagKind::Complex, format!("complexity {c}"), explanation, Vec::new()));
         let commits = cx.commits(n);
-        if commits > 0 {
+        if commits >= HOTSPOT_MIN_COMMITS {
             let explanation = format!(
                 "Changed in {} in the last {} days and complexity {c}: a frequent, risky place to edit.",
                 plural(commits, "commit", "commits"),
@@ -233,4 +234,31 @@ pub fn flags(g: &ArchivedGraph, analysis: &Analysis, churn: &HashMap<String, u32
         out.push(flag(FlagKind::Upward, format!("points up to {}", label(g, to)), explanation, vec![to]));
     }
     out
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct InsightsKey {
+    pub analysis: usize,
+    pub churn: usize,
+    pub opts: LayoutOptions,
+    pub limits: Limits,
+    pub scope: Option<NodeId>,
+}
+
+#[derive(Default)]
+pub struct InsightsCache {
+    held: Option<(InsightsKey, Insights)>,
+}
+
+impl InsightsCache {
+    pub fn get(&mut self, key: InsightsKey, make: impl FnOnce() -> Insights) -> &Insights {
+        if self.held.as_ref().is_none_or(|(k, _)| *k != key) {
+            self.held = Some((key, make()));
+        }
+        self.current().expect("just filled")
+    }
+
+    pub fn current(&self) -> Option<&Insights> {
+        self.held.as_ref().map(|h| &h.1)
+    }
 }

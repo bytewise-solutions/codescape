@@ -144,6 +144,11 @@ enough to read.
   others) or `only tests use it`. Entry points, tests, generated code, constructors and methods implementing a
   supertype's are never listed. Code reached by reflection or a framework can still show up, so read it as a hint.
   `codescape-index <dir> --unused` prints the same list.
+- **Insights.** Below MODULES the left panel lists areas of interest, each row a name and a short reason (hover for
+  the full explanation, click to fly there; a method opens its code): most complex, hotspots (complex code changed
+  in at least 3 commits within the hotspot period; `needs git` outside a repository), most depended on, upward
+  dependencies, dead code, untested public code and duplicates. **Whole project / Selection** limits them to the
+  selected block. Thresholds are in the map panel's HINTS section.
 - **Constructors live inside their type.** A Go `func NewX(...) *X` is a row of `X`'s card, not a box of its own.
 - **Dependency injection is set aside.** Code recognised as wiring (Google Wire's generated injectors and provider
   sets, Dagger components/modules) is hidden with its arrows, so it never changes the layering. Tick **View ▸ Wiring**
