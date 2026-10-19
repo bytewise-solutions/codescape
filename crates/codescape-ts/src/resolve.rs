@@ -1,4 +1,4 @@
-use crate::parse::{CHAIN, Dialect, TsCall, TsFile, TsFunc, TsUse, TypeExpr, parse_ts};
+use crate::parse::{CALL_SIGNATURE, CHAIN, Dialect, TsCall, TsFile, TsFunc, TsUse, TypeExpr, parse_ts};
 use codescape_build::{Discovery, in_npm_excluded_dir, is_npm_source, is_npm_tooling_file, read_json_loose, rel_path, walk_files_under};
 use codescape_facts::{CallFacts, ExtractStats, FileFacts, FnFacts, Import, ProjectFacts, TypeFacts, TypeUse};
 use codescape_format::*;
@@ -882,6 +882,10 @@ impl<'a> Resolver<'a> {
             return match self.name_sym(ctx.fi, callee)? {
                 Sym::Func(f, n) => self.func_ret(f, &n, awaited),
                 Sym::External(s) => Some(Val::Inst(TypeRef::External(format!("{s}()")))),
+                Sym::Var(f, e) => match self.value_of(Ctx { fi: f, ti: None, func: None }, &e, false)? {
+                    Val::Inst(TypeRef::Project(t)) => self.call_member(Val::Inst(TypeRef::Project(t)), CALL_SIGNATURE, awaited),
+                    _ => None,
+                },
                 _ => None,
             };
         };
@@ -1202,6 +1206,15 @@ impl<'a> Resolver<'a> {
                     self.stats.resolved += 1;
                 }
                 Some(Val::Inst(TypeRef::External(_))) => self.stats.external += 1,
+                Some(Val::Inst(TypeRef::Project(t))) => match self.lookup_method(t, CALL_SIGNATURE) {
+                    Some((_, target)) => {
+                        self.edge(caller, target, EdgeKind::Calls, scope, call.line);
+                        cf.target = Some(target);
+                        self.stats.resolved += 1;
+                    }
+                    None if self.has_external_super(t) => self.stats.external += 1,
+                    None => self.stats.unresolved += 1,
+                },
                 Some(Val::Static(_)) => {}
                 _ if GLOBAL_FUNCTIONS.contains(&call.method.as_str()) => {}
                 _ => self.stats.unresolved += 1,

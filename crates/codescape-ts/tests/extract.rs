@@ -404,3 +404,30 @@ fn library_calls_are_counted_apart_from_project_calls() {
     let s = extract_ts(&d, &module_nodes, &default_excludes(), &mut b, &mut facts);
     assert_eq!((s.resolved, s.external, s.guessed, s.unresolved), (1, 3, 0, 0), "{s:?}");
 }
+
+#[test]
+fn members_of_object_types_and_intersections_resolve() {
+    let r = run();
+    let http = ["web", "src/app/http", "Http"];
+    let node = |t: &str, m: &str| at(&r.b, &["web", "src/app/http", t, m]);
+    let load = at(&r.b, &["web", "src/app/http", "load"]);
+    let to = |n: NodeId| r.b.edges().iter().any(|e| e.from == load && e.to == n && e.kind == EdgeKind::Calls);
+    for (t, m) in [("Http", "get"), ("Http", "post"), ("Http", "create"), ("Http", "()"), ("Mixed", "extra")] {
+        assert!(to(node(t, m)), "{t}.{m}");
+    }
+    assert_eq!(r.b.sub_kind(at(&r.b, &http)), SubKind::NamedType);
+    let refs = refs_from(&r.b, load);
+    let get = node("Http", "get");
+    assert!(refs.contains(&(get, 4, 4, 3)), "h.get: {refs:?}");
+    assert!(refs.contains(&(get, 7, 4, 3)), "c.get through h.create(): {refs:?}");
+    assert!(refs.contains(&(get, 13, 4, 3)), "m.get through the intersection: {refs:?}");
+    assert!(refs.contains(&(node("Server", "close"), 10, 4, 5)), "s.close: {refs:?}");
+    let call_sig = node("Http", "()");
+    assert!(!refs.iter().any(|x| x.0 == call_sig), "a call signature has no name span: {refs:?}");
+    let f = file(&r, "use-http.ts");
+    let s_get = f.calls.iter().find(|c| c.method == "get" && c.line == 11).unwrap();
+    assert_eq!(s_get.target, None, "express.Express part is external");
+    let in_load = |m: &str| f.calls.iter().filter(|c| c.method == m).count();
+    assert_eq!(in_load("http"), 2);
+    assert!(f.calls.iter().filter(|c| c.method == "http").all(|c| c.target == Some(call_sig)), "http(..) resolves to the call signature");
+}

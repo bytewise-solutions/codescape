@@ -9,6 +9,8 @@ const DECISIONS: Decisions = Decisions {
 use codescape_format::{SubKind, Visibility};
 use tree_sitter::{Node, Parser};
 
+pub const CALL_SIGNATURE: &str = "()";
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Dialect {
     TypeScript,
@@ -697,12 +699,15 @@ impl<'s> Ctx<'s> {
                 }
             }
             "interface_declaration" => out.types.push(self.interface(n)),
-            "enum_declaration" | "type_alias_declaration" => {
+            "type_alias_declaration" => {
                 let Some(name) = n.child_by_field_name("name") else { return };
-                let kind = if n.kind() == "enum_declaration" { SubKind::Enum } else { SubKind::NamedType };
+                out.types.push(self.type_alias(n, self.text(name)));
+            }
+            "enum_declaration" => {
+                let Some(name) = n.child_by_field_name("name") else { return };
                 out.types.push(TsType {
                     name: self.text(name).to_string(),
-                    kind,
+                    kind: SubKind::Enum,
                     extends: Vec::new(),
                     implements: Vec::new(),
                     decorators: Vec::new(),
@@ -1057,27 +1062,90 @@ impl<'s> Ctx<'s> {
             }
         }
         if let Some(body) = n.child_by_field_name("body") {
-            for m in named_kids(body) {
-                let Some(name) = m.child_by_field_name("name").map(|x| self.text(x).to_string()) else { continue };
-                match m.kind() {
-                    "method_signature" => {
+            self.members(body, &mut t);
+        }
+        self.drop_type_params(n, &mut t);
+        t
+    }
+
+    fn members(&self, body: Node, t: &mut TsType) {
+        for m in named_kids(body) {
+            if m.kind() == "call_signature" {
+                if !t.methods.iter().any(|f| f.name == CALL_SIGNATURE) {
+                    t.methods.push(self.function(CALL_SIGNATURE, SubKind::Method, m, None));
+                }
+                continue;
+            }
+            let Some(name) = m.child_by_field_name("name").map(|x| self.text(x).to_string()) else { continue };
+            match m.kind() {
+                "method_signature" => {
+                    if !t.methods.iter().any(|f| f.name == name) {
+                        t.methods.push(self.function(&name, SubKind::Method, m, None));
+                    }
+                }
+                "property_signature" => {
+                    let ty = m.child_by_field_name("type");
+                    let func = ty.and_then(|a| named_kids(a).into_iter().find(|k| k.kind() == "function_type"));
+                    if let Some(func) = func {
                         if !t.methods.iter().any(|f| f.name == name) {
-                            t.methods.push(self.function(&name, SubKind::Method, m, None));
+                            let mut f = self.function(&name, SubKind::Method, func, None);
+                            f.start_line = line(m);
+                            t.methods.push(f);
                         }
-                    }
-                    "property_signature" => {
-                        let declared = m.child_by_field_name("type").map(|x| annotation_text(self, x)).unwrap_or_default();
-                        t.field_decls.push(FieldDecl { name: name.clone(), ty: declared, visibility: Visibility::Public, line: line(m) });
                         self.uses(m, &mut t.type_uses);
-                        if let Some(ty) = m.child_by_field_name("type") {
-                            t.fields.push((name, TypeExpr::Named(self.type_name(ty))));
-                        }
+                        continue;
                     }
-                    _ => {}
+                    let declared = ty.map(|x| annotation_text(self, x)).unwrap_or_default();
+                    t.field_decls.push(FieldDecl { name: name.clone(), ty: declared, visibility: Visibility::Public, line: line(m) });
+                    self.uses(m, &mut t.type_uses);
+                    if let Some(ty) = ty {
+                        t.fields.push((name, TypeExpr::Named(self.type_name(ty))));
+                    }
+                }
+                _ => {}
+            }
+        }
+    }
+
+    fn type_alias(&self, n: Node, name: &str) -> TsType {
+        let mut t = TsType {
+            name: name.to_string(),
+            kind: SubKind::NamedType,
+            extends: Vec::new(),
+            implements: Vec::new(),
+            decorators: Vec::new(),
+            decorator_refs: Vec::new(),
+            fields: Vec::new(),
+            field_decls: Vec::new(),
+            methods: Vec::new(),
+            type_uses: Vec::new(),
+            start_line: line(n),
+            end_line: end_line(n),
+        };
+        self.uses(n, &mut t.type_uses);
+        let mut parts = Vec::new();
+        if let Some(v) = n.child_by_field_name("value") {
+            self.flatten(v, &mut parts);
+        }
+        let intersection = parts.len() > 1;
+        for p in parts {
+            if p.kind() == "object_type" {
+                self.members(p, &mut t);
+            } else if intersection {
+                let sup = self.type_name(p);
+                if !sup.is_empty() {
+                    t.extends.push(sup);
                 }
             }
         }
         self.drop_type_params(n, &mut t);
         t
+    }
+
+    fn flatten<'t>(&self, n: Node<'t>, out: &mut Vec<Node<'t>>) {
+        match n.kind() {
+            "intersection_type" | "parenthesized_type" => named_kids(n).into_iter().for_each(|k| self.flatten(k, out)),
+            _ => out.push(n),
+        }
     }
 }
