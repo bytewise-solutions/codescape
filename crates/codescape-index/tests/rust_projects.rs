@@ -139,4 +139,10 @@ fn codescape_indexes_itself() {
         unr as f64 * 100.0 / total
     );
     assert!(g.skipped_roots().next().is_none(), "{:?}", g.skipped_roots().collect::<Vec<_>>());
+
+    let ids = 0..g.node_count() as NodeId;
+    let call_edges: usize = ids.clone().map(|n| g.out_edges(n).iter().filter(|e| EdgeKind::from_u8(e.kind) == EdgeKind::Calls).count()).sum();
+    let refs: usize = ids.map(|n| g.refs_from(n).len()).sum();
+    println!("refs: {refs}, call edges: {call_edges}");
+    assert!(refs * 20 >= call_edges, "{refs} refs for {call_edges} call edges");
 }
