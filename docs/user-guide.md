@@ -151,9 +151,10 @@ enough to read.
   `codescape-index <dir> --unused` prints the same list.
 - **Insights.** Below MODULES the left panel lists areas of interest, each row a name and a short reason (hover for
   the full explanation, click to fly there; a method opens its code): most complex, hotspots (complex code changed
-  in at least 3 commits within the hotspot period; `needs git` outside a repository), most depended on, upward
-  dependencies, dead code, untested public code and duplicates. **Whole project / Selection** limits them to the
-  selected block. Thresholds are in the map panel's HINTS section.
+  in at least 3 commits within the hotspot period; `needs git` outside a repository, `not in review` in Review mode),
+  most depended on, upward dependencies, dead code, untested public code and duplicates. **Whole project / Selection**
+  limits them to the selected block (Selection is available once something is selected). Dead code and the unused
+  flags follow **View ▸ Unused code**. Thresholds are in the map panel's HINTS section.
 - **Flags in the inspector.** A selected block with flags gets a FLAGS section at the top of the right panel: each
   flag's short name coloured by kind, its full explanation below (complexity breakdown, the commits behind a
   hotspot, unused wording, duplicate places, an upward arrow's target), and the other duplicate places or the upward

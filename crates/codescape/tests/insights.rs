@@ -337,3 +337,16 @@ fn a_duplicate_with_the_same_name_says_which_file_it_is_in() {
     let f = all.iter().find(|f| f.kind == FlagKind::Duplicate).unwrap();
     assert_eq!(f.explanation, "Same code as `Res.node` in two/Res.java (lines 5–30): 80 tokens.");
 }
+
+#[test]
+fn unused_flags_and_the_dead_code_list_follow_the_unused_switch() {
+    let fx = fixture();
+    let g = fx.file.graph();
+    let off = Limits { unused: false, ..Limits::default() };
+    let a = analysis(g);
+    let i = compute(g, &a, &churn(), &LayoutOptions::default(), &off, None);
+    assert!(i.dead.is_empty(), "{:?}", names(g, &i.dead));
+    let kinds: Vec<FlagKind> = flags(g, &a, &churn(), &LayoutOptions::default(), &off, node(g, "shop.Svc.helper")).iter().map(|f| f.kind).collect();
+    assert!(!kinds.iter().any(|k| matches!(k, FlagKind::Unused | FlagKind::NoCaller | FlagKind::OnlyTests)), "{kinds:?}");
+    assert!(!all(g, None).dead.is_empty());
+}

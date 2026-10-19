@@ -78,6 +78,7 @@ pub const CHEATSHEET: &[(&str, &[(&str, &str)])] = &[
             ("Esc", "close the top window; else the diagram, the file, the selection"),
             ("Ctrl+K", "jump to a name (Up / Down, Enter)"),
             ("S", "sequence diagram of the selected method or class (Whole chain button climbs further)"),
+            ("Hover a complexity number", "why it is that high: the decisions counted and the nesting"),
         ],
     ),
     (

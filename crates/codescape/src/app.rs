@@ -522,15 +522,13 @@ struct Project {
     pointer: Option<Pos2>,
 }
 
-fn gutter_width(size: f32, total: usize) -> f32 {
-    total.to_string().len() as f32 * advance(size) + 2.0 * advance(size) + MARK_SLOTS as f32 * mark_pitch(size)
+fn gutter_width(size: f32, total: usize, slots: usize) -> f32 {
+    total.to_string().len() as f32 * advance(size) + 2.0 * advance(size) + slots as f32 * mark_pitch(size)
 }
 
 fn mark_pitch(size: f32) -> f32 {
     size * 0.95
 }
-
-const MARK_SLOTS: usize = 3;
 
 fn chevron(painter: &egui::Painter, center: Pos2, up: bool) {
     let dy = if up { -2.0 } else { 2.0 };
@@ -792,6 +790,7 @@ impl Project {
             complexity_hint: self.levels().0,
             many_callers: s.threshold(Threshold::ManyCallers).value,
             hotspot_days: s.threshold(Threshold::HotspotDays).value,
+            unused: s.view(View::Unused).value,
         }
     }
 
@@ -2890,7 +2889,7 @@ impl Project {
         }
         let line_h = size * LINE_SPACING;
         let top = self.file_page(b).top() + 6.0 - self.file_scroll.get(&node).copied().unwrap_or(0.0) * line_h;
-        let gutter = gutter_width(size, total);
+        let gutter = gutter_width(size, total, self.mark_slots(node));
         let x = p.x - (b.rect.x + gutter + advance(size)) + self.file_hscroll.get(&node).copied().unwrap_or(0.0);
         let (line, col) = (((p.y - top) / line_h).floor(), (x / advance(size)).floor());
         if line < 0.0 || col < 0.0 {
@@ -2916,9 +2915,13 @@ impl Project {
         Some(hscroll_by(self.file_hscroll.get(&node).copied().unwrap_or(0.0), wheel_px, longest, advance(size), text.width()))
     }
 
+    fn mark_slots(&self, node: NodeId) -> usize {
+        self.file_marks(node).iter().map(|m| m.kinds().len()).max().unwrap_or(0)
+    }
+
     fn file_text_area(&self, b: &crate::canvas::SceneBox, size: f32, total: usize) -> egui::Rect {
         let page = self.file_page(b);
-        let gutter = gutter_width(size, total);
+        let gutter = gutter_width(size, total, self.mark_slots(b.node));
         egui::Rect::from_min_max(
             Pos2::new(b.rect.x + gutter + advance(size) * 0.5, page.top()),
             Pos2::new(self.scrollbar_track(page).left() - 4.0, page.bottom()),
@@ -2972,7 +2975,7 @@ impl Project {
             return;
         }
         let mono = FontId::monospace(size);
-        let gutter = gutter_width(size, lines.len());
+        let gutter = gutter_width(size, lines.len(), self.mark_slots(b.node));
         let diff = self.review.as_ref().and_then(|rv| rv.review.file(path));
         let full = |y: f32, h: f32| egui::Rect::from_min_size(Pos2::new(b.rect.x + 2.0, y), egui::vec2(b.rect.w - 4.0, h));
         if let Some(d) = diff {

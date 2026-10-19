@@ -178,13 +178,16 @@ impl Project {
         let mut picked = Picked { node: None, selection: None };
         ui.add_space(12.0);
         ui.label(RichText::new("INSIGHTS").small().color(style::MUTED));
-        let mut selection = self.insights_selection;
+        let effective = self.insights_selection && self.selected.is_some();
+        let mut selection = effective;
         ui.horizontal(|ui| {
             ui.selectable_value(&mut selection, false, "Whole project");
             let scope = self.selected.map_or("Selection".to_string(), |s| format!("In {}", self.file.graph().name(s)));
-            ui.selectable_value(&mut selection, true, scope).on_hover_text("Only what is inside the selected block");
+            ui.add_enabled_ui(self.selected.is_some(), |ui| {
+                ui.selectable_value(&mut selection, true, scope).on_hover_text("Only what is inside the selected block");
+            });
         });
-        if selection != self.insights_selection {
+        if selection != effective {
             picked.selection = Some(selection);
         }
         let Some(insights) = self.insights.current() else {
@@ -196,6 +199,7 @@ impl Project {
             let rows = (section.rows)(insights);
             let hotspots = section.kinds == [FlagKind::Hotspot];
             let note = match (&self.churn.data, hotspots) {
+                _ if hotspots && self.review.is_some() => Some("not in review"),
                 (None, true) => Some("loading…"),
                 (Some(None), true) => Some("needs git"),
                 _ => None,
@@ -216,8 +220,13 @@ impl Project {
                             Some(t) => format!("{}.{}", g.name(t), g.name(row.node)),
                             None => g.name(row.node).to_string(),
                         };
-                        let hover = self.row_hover(section, row);
-                        if ui.selectable_label(self.selected == Some(row.node), name).on_hover_text(hover).clicked() {
+                        if ui
+                            .selectable_label(self.selected == Some(row.node), name)
+                            .on_hover_ui(|ui| {
+                                ui.label(self.row_hover(section, row));
+                            })
+                            .clicked()
+                        {
                             picked.node = Some(row.node);
                         }
                         ui.horizontal(|ui| {
@@ -241,7 +250,13 @@ impl Project {
             .filter(|f| section.kinds.contains(&f.kind))
             .map(|f| f.explanation)
             .collect();
-        if explained.is_empty() { format!("{path}\n{}", row.reason) } else { format!("{path}\n{}", explained.join("\n")) }
+        if !explained.is_empty() {
+            format!("{path}\n{}", explained.join("\n"))
+        } else if section.kinds.is_empty() {
+            format!("{path}\nCalled from {} places outside its own type (listed from {}).", row.score, self.limits().many_callers)
+        } else {
+            format!("{path}\n{}", row.reason)
+        }
     }
 
     pub(super) fn go_to_insight(&mut self, n: NodeId) {

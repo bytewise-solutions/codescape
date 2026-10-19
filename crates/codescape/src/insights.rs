@@ -52,9 +52,14 @@ struct Ctx<'a> {
     churn: &'a HashMap<String, u32>,
     opts: &'a LayoutOptions,
     limits: &'a Limits,
+    any_tested: std::cell::OnceCell<bool>,
 }
 
-impl Ctx<'_> {
+impl<'a> Ctx<'a> {
+    fn new(g: &'a ArchivedGraph, a: &'a Analysis, churn: &'a HashMap<String, u32>, opts: &'a LayoutOptions, limits: &'a Limits) -> Self {
+        Ctx { g, a, churn, opts, limits, any_tested: Default::default() }
+    }
+
     fn shown(&self, n: NodeId) -> bool {
         followable(self.g, self.opts, n)
     }
@@ -73,11 +78,14 @@ impl Ctx<'_> {
     }
 
     fn usage(&self, n: NodeId) -> Usage {
-        if matches!(self.g.kind(n), NodeKind::Type | NodeKind::Member) { self.a.usage[n as usize] } else { Usage::Used }
+        if self.limits.unused && matches!(self.g.kind(n), NodeKind::Type | NodeKind::Member) { self.a.usage[n as usize] } else { Usage::Used }
     }
 
     fn untested(&self, n: NodeId) -> bool {
-        self.g.complexity(n).is_some() && self.g.visibility(n) == Visibility::Public && !self.a.tested[n as usize] && self.a.tested.iter().any(|&t| t)
+        self.g.complexity(n).is_some()
+            && self.g.visibility(n) == Visibility::Public
+            && !self.a.tested[n as usize]
+            && *self.any_tested.get_or_init(|| self.a.tested.iter().any(|&t| t))
     }
 
     fn duplicates(&self, n: NodeId) -> Vec<(u32, Vec<(NodeId, u32, u32)>)> {
@@ -115,7 +123,7 @@ fn ranked(mut rows: Vec<Row>) -> Vec<Row> {
 }
 
 pub fn compute(g: &ArchivedGraph, analysis: &Analysis, churn: &HashMap<String, u32>, opts: &LayoutOptions, limits: &Limits, scope: Option<NodeId>) -> Insights {
-    let cx = Ctx { g, a: analysis, churn, opts, limits };
+    let cx = Ctx::new(g, analysis, churn, opts, limits);
     let nodes: Vec<NodeId> = (0..g.node_count() as NodeId).filter(|&n| scope.is_none_or(|s| g.is_ancestor(s, n)) && cx.shown(n)).collect();
     let mut out = Insights::default();
     let row = |node: NodeId, reason: String, score: u32| Row { node, reason, score };
@@ -191,7 +199,11 @@ pub fn complexity_facts(g: &ArchivedGraph, n: NodeId) -> Vec<String> {
 const NAME_NOWHERE: &str = "its name appears nowhere else in the sources; reflection or a framework could still use it.";
 
 pub fn flags(g: &ArchivedGraph, analysis: &Analysis, churn: &HashMap<String, u32>, opts: &LayoutOptions, limits: &Limits, n: NodeId) -> Vec<Flag> {
-    let cx = Ctx { g, a: analysis, churn, opts, limits };
+    flags_in(&Ctx::new(g, analysis, churn, opts, limits), n)
+}
+
+fn flags_in(cx: &Ctx, n: NodeId) -> Vec<Flag> {
+    let (g, limits) = (cx.g, cx.limits);
     let mut out = Vec::new();
     if !cx.shown(n) {
         return out;
@@ -331,7 +343,8 @@ pub fn file_marks(g: &ArchivedGraph, analysis: &Analysis, churn: &HashMap<String
         stack.extend(g.children(n));
     }
     let blocks = nodes.into_iter().filter(|&n| matches!(g.kind(n), NodeKind::Member | NodeKind::Type));
-    gutter_marks(blocks.map(|n| (g.span(n).0, flags(g, analysis, churn, opts, limits, n))))
+    let cx = Ctx::new(g, analysis, churn, opts, limits);
+    gutter_marks(blocks.map(|n| (g.span(n).0, flags_in(&cx, n))))
 }
 
 #[derive(Default)]
