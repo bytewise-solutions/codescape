@@ -4,6 +4,7 @@ mod focus;
 mod input;
 mod inspector;
 mod keys;
+mod links;
 mod panels;
 mod reach;
 mod reading;

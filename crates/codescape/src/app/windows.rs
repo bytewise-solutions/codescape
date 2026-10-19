@@ -9,10 +9,11 @@ pub(crate) enum Win {
     Structure,
     Keys,
     MapPanel,
+    Arrow,
 }
 
 impl Win {
-    const ALL: [Win; 7] = [Win::Jump, Win::Shortcuts, Win::Settings, Win::Find, Win::Structure, Win::Keys, Win::MapPanel];
+    const ALL: [Win; 8] = [Win::Jump, Win::Shortcuts, Win::Settings, Win::Find, Win::Structure, Win::Keys, Win::MapPanel, Win::Arrow];
 
     pub(crate) fn id(self) -> egui::Id {
         egui::Id::unique(match self {
@@ -23,6 +24,7 @@ impl Win {
             Win::Structure => "structure",
             Win::Keys => "Keyboard shortcuts",
             Win::MapPanel => "What's on the map",
+            Win::Arrow => "Arrow calls",
         })
     }
 }
@@ -37,6 +39,7 @@ impl Project {
             Win::Structure => self.structure.is_some(),
             Win::Keys => self.keys_open,
             Win::MapPanel => self.map_panel_open,
+            Win::Arrow => self.arrow.is_some(),
         }
     }
 
@@ -52,6 +55,7 @@ impl Project {
                 self.capturing = None;
             }
             Win::MapPanel => self.map_panel_open = false,
+            Win::Arrow => self.arrow = None,
         }
     }
 

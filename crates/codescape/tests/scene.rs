@@ -575,3 +575,24 @@ fn while_reading_the_breadcrumb_level_stays_at_the_file_s_package() {
     assert_eq!(level_node(g, &s, reading, VIEW.center()), before);
     assert_eq!(level_node(g, &s, None, VIEW.center()), s.deepest_open_at(VIEW.center()));
 }
+
+#[test]
+fn edge_at_finds_the_arrow_at_its_midpoint_but_not_beside_its_head() {
+    let fx = fixture();
+    let g = fx.file.graph();
+    let mut cache = LayoutCache::new(Vec::new(), LayoutOptions::default());
+    let cam = fit_all(g, &mut cache);
+    let s = scene(g, &mut cache, &cam);
+    let (i, e) = s.edges.iter().enumerate().find(|(_, e)| e.points.len() >= 2).expect("an arrow");
+    let (p, q) = (e.points[0], e.points[1]);
+    let mid = [(p[0] + q[0]) / 2.0, (p[1] + q[1]) / 2.0];
+    assert_eq!(s.edge_at(mid), Some(i));
+    let end = *e.points.last().unwrap();
+    let before = e.points[e.points.len() - 2];
+    let (dx, dy) = (end[0] - before[0], end[1] - before[1]);
+    let len = (dx * dx + dy * dy).sqrt();
+    let inside = [end[0] + dx / len * 3.0, end[1] + dy / len * 3.0];
+    assert!(s.box_at(inside).is_some());
+    assert_eq!(s.edge_at(inside), None);
+    assert_eq!(s.edge_at([-500.0, -500.0]), None);
+}

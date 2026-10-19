@@ -71,6 +71,7 @@ pub const CHEATSHEET: &[(&str, &[(&str, &str)])] = &[
         "Select and follow",
         &[
             ("Click", "select a box or method row; links light up"),
+            ("Click an arrow", "list the calls behind it; click one to open the code"),
             ("← → ↑ ↓", "select the nearest box in that direction"),
             ("1 2 3", "neighbours / what it reaches / where it is used"),
             ("Alt+←", "back to the previous selection"),

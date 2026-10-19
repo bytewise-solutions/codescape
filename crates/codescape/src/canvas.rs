@@ -111,9 +111,32 @@ impl Scene {
         self.boxes.iter().rev().filter(|b| !b.source).find_map(|b| b.rows.iter().find(|r| r.rect.contains(p)).map(|r| r.node))
     }
 
+    pub fn edge_at(&self, p: [f32; 2]) -> Option<usize> {
+        let mut best: Option<(u32, usize)> = None;
+        for (i, e) in self.edges.iter().enumerate() {
+            let hit = e.points.windows(2).any(|w| {
+                let (c, _) = nearest_on_segment(w[0], w[1], p);
+                (c[0] - p[0]).hypot(c[1] - p[1]) <= EDGE_HIT_PX && !self.boxes.iter().any(|b| b.depth >= e.depth && b.rect.contains(c))
+            });
+            if hit && best.is_none_or(|(depth, _)| e.depth >= depth) {
+                best = Some((e.depth, i));
+            }
+        }
+        best.map(|(_, i)| i)
+    }
+
     pub fn deepest_open_at(&self, p: [f32; 2]) -> Option<NodeId> {
         self.boxes.iter().filter(|b| b.open && b.rect.contains(p)).max_by_key(|b| b.depth).map(|b| b.node)
     }
+}
+
+const EDGE_HIT_PX: f32 = 5.0;
+
+fn nearest_on_segment(a: [f32; 2], b: [f32; 2], p: [f32; 2]) -> ([f32; 2], f32) {
+    let (dx, dy) = (b[0] - a[0], b[1] - a[1]);
+    let len2 = dx * dx + dy * dy;
+    let t = if len2 > 0.0 { (((p[0] - a[0]) * dx + (p[1] - a[1]) * dy) / len2).clamp(0.0, 1.0) } else { 0.0 };
+    ([a[0] + dx * t, a[1] + dy * t], t)
 }
 
 struct Xform {

@@ -1,3 +1,4 @@
+mod arrow_ui;
 mod code_find;
 mod keys_ui;
 mod map_panel;
@@ -456,6 +457,8 @@ struct Project {
     search_hits: Vec<NodeId>,
     search_cursor: usize,
     hovered: Option<NodeId>,
+    hovered_edge: Option<(NodeId, NodeId)>,
+    arrow: Option<arrow_ui::ArrowWin>,
     shortcuts_open: bool,
     keys: Keymap,
     keys_open: bool,
@@ -671,6 +674,8 @@ impl Project {
             search_hits: Vec::new(),
             search_cursor: 0,
             hovered: None,
+            hovered_edge: None,
+            arrow: None,
             shortcuts_open: false,
             keys: load_keys(),
             keys_open: false,
@@ -1565,6 +1570,7 @@ impl Project {
         self.find_bar(ui.ctx());
         self.structure_window(ui.ctx());
         self.keys_window(ui.ctx());
+        self.arrow_window(ui.ctx());
         self.track_windows(ui.ctx());
         if self.settings_open {
             let out = settings_window::show(ui.ctx(), &mut self.settings_open, &mut self.settings, &self.packs, &mut self.form);
@@ -2238,6 +2244,7 @@ impl Project {
         }
         let g = self.file.graph();
         let mut clicked_box = None;
+        let mut clicked_arrow = None;
         let mut display = None;
         let mut details_toggle: Option<(NodeId, bool)> = None;
         if resp.clicked()
@@ -2261,6 +2268,8 @@ impl Project {
                 self.scene.boxes.iter().rev().find(|b| b.open && b.hidden_details + b.shown_details > 0 && chip_rect(b.rect).contains([p.x, p.y]))
             {
                 details_toggle = Some((b.node, b.hidden_details > 0));
+            } else if let Some(i) = self.scene.edge_at([p.x, p.y]) {
+                clicked_arrow = Some((self.scene.edges[i].a, self.scene.edges[i].b));
             } else {
                 clicked_box =
                     self.code_member_at(p).or_else(|| self.file_page_at(p)).or_else(|| self.scene.row_at([p.x, p.y])).or_else(|| self.scene.box_at([p.x, p.y]));
@@ -2286,6 +2295,14 @@ impl Project {
         }
         let started = Instant::now();
         self.hovered = resp.hover_pos().and_then(|p| self.scene.box_at([p.x, p.y]));
+        self.hovered_edge = resp
+            .hover_pos()
+            .filter(|_| self.reading.is_none())
+            .and_then(|p| self.scene.edge_at([p.x, p.y]))
+            .map(|i| (self.scene.edges[i].a, self.scene.edges[i].b));
+        if self.hovered_edge.is_some() {
+            ui.ctx().set_cursor_icon(egui::CursorIcon::PointingHand);
+        }
         let anchor = self.pointer.filter(|_| !self.scripted).map_or(self.view.center(), |p| [p.x, p.y]);
         let mut open_files: Vec<NodeId> = self.scene.boxes.iter().filter(|b| b.source).map(|b| b.node).collect();
         open_files.extend(self.goto_line.map(|(t, _)| t));
@@ -2320,6 +2337,9 @@ impl Project {
         if self.reading.is_none() {
             minimap::draw(&painter, &root, &self.cam, self.view);
             self.paint_legend(&painter);
+        }
+        if let Some((a, b)) = clicked_arrow {
+            self.open_arrow(a, b);
         }
         if let Some(n) = clicked_box {
             self.set_focus(n, None, false, true);
@@ -2478,7 +2498,8 @@ impl Project {
             dashed = true;
         }
         let marked = e.mark != Mark::None;
-        let hovered = self.hovered.is_some_and(|h| e.a == h || e.b == h);
+        let under_pointer = self.hovered_edge == Some((e.a, e.b));
+        let hovered = self.hovered.is_some_and(|h| e.a == h || e.b == h) || under_pointer;
         let links = if e.weight == 0 { e.implements } else { e.links };
         let (width, alpha) = if self.settings.settings().view(View::QuietArrows).value {
             let look = style::edge_look(links, heaviest, marked || hovered);
@@ -2486,6 +2507,7 @@ impl Project {
         } else {
             (style::edge_width(links, marked), if marked { 1.0 } else { style::edge_alpha(links) })
         };
+        let (width, alpha) = if under_pointer { (width.max(2.4), 1.0) } else { (width, alpha) };
         match e.mark {
             Mark::Down | Mark::Focus => color = style::USES,
             Mark::Up => color = style::CALLER,

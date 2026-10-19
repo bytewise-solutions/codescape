@@ -6,6 +6,7 @@ pub mod focus;
 pub mod input;
 pub mod inspector;
 pub mod keys;
+pub mod links;
 pub mod minimap;
 pub mod panels;
 pub mod reach;

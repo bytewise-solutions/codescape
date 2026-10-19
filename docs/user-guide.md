@@ -90,6 +90,8 @@ enough to read.
 - **Quiet arrows.** Every dependency is drawn, but faint, slightly stronger for the heaviest ones in a container. Hover
   or select a box and its own arrows light up at full strength, as thick as the number of classes they link. Turn
   **View ▸ Quiet arrows** off to draw every arrow by its weight instead.
+- **Click an arrow** to open a window listing the calls behind it (`caller → callee  :line`). Click a row to open the
+  file at that call; **Go to** buttons fly to either end. Hovering an arrow brightens it and shows a pointing hand.
 - **Implements / inherits** arrows are dotted with a hollow triangle at the interface, like UML.
 - **Types are UML cards.** A header with the stereotype («interface», «trait», «struct», «enumeration», «record»)
   and the name, then the fields (`- cache: Map<String, Integer>`), then the methods as left-aligned rows with their visibility (`+` public, `#` protected, `~` package,
