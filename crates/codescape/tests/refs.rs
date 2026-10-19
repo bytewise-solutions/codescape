@@ -105,3 +105,19 @@ fn columns_are_as_wide_as_the_drawn_monospace_glyphs() {
         }
     });
 }
+
+#[test]
+fn only_a_target_the_map_shows_can_be_followed() {
+    let fx = fixture(|b, [.., o, _, _]| b.add_flags(o, NodeFlags::NOISE));
+    let g = fx.file.graph();
+    let (a, o, get) = (node(g, &["p", "A"]), node(g, &["p", "O"]), node(g, &["p", "O", "get"]));
+    let opts = codescape_layout::LayoutOptions::default();
+    assert!(followable(g, &opts, a));
+    assert!(!followable(g, &opts, o), "a hidden type");
+    assert!(!followable(g, &opts, get), "a member of a hidden type");
+    let shown = codescape_layout::LayoutOptions { show_noise: true, ..opts.clone() };
+    assert!(followable(g, &shown, get));
+    let mut user = shown.clone();
+    user.hidden_nodes.insert(a);
+    assert!(!followable(g, &user, a), "hidden by the user");
+}

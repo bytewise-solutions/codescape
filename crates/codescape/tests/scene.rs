@@ -102,6 +102,7 @@ fn hidden_flags_skip_mock_and_test_nodes() {
     let s = scene(g, &mut cache, &cam);
     let mock = node(g, &["left", "left.mocks"]);
     assert!(s.boxes.iter().all(|b| b.node != mock));
+    assert!(world_rect(g, &mut cache, mock).is_none(), "nothing to fly to");
 }
 
 #[test]

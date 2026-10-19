@@ -13,7 +13,7 @@ use crate::inspector;
 use crate::keys::{Action as KeyAction, Keymap};
 use crate::panels::{EntryGroupView, group_entries};
 use crate::reading::{fill_view, leave_zoom, level_node, zoom_text};
-use crate::refs::FileRefs;
+use crate::refs::{FileRefs, followable};
 use crate::review_view::{CommitStep, ItemKind, Limits, MarkState, ReviewItem, ReviewMarks, Risk, by_risk, items_with as review_items, step as review_step};
 use crate::search::{self, SearchIndex, member_at_line};
 use crate::settings_window::{self, SettingsForm};
@@ -755,9 +755,10 @@ impl Project {
     fn open_member_at(&mut self, m: NodeId, line: Option<u32>) {
         let g = self.file.graph();
         let Some(t) = g.parent(m).map(|p| if g.kind(p) == NodeKind::Type { p } else { m }) else { return };
-        self.goto_line = Some((t, line.unwrap_or(g.span(m).0)));
+        let line = line.unwrap_or(g.span(m).0);
         self.set_focus(m, None, false, true);
         if let Some(r) = world_rect(self.file.graph(), &mut self.cache, t) {
+            self.goto_line = Some((t, line));
             self.target = Some(Camera::reading(r, self.view));
         }
     }
@@ -2794,7 +2795,7 @@ impl Project {
             return None;
         }
         let (col, len, target) = self.file_refs(node)?.at(line as usize + 1, col as usize)?;
-        Some((node, line as usize + 1, col, len, target))
+        followable(self.file.graph(), self.cache.options(), target).then_some((node, line as usize + 1, col, len, target))
     }
 
     fn file_metrics(&self, node: NodeId) -> Option<(f32, usize, usize)> {
@@ -2911,7 +2912,11 @@ impl Project {
             && let Some(refs) = self.file_refs(b.node)
         {
             for (i, l) in lines.iter().enumerate().take(last).skip(first) {
-                links.extend((0..l.chars().count()).filter_map(|c| refs.at(i + 1, c).filter(|r| r.0 == c)).map(|(c, n, _)| (i + 1, c, n)));
+                links.extend(
+                    (0..l.chars().count())
+                        .filter_map(|c| refs.at(i + 1, c).filter(|r| r.0 == c && followable(g, self.cache.options(), r.2)))
+                        .map(|(c, n, _)| (i + 1, c, n)),
+                );
             }
         }
         for (line, col, len) in links {

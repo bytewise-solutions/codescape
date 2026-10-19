@@ -1,5 +1,6 @@
 use crate::source::TAB;
 use codescape_format::{ArchivedGraph, NodeId};
+use codescape_layout::LayoutOptions;
 use std::collections::HashMap;
 
 pub fn display_span(raw: &str, byte_col: usize, byte_len: usize) -> (usize, usize) {
@@ -7,6 +8,10 @@ pub fn display_span(raw: &str, byte_col: usize, byte_len: usize) -> (usize, usiz
     let at = |b: usize| (0..=b.min(raw.len())).rev().find(|&i| raw.is_char_boundary(i)).unwrap_or(0);
     let (start, end) = (at(byte_col), at(byte_col.saturating_add(byte_len)));
     (width(&raw[..start]), width(&raw[start..end]))
+}
+
+pub fn followable(g: &ArchivedGraph, opts: &LayoutOptions, target: NodeId) -> bool {
+    !g.path(target).into_iter().any(|n| opts.hides(g, n))
 }
 
 struct Link {
