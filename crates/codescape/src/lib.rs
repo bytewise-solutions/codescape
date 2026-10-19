@@ -4,6 +4,7 @@ pub mod canvas;
 pub mod find;
 pub mod focus;
 pub mod input;
+pub mod insights;
 pub mod inspector;
 pub mod keys;
 pub mod links;

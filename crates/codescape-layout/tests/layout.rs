@@ -994,3 +994,16 @@ fn under_header(l: &ContainerLayout, r: Rect) -> Rect {
     let round = |v: f32| (v * 100.0).round() / 100.0;
     Rect::new(round(r.x), round(r.y - l.header), round(r.w), round(r.h))
 }
+
+#[test]
+fn upward_edges_are_the_arrows_the_layout_draws_up() {
+    let g = graph(&["a", "b", "c", "d"], &main_deps(&[("a", "b"), ("b", "c"), ("c", "a"), ("c", "d")]));
+    let gr = g.file.graph();
+    let opts = LayoutOptions::default();
+    let l = layout_container(gr, gr.root(), &[], &opts);
+    let drawn: Vec<(NodeId, NodeId)> = l.edges.iter().filter(|e| e.dir == Direction::Up).map(|e| (e.a, e.b)).collect();
+    let up: Vec<(NodeId, NodeId)> = upward_edges(gr, gr.root(), &opts).iter().map(|&(a, b, _)| (a, b)).collect();
+    assert_eq!(drawn.len(), 1);
+    assert_eq!(up, drawn);
+    assert_eq!(upward_edges(gr, gr.root(), &opts)[0].2, 1, "the number of dependencies behind the arrow");
+}

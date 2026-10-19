@@ -739,7 +739,12 @@ impl Project {
     }
 
     fn limits(&self) -> Limits {
-        Limits { complexity_hint: self.levels().0, many_callers: self.settings.settings().threshold(Threshold::ManyCallers).value }
+        let s = self.settings.settings();
+        Limits {
+            complexity_hint: self.levels().0,
+            many_callers: s.threshold(Threshold::ManyCallers).value,
+            hotspot_days: s.threshold(Threshold::HotspotDays).value,
+        }
     }
 
     fn toggle_both_panels(&mut self) {

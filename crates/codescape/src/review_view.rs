@@ -8,11 +8,12 @@ use std::path::Path;
 pub struct Limits {
     pub complexity_hint: u16,
     pub many_callers: u32,
+    pub hotspot_days: u32,
 }
 
 impl Default for Limits {
     fn default() -> Self {
-        Limits { complexity_hint: 10, many_callers: 5 }
+        Limits { complexity_hint: 10, many_callers: 5, hotspot_days: 365 }
     }
 }
 

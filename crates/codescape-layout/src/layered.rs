@@ -53,12 +53,7 @@ fn entry_owners(g: &ArchivedGraph) -> HashSet<NodeId> {
 }
 
 pub fn layout_container(g: &ArchivedGraph, node: NodeId, frames: &[FrameRule], opts: &LayoutOptions) -> ContainerLayout {
-    let mut base = layout_structure(
-        g,
-        node,
-        frames,
-        &LayoutOptions { show_wiring: false, show_noise: false, show_details: false, details_in: Vec::new(), ..opts.clone() },
-    );
+    let mut base = layout_structure(g, node, frames, &structure_options(opts));
     let tests = if opts.show_tests { NodeFlags::TEST.0 | NodeFlags::MOCK.0 } else { 0 };
     let other = NodeFlags(opts.hidden.0 & !NodeFlags::DETAIL.0 & !tests);
     let details = display_children(g, node)
@@ -154,13 +149,19 @@ fn add_wiring(g: &ArchivedGraph, node: NodeId, mut l: ContainerLayout, opts: &La
     l
 }
 
-fn layout_structure(g: &ArchivedGraph, node: NodeId, frames: &[FrameRule], opts: &LayoutOptions) -> ContainerLayout {
+struct Layering {
+    kids: Vec<NodeId>,
+    pinned: Vec<bool>,
+    edges: Vec<SibEdge>,
+    raw_layer: Vec<u32>,
+}
+
+fn layering(g: &ArchivedGraph, node: NodeId, opts: &LayoutOptions) -> Option<Layering> {
     let card = g.kind(node) == NodeKind::Type;
-    let header = if card { card_rows_bottom(g, node, opts).max(HEADER) } else { HEADER };
     let kids: Vec<NodeId> = display_children(g, node).into_iter().filter(|&c| !opts.hides(g, c) && !(card && g.kind(c) == NodeKind::Member)).collect();
     let n = kids.len();
     if n == 0 {
-        return ContainerLayout { size: [0.0, 0.0], header, ..Default::default() };
+        return None;
     }
     let owners = entry_owners(g);
     let pinned: Vec<bool> = kids.iter().map(|k| owners.contains(k)).collect();
@@ -270,8 +271,40 @@ fn layout_structure(g: &ArchivedGraph, node: NodeId, frames: &[FrameRule], opts:
             }
         }
     }
-    let raw_layer = layer.clone();
-    let raw_layers = layer.iter().max().map_or(0, |m| *m as usize + 1);
+    Some(Layering { kids, pinned, edges, raw_layer: layer })
+}
+
+fn drawn(opts: &LayoutOptions, e: &SibEdge) -> bool {
+    (opts.guessed_calls || !e.guessed) && (opts.implements_arrows || e.calls + e.deps > 0) && (opts.import_arrows || e.calls + e.implements > 0 || e.wiring > 0)
+}
+
+fn direction(e: &SibEdge, raw_layer: &[u32]) -> Direction {
+    if e.back || raw_layer[e.a] > raw_layer[e.b] {
+        Direction::Up
+    } else if raw_layer[e.a] == raw_layer[e.b] {
+        Direction::Sideways
+    } else {
+        Direction::Down
+    }
+}
+
+pub fn upward_edges(g: &ArchivedGraph, node: NodeId, opts: &LayoutOptions) -> Vec<(NodeId, NodeId, u32)> {
+    let Some(l) = layering(g, node, &structure_options(opts)) else { return Vec::new() };
+    l.edges.iter().filter(|e| drawn(opts, e) && direction(e, &l.raw_layer) == Direction::Up).map(|e| (l.kids[e.a], l.kids[e.b], e.calls + e.deps)).collect()
+}
+
+fn structure_options(opts: &LayoutOptions) -> LayoutOptions {
+    LayoutOptions { show_wiring: false, show_noise: false, show_details: false, details_in: Vec::new(), ..opts.clone() }
+}
+
+fn layout_structure(g: &ArchivedGraph, node: NodeId, frames: &[FrameRule], opts: &LayoutOptions) -> ContainerLayout {
+    let card = g.kind(node) == NodeKind::Type;
+    let header = if card { card_rows_bottom(g, node, opts).max(HEADER) } else { HEADER };
+    let Some(Layering { kids, pinned, edges, raw_layer }) = layering(g, node, opts) else {
+        return ContainerLayout { size: [0.0, 0.0], header, ..Default::default() };
+    };
+    let n = kids.len();
+    let raw_layers = raw_layer.iter().max().map_or(0, |m| *m as usize + 1);
     let sizes: Vec<[f32; 2]> = kids.iter().map(|&k| box_size(g, k, opts)).collect();
     let area: f32 = sizes.iter().map(|s| (s[0] + GAP_X) * (s[1] + GAP_Y)).sum();
     let widest = sizes.iter().map(|s| s[0]).fold(0.0, f32::max);
@@ -291,7 +324,7 @@ fn layout_structure(g: &ArchivedGraph, node: NodeId, frames: &[FrameRule], opts:
         w / h.max(1.0)
     };
     let chosen = if cap > ROLE_LAYERS { (FOLDED_ROWS..=cap).rev().find(|&l| aspect_with(l) >= MIN_ASPECT).unwrap_or(FOLDED_ROWS) } else { cap };
-    layer = squeeze(chosen);
+    let layer = squeeze(chosen);
     let layer_count = layer.iter().max().map_or(0, |m| *m as usize + 1);
     let mut layers: Vec<Vec<usize>> = vec![Vec::new(); layer_count];
     for i in 0..n {
@@ -364,23 +397,12 @@ fn layout_structure(g: &ArchivedGraph, node: NodeId, frames: &[FrameRule], opts:
     }
 
     let row_of: HashMap<usize, usize> = rows.iter().enumerate().flat_map(|(ri, (_, r))| r.iter().map(move |&v| (v, ri))).collect();
-    let drawn = |e: &&SibEdge| {
-        (opts.guessed_calls || !e.guessed)
-            && (opts.implements_arrows || e.calls + e.deps > 0)
-            && (opts.import_arrows || e.calls + e.implements > 0 || e.wiring > 0)
-    };
     let laid_edges = edges
         .iter()
-        .filter(drawn)
+        .filter(|e| drawn(opts, e))
         .map(|e| {
             let (ra, rb) = (rects[e.a], rects[e.b]);
-            let dir = if e.back || raw_layer[e.a] > raw_layer[e.b] {
-                Direction::Up
-            } else if raw_layer[e.a] == raw_layer[e.b] {
-                Direction::Sideways
-            } else {
-                Direction::Down
-            };
+            let dir = direction(e, &raw_layer);
             let same_row = row_of[&e.a] == row_of[&e.b];
             let side_points = || {
                 if ra.x < rb.x {

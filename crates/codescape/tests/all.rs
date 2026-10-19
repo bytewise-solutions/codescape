@@ -2,6 +2,7 @@ mod camera;
 mod find;
 mod focus;
 mod input;
+mod insights;
 mod inspector;
 mod keys;
 mod links;
