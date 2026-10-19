@@ -128,14 +128,18 @@ fn used_by_leaves_out_tests_while_tests_are_hidden() {
     b.add_node(t, NodeKind::Member, SubKind::Method, "fromMain", Lang::Go);
     let test = b.add_node(t, NodeKind::Member, SubKind::Method, "fromTest", Lang::Go);
     b.add_flags(test, NodeFlags::TEST);
+    let ext = b.add_node(t, NodeKind::Member, SubKind::Method, "libCall", Lang::Go);
+    b.add_flags(ext, NodeFlags::EXTERNAL);
+    let wire = b.add_node(t, NodeKind::Member, SubKind::Method, "wiredCaller", Lang::Go);
+    b.add_flags(wire, NodeFlags::WIRING);
     let dir = tempfile::tempdir().unwrap();
     write_graph(&b.finish(), &dir.path().join("g")).unwrap();
     let file = IndexFile::open(&dir.path().join("g")).unwrap();
     let g = file.graph();
-    let callers = [named(g, "fromMain"), named(g, "fromTest")];
+    let callers = [named(g, "fromMain"), named(g, "fromTest"), named(g, "libCall"), named(g, "wiredCaller")];
 
     let (shown, dropped) = visible_links(g, &callers, &codescape_layout::LayoutOptions::default());
-    assert_eq!((shown, dropped), (vec![named(g, "fromMain")], 1));
+    assert_eq!((shown, dropped), (vec![callers[0], callers[2], callers[3]], 1));
 
     let opts = codescape_layout::LayoutOptions { show_tests: true, ..Default::default() };
     let (shown, dropped) = visible_links(g, &callers, &opts);

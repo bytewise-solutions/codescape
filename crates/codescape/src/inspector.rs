@@ -91,10 +91,10 @@ pub fn visible_links(g: &ArchivedGraph, list: &[NodeId], opts: &LayoutOptions) -
     let mut tests = 0;
     let mut shown = Vec::with_capacity(list.len());
     for &n in list {
-        if !opts.hides(g, n) {
-            shown.push(n);
-        } else if g.flags(n).intersects(NodeFlags::TEST | NodeFlags::MOCK) {
+        if g.flags(n).intersects(NodeFlags::TEST | NodeFlags::MOCK) && opts.hides(g, n) {
             tests += 1;
+        } else {
+            shown.push(n);
         }
     }
     (shown, tests)
