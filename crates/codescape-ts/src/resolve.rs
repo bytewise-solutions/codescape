@@ -1,6 +1,6 @@
-use crate::parse::{CHAIN, Dialect, TsCall, TsFile, TsFunc, TypeExpr, parse_ts};
+use crate::parse::{CHAIN, Dialect, TsCall, TsFile, TsFunc, TsUse, TypeExpr, parse_ts};
 use codescape_build::{Discovery, in_npm_excluded_dir, is_npm_source, is_npm_tooling_file, read_json_loose, rel_path, walk_files_under};
-use codescape_facts::{CallFacts, ExtractStats, FileFacts, FnFacts, Import, ProjectFacts, TypeFacts};
+use codescape_facts::{CallFacts, ExtractStats, FileFacts, FnFacts, Import, ProjectFacts, TypeFacts, TypeUse};
 use codescape_format::*;
 use globset::GlobSet;
 use rayon::prelude::*;
@@ -1061,6 +1061,8 @@ impl<'a> Resolver<'a> {
                     supertypes: info.supers.iter().map(|s| self.type_name(s)).collect(),
                     annotations: t.decorators.clone(),
                 });
+                let from = info.node;
+                self.record_uses(fi, from, &t.type_uses, &[], &mut ff.type_uses);
                 for m in &t.methods {
                     let node = self.types[ti].methods[&m.name];
                     ff.functions.push(FnFacts {
@@ -1072,6 +1074,7 @@ impl<'a> Resolver<'a> {
                         is_main: false,
                         overrides_external: None,
                     });
+                    self.record_uses(fi, node, &m.type_uses, &m.declared, &mut ff.type_uses);
                     let ctx = Ctx { fi, ti: Some(ti), func: Some(m) };
                     for call in &m.calls {
                         let cf = self.resolve_call(ctx, node, scope, call);
@@ -1093,6 +1096,7 @@ impl<'a> Resolver<'a> {
                     is_main: false,
                     overrides_external: None,
                 });
+                self.record_uses(fi, node, &func.type_uses, &func.declared, &mut ff.type_uses);
                 let ctx = Ctx { fi, ti: None, func: Some(func) };
                 for call in &func.calls {
                     let cf = self.resolve_call(ctx, node, scope, call);
@@ -1110,6 +1114,7 @@ impl<'a> Resolver<'a> {
                     is_main: self.entry_files.contains(&fi),
                     overrides_external: None,
                 });
+                self.record_uses(fi, node, &top.type_uses, &top.declared, &mut ff.type_uses);
                 let ctx = Ctx { fi, ti: None, func: Some(top) };
                 for call in &top.calls {
                     let cf = self.resolve_call(ctx, node, scope, call);
@@ -1117,6 +1122,28 @@ impl<'a> Resolver<'a> {
                 }
             }
             facts.files.push(ff);
+        }
+    }
+
+    fn record_uses(&mut self, fi: usize, from: NodeId, uses: &[TsUse], declared: &[String], out: &mut Vec<TypeUse>) {
+        for u in uses {
+            out.push(TypeUse { owner: from, name: u.name.clone(), line: u.line, col: u.col, len: u.len });
+            let head = u.name.split('.').next().unwrap_or("");
+            if declared.iter().any(|d| d == head) {
+                continue;
+            }
+            if let Some(TypeRef::Project(t)) = self.resolve_type(fi, &u.name, false) {
+                self.b.add_ref(from, self.types[t].node, u.line, u.col, u.len);
+            }
+        }
+    }
+
+    fn head_is_clear(&self, ctx: Ctx, path: &str, strict: bool) -> bool {
+        let head = path.split('.').next().unwrap_or("").trim_end_matches("()");
+        let times = ctx.func.map_or(0, |f| f.declared.iter().filter(|d| *d == head).count());
+        match self.local(ctx, head) {
+            Local::Missing => times == 0,
+            _ => !strict && times <= 1,
         }
     }
 
@@ -1132,8 +1159,11 @@ impl<'a> Resolver<'a> {
             ident_args: call.ident_args.clone(),
             assigned_to: call.assigned_to.clone(),
             line: call.line,
+            col: call.col,
+            len: call.len,
             ..Default::default()
         };
+        let ref_from = if call.in_field { ctx.ti.map_or(caller, |t| self.types[t].node) } else { caller };
         cf.arg_targets = call
             .ident_args
             .iter()
@@ -1147,6 +1177,9 @@ impl<'a> Resolver<'a> {
                 Some(Val::Static(t)) => {
                     let to = self.types[t].node;
                     self.edge(caller, to, EdgeKind::Instantiates, scope, call.line);
+                    if self.head_is_clear(ctx, &call.method, true) {
+                        self.b.add_ref(ref_from, to, call.line, call.col, call.len);
+                    }
                     cf.instantiates = Some(self.types[t].fqn.clone());
                 }
                 Some(Val::Inst(TypeRef::External(s))) => cf.instantiates = Some(s),
@@ -1162,6 +1195,9 @@ impl<'a> Resolver<'a> {
             match self.resolve_value(ctx, &call.method) {
                 Some(Val::Func(target)) => {
                     self.edge(caller, target, EdgeKind::Calls, scope, call.line);
+                    if self.head_is_clear(ctx, &call.method, true) {
+                        self.b.add_ref(ref_from, target, call.line, call.col, call.len);
+                    }
                     cf.target = Some(target);
                     self.stats.resolved += 1;
                 }
@@ -1177,12 +1213,18 @@ impl<'a> Resolver<'a> {
             return cf;
         }
         cf.receiver_var = recv.split('.').next().map(String::from);
-        match self.resolve_value(ctx, recv) {
+        let value = self.resolve_value(ctx, recv);
+        let strict = matches!(value, Some(Val::Static(_) | Val::Ns(_)));
+        let clear = self.head_is_clear(ctx, recv, strict);
+        match value {
             Some(Val::Inst(TypeRef::Project(t))) | Some(Val::Static(t)) => {
                 cf.receiver_type = Some(self.types[t].fqn.clone());
                 match self.lookup_method(t, &call.method) {
                     Some((owner, target)) => {
                         self.edge(caller, target, EdgeKind::Calls, scope, call.line);
+                        if clear {
+                            self.b.add_ref(ref_from, target, call.line, call.col, call.len);
+                        }
                         cf.target = Some(target);
                         if let Some(imp) = self.single_impl(owner, &call.method) {
                             self.edge(caller, imp, EdgeKind::Calls, scope, call.line);
@@ -1207,6 +1249,9 @@ impl<'a> Resolver<'a> {
                 Some(Sym::Func(f, n)) => {
                     let target = self.file_funcs[f][&n].node;
                     self.edge(caller, target, EdgeKind::Calls, scope, call.line);
+                    if clear {
+                        self.b.add_ref(ref_from, target, call.line, call.col, call.len);
+                    }
                     cf.target = Some(target);
                     self.stats.resolved += 1;
                 }

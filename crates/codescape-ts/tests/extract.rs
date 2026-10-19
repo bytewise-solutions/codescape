@@ -275,3 +275,113 @@ fn functions_and_methods_carry_their_cyclomatic_complexity() {
     assert_eq!(b.complexity(at(&b, &["cx", "src", "easy"])), 1);
     assert_eq!(b.complexity(at(&b, &["cx", "src", "C", "hard"])), 10, "if && for if || case case ?: ??");
 }
+
+fn refs_from(b: &GraphBuilder, from: NodeId) -> Vec<(NodeId, u32, u32, u32)> {
+    b.refs().iter().filter(|r| r.from == from).map(|r| (r.to, r.line, r.col as u32, r.len as u32)).collect()
+}
+
+fn project(files: &[(&str, &str)]) -> (GraphBuilder, ProjectFacts) {
+    let tmp = tempfile::tempdir().unwrap();
+    let r = tmp.path();
+    std::fs::write(r.join("package.json"), "{\"name\": \"u\"}").unwrap();
+    std::fs::write(r.join("tsconfig.json"), "{}").unwrap();
+    std::fs::create_dir_all(r.join("src")).unwrap();
+    for (name, src) in files {
+        std::fs::write(r.join("src").join(name), src).unwrap();
+    }
+    let d = discover(r, &default_excludes()).unwrap();
+    let mut b = GraphBuilder::new("u");
+    let module_nodes: Vec<NodeId> = d.modules.iter().map(|m| b.add_node(b.root(), NodeKind::Module, SubKind::None, &m.name, m.lang)).collect();
+    let mut facts = ProjectFacts::default();
+    extract_ts(&d, &module_nodes, &default_excludes(), &mut b, &mut facts);
+    (b, facts)
+}
+
+#[test]
+fn call_and_type_use_positions_are_recorded() {
+    let r = run();
+    let user = at(&r.b, &users("User"));
+    let rename = at(&r.b, &[USERS[0], USERS[1], "User", "rename"]);
+    let find = at(&r.b, &[USERS[0], USERS[1], "UserService", "find"]);
+    let refs = refs_from(&r.b, find);
+    assert!(refs.contains(&(user, 20, 20, 4)), "return type: {refs:?}");
+    assert!(refs.contains(&(user, 21, 18, 4)), "new User(): {refs:?}");
+    assert!(refs.contains(&(rename, 22, 6, 6)), "u.rename(): {refs:?}");
+    let service = at(&r.b, &users("UserService"));
+    let load = at(&r.b, &[USERS[0], USERS[1], "UserService", "load"]);
+    assert!(refs_from(&r.b, load).contains(&(user, 12, 18, 4)), "generic argument of the return type");
+    let store = at(&r.b, &["@demo/shared", "src", "Store"]);
+    let store_get = at(&r.b, &["@demo/shared", "src", "Store", "get"]);
+    let log = at(&r.b, &["@demo/shared", "src", "log"]);
+    assert!(refs_from(&r.b, load).contains(&(store_get, 15, 15, 3)));
+    assert!(refs_from(&r.b, load).contains(&(log, 13, 4, 3)));
+    let service_refs = refs_from(&r.b, service);
+    assert!(service_refs.contains(&(store, 10, 18, 5)), "field type is referenced from the owning type: {service_refs:?}");
+    let base = at(&r.b, &users("BaseService"));
+    assert!(service_refs.contains(&(base, 8, 33, 11)), "extends: {service_refs:?}");
+    let ctor = at(&r.b, &["web", "src/app", "AppComponent", "constructor"]);
+    assert!(refs_from(&r.b, ctor).contains(&(service, 7, 29, 11)), "constructor parameter type");
+    let on_init = at(&r.b, &["web", "src/app", "AppComponent", "ngOnInit"]);
+    let users_load = at(&r.b, &[USERS[0], USERS[1], "UserService", "load"]);
+    assert!(refs_from(&r.b, on_init).contains(&(users_load, 10, 15, 4)));
+    let refresh = at(&r.b, &[USERS[0], USERS[1], "UserListComponent", "refresh"]);
+    let format = at(&r.b, &["web", "src/app/util", "Helpers", "format"]);
+    let format2 = at(&r.b, &["web", "src/app/util", "format2"]);
+    assert!(refs_from(&r.b, refresh).contains(&(format, 16, 12, 6)), "static call");
+    assert!(refs_from(&r.b, refresh).contains(&(format2, 17, 6, 7)), "namespace import call");
+    let f = file(&r, "user.service.ts");
+    assert!(f.type_uses.iter().any(|u| u.name == "User" && u.line == 20 && u.col == 20 && u.len == 4));
+    assert!(f.calls.iter().any(|c| c.method == "rename" && c.line == 22 && c.col == 6 && c.len == 6));
+}
+
+#[test]
+fn aliased_default_and_namespace_imports_resolve_in_js_and_ts() {
+    let (b, _) = project(&[
+        ("a.ts", "export class A { go() {} }\nexport default class D { run() {} }\n"),
+        (
+            "use.js",
+            "import Dflt from './a';\nimport { A as Z } from './a';\nimport * as ns from './a';\nexport function f() {\n  new Dflt().run();\n  const z = new Z();\n  z.go();\n  new ns.A();\n}\n",
+        ),
+    ]);
+    let f = at(&b, &["u", "src", "f"]);
+    let (a, d) = (at(&b, &["u", "src", "A"]), at(&b, &["u", "src", "D"]));
+    let go = at(&b, &["u", "src", "A", "go"]);
+    let refs = refs_from(&b, f);
+    for want in [(d, 5, 6, 4), (a, 6, 16, 1), (go, 7, 4, 2), (a, 8, 9, 1)] {
+        assert!(refs.contains(&want), "{want:?} in {refs:?}");
+    }
+}
+
+#[test]
+fn field_initializers_and_property_types_are_referenced_from_the_owning_type() {
+    let (b, _) = project(&[
+        ("a.ts", "export class A {}\nexport interface I {}\n"),
+        ("c.ts", "import { A, I } from './a';\nexport class C implements I {\n  x: A[] = [];\n  y = new A();\n  readonly z: Map<string, A> = new Map();\n}\n"),
+    ]);
+    let c = at(&b, &["u", "src", "C"]);
+    let (a, i) = (at(&b, &["u", "src", "A"]), at(&b, &["u", "src", "I"]));
+    let refs = refs_from(&b, c);
+    for want in [(i, 2, 26, 1), (a, 3, 5, 1), (a, 4, 10, 1), (a, 5, 26, 1)] {
+        assert!(refs.contains(&want), "{want:?} in {refs:?}");
+    }
+}
+
+#[test]
+fn shadowed_guessed_and_type_parameter_names_get_no_ref() {
+    let (b, _) = project(&[
+        ("a.ts", "export class A { go() {} }\nexport class B { go() {} }\n"),
+        (
+            "c.ts",
+            "import { A } from './a';\nexport function g<A>(x: A) {}\nexport function h(A: number) { return new A(); }\nexport function k() {\n  const A = make();\n  new A();\n  A.go();\n}\nexport function m(x) {\n  x.go();\n  unknown.go();\n}\nexport function n() {\n  type A = number;\n  let y: A;\n}\nexport class W<A> {\n  f: A;\n}\n",
+        ),
+        ("d.ts", "import { A } from './a';\nexport function ok(x: A) { new A(); }\n"),
+    ]);
+    let a = at(&b, &["u", "src", "A"]);
+    for f in ["g", "h", "k", "m", "n"] {
+        let refs = refs_from(&b, at(&b, &["u", "src", f]));
+        assert!(refs.is_empty(), "{f}: {refs:?}");
+    }
+    assert!(refs_from(&b, at(&b, &["u", "src", "W"])).iter().all(|r| r.0 != a), "class type parameter");
+    let ok = refs_from(&b, at(&b, &["u", "src", "ok"]));
+    assert!(ok.contains(&(a, 2, 22, 1)) && ok.contains(&(a, 2, 31, 1)), "control: {ok:?}");
+}

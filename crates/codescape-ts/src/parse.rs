@@ -63,6 +63,14 @@ pub struct ReExport {
     pub names: Option<Vec<(String, String)>>,
 }
 
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct TsUse {
+    pub name: String,
+    pub line: u32,
+    pub col: u32,
+    pub len: u32,
+}
+
 #[derive(Clone, Debug, PartialEq)]
 pub struct TsType {
     pub name: String,
@@ -74,6 +82,7 @@ pub struct TsType {
     pub fields: Vec<(String, TypeExpr)>,
     pub field_decls: Vec<FieldDecl>,
     pub methods: Vec<TsFunc>,
+    pub type_uses: Vec<TsUse>,
     pub start_line: u32,
     pub end_line: u32,
 }
@@ -90,6 +99,8 @@ pub struct TsFunc {
     pub decorators: Vec<Annotation>,
     pub locals: Vec<(String, TypeExpr)>,
     pub calls: Vec<TsCall>,
+    pub type_uses: Vec<TsUse>,
+    pub declared: Vec<String>,
     pub start_line: u32,
     pub end_line: u32,
 }
@@ -107,6 +118,8 @@ impl Default for TsFunc {
             decorators: Vec::new(),
             locals: Vec::new(),
             calls: Vec::new(),
+            type_uses: Vec::new(),
+            declared: Vec::new(),
             start_line: 0,
             end_line: 0,
         }
@@ -122,6 +135,9 @@ pub struct TsCall {
     pub is_new: bool,
     pub assigned_to: Option<String>,
     pub line: u32,
+    pub col: u32,
+    pub len: u32,
+    pub in_field: bool,
 }
 
 pub const CHAIN: &str = "<chain>";
@@ -151,6 +167,14 @@ pub fn parse_ts(src: &[u8], dialect: Dialect) -> TsFile {
 
 fn line(n: Node) -> u32 {
     n.start_position().row as u32 + 1
+}
+
+fn col(n: Node) -> u32 {
+    n.start_position().column as u32
+}
+
+fn len(n: Node) -> u32 {
+    (n.end_byte() - n.start_byte()) as u32
 }
 
 fn end_line(n: Node) -> u32 {
@@ -319,6 +343,160 @@ impl<'s> Ctx<'s> {
         }
     }
 
+    fn top(&self, n: Node, out: &mut TsFile) {
+        self.collect(n, &mut out.top);
+        self.scan(n, &mut out.top);
+    }
+
+    fn scan(&self, n: Node, f: &mut TsFunc) {
+        self.uses(n, &mut f.type_uses);
+        self.declared_names(n, &mut f.declared);
+    }
+
+    fn uses(&self, root: Node, out: &mut Vec<TsUse>) {
+        let mut skip = Vec::new();
+        let mut stack = vec![root];
+        while let Some(n) = stack.pop() {
+            match n.kind() {
+                "type_parameter" => skip.extend(n.child_by_field_name("name").map(|x| self.text(x).to_string())),
+                "class_declaration" | "abstract_class_declaration" | "interface_declaration" | "type_alias_declaration" | "enum_declaration" if n != root => {
+                    skip.extend(n.child_by_field_name("name").map(|x| self.text(x).to_string()))
+                }
+                _ => {}
+            }
+            stack.extend(named_kids(n));
+        }
+        let mut stack = vec![root];
+        while let Some(n) = stack.pop() {
+            match n.kind() {
+                "type_identifier" => {
+                    let declares = n.parent().is_some_and(|p| {
+                        matches!(
+                            p.kind(),
+                            "type_parameter"
+                                | "class_declaration"
+                                | "abstract_class_declaration"
+                                | "class"
+                                | "interface_declaration"
+                                | "type_alias_declaration"
+                        ) && p.child_by_field_name("name") == Some(n)
+                    });
+                    let name = self.text(n);
+                    if !declares && !skip.iter().any(|s| s == name) {
+                        out.push(TsUse { name: name.to_string(), line: line(n), col: col(n), len: len(n) });
+                    }
+                }
+                "nested_type_identifier" => {
+                    if let (Some(module), Some(name)) = (n.child_by_field_name("module"), n.child_by_field_name("name"))
+                        && module.kind() == "identifier"
+                    {
+                        out.push(TsUse { name: format!("{}.{}", self.text(module), self.text(name)), line: line(name), col: col(name), len: len(name) });
+                    }
+                }
+                "class_declaration" | "class" | "abstract_class_declaration" if n != root => {}
+                _ => stack.extend(named_kids(n)),
+            }
+        }
+    }
+
+    fn expr_use(&self, n: Node, out: &mut Vec<TsUse>) {
+        match n.kind() {
+            "identifier" => out.push(TsUse { name: self.text(n).to_string(), line: line(n), col: col(n), len: len(n) }),
+            "member_expression" => {
+                if let (Some(obj), Some(prop)) = (n.child_by_field_name("object"), n.child_by_field_name("property"))
+                    && obj.kind() == "identifier"
+                    && prop.kind() == "property_identifier"
+                {
+                    out.push(TsUse { name: format!("{}.{}", self.text(obj), self.text(prop)), line: line(prop), col: col(prop), len: len(prop) });
+                }
+            }
+            _ => {}
+        }
+    }
+
+    fn type_param_names(&self, n: Node) -> Vec<String> {
+        let Some(list) = n.child_by_field_name("type_parameters") else { return Vec::new() };
+        named_kids(list).into_iter().filter_map(|p| p.child_by_field_name("name")).map(|x| self.text(x).to_string()).collect()
+    }
+
+    fn drop_type_params(&self, n: Node, t: &mut TsType) {
+        let skip = self.type_param_names(n);
+        if skip.is_empty() {
+            return;
+        }
+        t.type_uses.retain(|u| !skip.contains(&u.name));
+        for m in &mut t.methods {
+            m.type_uses.retain(|u| !skip.contains(&u.name));
+        }
+    }
+
+    fn pattern_names(&self, n: Node, out: &mut Vec<String>) {
+        match n.kind() {
+            "identifier" | "shorthand_property_identifier_pattern" => out.push(self.text(n).to_string()),
+            "object_pattern" | "array_pattern" | "rest_pattern" => {
+                for k in named_kids(n) {
+                    self.pattern_names(k, out);
+                }
+            }
+            "pair_pattern" => {
+                if let Some(v) = n.child_by_field_name("value") {
+                    self.pattern_names(v, out);
+                }
+            }
+            "assignment_pattern" | "object_assignment_pattern" => {
+                if let Some(l) = n.child_by_field_name("left") {
+                    self.pattern_names(l, out);
+                }
+            }
+            _ => {}
+        }
+    }
+
+    fn declared_names(&self, root: Node, out: &mut Vec<String>) {
+        let mut stack = vec![root];
+        while let Some(n) = stack.pop() {
+            match n.kind() {
+                "required_parameter" | "optional_parameter" => {
+                    if let Some(p) = n.child_by_field_name("pattern") {
+                        self.pattern_names(p, out);
+                    }
+                }
+                "formal_parameters" => {
+                    for k in named_kids(n).into_iter().filter(|k| !matches!(k.kind(), "required_parameter" | "optional_parameter" | "comment")) {
+                        self.pattern_names(k, out);
+                    }
+                }
+                "variable_declarator" => {
+                    if let Some(p) = n.child_by_field_name("name") {
+                        self.pattern_names(p, out);
+                    }
+                }
+                "arrow_function" => {
+                    if let Some(p) = n.child_by_field_name("parameter") {
+                        self.pattern_names(p, out);
+                    }
+                }
+                "catch_clause" => {
+                    if let Some(p) = n.child_by_field_name("parameter") {
+                        self.pattern_names(p, out);
+                    }
+                }
+                "for_in_statement" => {
+                    if let Some(l) = n.child_by_field_name("left") {
+                        self.pattern_names(l, out);
+                    }
+                }
+                "function_declaration" | "generator_function_declaration" | "function_expression" | "class_declaration" | "abstract_class_declaration"
+                    if n != root =>
+                {
+                    out.extend(n.child_by_field_name("name").map(|x| self.text(x).to_string()))
+                }
+                _ => {}
+            }
+            stack.extend(named_kids(n));
+        }
+    }
+
     fn function(&self, name: &str, sub: SubKind, n: Node, fields: Option<&mut Vec<(String, TypeExpr)>>) -> TsFunc {
         let mut f = TsFunc {
             name: name.to_string(),
@@ -341,6 +519,7 @@ impl<'s> Ctx<'s> {
             self.collect(body, &mut f);
         }
         f.calls.sort_by_key(|c| c.line);
+        self.scan(n, &mut f);
         f
     }
 
@@ -392,7 +571,10 @@ impl<'s> Ctx<'s> {
                 "class_declaration" | "class" | "abstract_class_declaration" => continue,
                 "call_expression" => self.call(n, f),
                 "new_expression" => {
-                    if let Some(name) = n.child_by_field_name("constructor").and_then(|c| self.path(c)) {
+                    if let Some(ctor) = n.child_by_field_name("constructor")
+                        && let Some(name) = self.path(ctor)
+                    {
+                        let token = if ctor.kind() == "member_expression" { ctor.child_by_field_name("property").unwrap_or(ctor) } else { ctor };
                         let (string_args, ident_args) = self.args(n.child_by_field_name("arguments"));
                         f.calls.push(TsCall {
                             method: name,
@@ -400,7 +582,9 @@ impl<'s> Ctx<'s> {
                             string_args,
                             ident_args,
                             assigned_to: self.assigned_to(n),
-                            line: line(n),
+                            line: line(token),
+                            col: col(token),
+                            len: len(token),
                             ..Default::default()
                         });
                     }
@@ -454,12 +638,12 @@ impl<'s> Ctx<'s> {
 
     fn call(&self, n: Node, f: &mut TsFunc) {
         let Some(func) = n.child_by_field_name("function") else { return };
-        let (receiver, method) = match func.kind() {
-            "identifier" => (None, self.text(func).to_string()),
+        let (receiver, method, token) = match func.kind() {
+            "identifier" => (None, self.text(func).to_string(), func),
             "member_expression" => {
                 let Some(prop) = func.child_by_field_name("property") else { return };
                 let recv = func.child_by_field_name("object").and_then(|o| self.chain_path(o)).unwrap_or_else(|| CHAIN.to_string());
-                (Some(recv), self.text(prop).to_string())
+                (Some(recv), self.text(prop).to_string(), prop)
             }
             _ => return,
         };
@@ -467,7 +651,18 @@ impl<'s> Ctx<'s> {
             return;
         }
         let (string_args, ident_args) = self.args(n.child_by_field_name("arguments"));
-        f.calls.push(TsCall { receiver, method, string_args, ident_args, is_new: false, assigned_to: self.assigned_to(n), line: line(n) });
+        f.calls.push(TsCall {
+            receiver,
+            method,
+            string_args,
+            ident_args,
+            is_new: false,
+            assigned_to: self.assigned_to(n),
+            line: line(token),
+            col: col(token),
+            len: len(token),
+            in_field: false,
+        });
     }
 
     fn import_of(&self, n: Node) -> Option<String> {
@@ -515,9 +710,13 @@ impl<'s> Ctx<'s> {
                     fields: Vec::new(),
                     field_decls: Vec::new(),
                     methods: Vec::new(),
+                    type_uses: Vec::new(),
                     start_line: line(n),
                     end_line: end_line(n),
                 });
+                if let Some(t) = out.types.last_mut() {
+                    self.uses(n, &mut t.type_uses);
+                }
             }
             "function_declaration" | "generator_function_declaration" => {
                 let name = n.child_by_field_name("name").map(|x| self.text(x).to_string()).unwrap_or_default();
@@ -534,12 +733,12 @@ impl<'s> Ctx<'s> {
                     return;
                 }
                 self.dynamic_imports(n, out);
-                self.collect(n, &mut out.top);
+                self.top(n, out);
             }
             "ambient_declaration" | "internal_module" | "module" | "comment" | "empty_statement" => {}
             _ => {
                 self.dynamic_imports(n, out);
-                self.collect(n, &mut out.top);
+                self.top(n, out);
             }
         }
     }
@@ -580,7 +779,7 @@ impl<'s> Ctx<'s> {
         }
         let Some(name) = name.filter(|x| x.kind() == "identifier") else {
             if let Some(v) = value {
-                self.collect(v, &mut out.top);
+                self.top(v, out);
             }
             return;
         };
@@ -598,9 +797,10 @@ impl<'s> Ctx<'s> {
                 if let Some(ty) = ty {
                     out.vars.push((name, ty));
                 }
+                self.uses(d, &mut out.top.type_uses);
                 if let Some(v) = value {
                     self.dynamic_imports(v, out);
-                    self.collect(v, &mut out.top);
+                    self.top(v, out);
                 }
             }
         }
@@ -667,7 +867,7 @@ impl<'s> Ctx<'s> {
                 }
                 _ => {
                     self.dynamic_imports(v, out);
-                    self.collect(v, &mut out.top);
+                    self.top(v, out);
                 }
             }
             return;
@@ -700,12 +900,20 @@ impl<'s> Ctx<'s> {
             for clause in named_kids(h) {
                 match clause.kind() {
                     "extends_clause" => {
-                        if let Some(v) = clause.child_by_field_name("value").and_then(|v| self.path(v)) {
-                            t.extends.push(v);
+                        if let Some(value) = clause.child_by_field_name("value") {
+                            t.extends.extend(self.path(value));
+                            self.expr_use(value, &mut t.type_uses);
                         }
+                        self.uses(clause, &mut t.type_uses);
                     }
-                    "implements_clause" => t.implements.extend(named_kids(clause).iter().map(|k| self.type_name(*k))),
-                    _ => t.extends.extend(self.path(clause)),
+                    "implements_clause" => {
+                        t.implements.extend(named_kids(clause).iter().map(|k| self.type_name(*k)));
+                        self.uses(clause, &mut t.type_uses);
+                    }
+                    _ => {
+                        t.extends.extend(self.path(clause));
+                        self.expr_use(clause, &mut t.type_uses);
+                    }
                 }
             }
         }
@@ -723,6 +931,7 @@ impl<'s> Ctx<'s> {
             fields: Vec::new(),
             field_decls: Vec::new(),
             methods: Vec::new(),
+            type_uses: Vec::new(),
             start_line: line(n),
             end_line: end_line(n),
         };
@@ -736,7 +945,10 @@ impl<'s> Ctx<'s> {
             t.start_line = t.start_line.min(line(*first));
         }
         self.heritage(n, &mut t);
-        let Some(body) = n.child_by_field_name("body") else { return Some(t) };
+        let Some(body) = n.child_by_field_name("body") else {
+            self.drop_type_params(n, &mut t);
+            return Some(t);
+        };
         let mut pending: Vec<Annotation> = Vec::new();
         for m in named_kids(body) {
             match m.kind() {
@@ -753,10 +965,15 @@ impl<'s> Ctx<'s> {
                             f.locals.append(&mut prev.locals);
                             f.calls.sort_by_key(|c| c.line);
                             f.decorators.append(&mut prev.decorators);
+                            f.type_uses.append(&mut prev.type_uses);
+                            f.declared.append(&mut prev.declared);
                             *prev = f;
                         } else if prev.end_line - prev.start_line < f.end_line - f.start_line {
                             f.decorators.append(&mut prev.decorators);
+                            f.type_uses.append(&mut prev.type_uses);
                             *prev = f;
+                        } else {
+                            prev.type_uses.append(&mut f.type_uses);
                         }
                     } else {
                         t.methods.push(f);
@@ -775,6 +992,9 @@ impl<'s> Ctx<'s> {
                             f.start_line = line(m);
                             f.decorators = decorators;
                             t.methods.push(f);
+                            if let Some(ty) = m.child_by_field_name("type") {
+                                self.uses(ty, &mut t.type_uses);
+                            }
                         }
                         _ => {
                             let declared = m.child_by_field_name("type").map(|x| annotation_text(self, x)).unwrap_or_default();
@@ -783,6 +1003,7 @@ impl<'s> Ctx<'s> {
                             if let Some(ty) = ty {
                                 t.fields.push((name, ty));
                             }
+                            self.uses(m, &mut t.type_uses);
                             if let Some(v) = value {
                                 let ctor = match t.methods.iter_mut().find(|f| f.sub == SubKind::Constructor) {
                                     Some(c) => c,
@@ -797,7 +1018,10 @@ impl<'s> Ctx<'s> {
                                         t.methods.last_mut().unwrap()
                                     }
                                 };
+                                let before = ctor.calls.len();
                                 self.collect(v, ctor);
+                                ctor.calls[before..].iter_mut().for_each(|c| c.in_field = true);
+                                self.declared_names(v, &mut ctor.declared);
                             }
                         }
                     }
@@ -805,6 +1029,7 @@ impl<'s> Ctx<'s> {
                 _ => pending.clear(),
             }
         }
+        self.drop_type_params(n, &mut t);
         let from_params: Vec<FieldDecl> = t.methods.iter().filter(|f| f.sub == SubKind::Constructor).flat_map(|f| f.param_fields.clone()).collect();
         t.field_decls.extend(from_params);
         Some(t)
@@ -821,12 +1046,14 @@ impl<'s> Ctx<'s> {
             fields: Vec::new(),
             field_decls: Vec::new(),
             methods: Vec::new(),
+            type_uses: Vec::new(),
             start_line: line(n),
             end_line: end_line(n),
         };
         for k in named_kids(n) {
             if k.kind() == "extends_type_clause" {
                 t.extends.extend(named_kids(k).iter().map(|x| self.type_name(*x)));
+                self.uses(k, &mut t.type_uses);
             }
         }
         if let Some(body) = n.child_by_field_name("body") {
@@ -841,6 +1068,7 @@ impl<'s> Ctx<'s> {
                     "property_signature" => {
                         let declared = m.child_by_field_name("type").map(|x| annotation_text(self, x)).unwrap_or_default();
                         t.field_decls.push(FieldDecl { name: name.clone(), ty: declared, visibility: Visibility::Public, line: line(m) });
+                        self.uses(m, &mut t.type_uses);
                         if let Some(ty) = m.child_by_field_name("type") {
                             t.fields.push((name, TypeExpr::Named(self.type_name(ty))));
                         }
@@ -849,6 +1077,7 @@ impl<'s> Ctx<'s> {
                 }
             }
         }
+        self.drop_type_params(n, &mut t);
         t
     }
 }
