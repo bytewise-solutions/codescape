@@ -111,10 +111,12 @@ pub enum Threshold {
     ComplexityHigh,
     ManyCallers,
     KeepVersionsDays,
+    DuplicateTokens,
 }
 
 impl Threshold {
-    pub const ALL: [Threshold; 4] = [Threshold::ComplexityHint, Threshold::ComplexityHigh, Threshold::ManyCallers, Threshold::KeepVersionsDays];
+    pub const ALL: [Threshold; 5] =
+        [Threshold::ComplexityHint, Threshold::ComplexityHigh, Threshold::ManyCallers, Threshold::KeepVersionsDays, Threshold::DuplicateTokens];
 
     pub fn default_value(self) -> u32 {
         match self {
@@ -122,6 +124,7 @@ impl Threshold {
             Threshold::ComplexityHigh => 20,
             Threshold::ManyCallers => 5,
             Threshold::KeepVersionsDays => 14,
+            Threshold::DuplicateTokens => 50,
         }
     }
 
@@ -131,6 +134,7 @@ impl Threshold {
             Threshold::ComplexityHigh => "High complexity from",
             Threshold::ManyCallers => "Many callers from",
             Threshold::KeepVersionsDays => "Keep compared versions (days)",
+            Threshold::DuplicateTokens => "Duplicates from (tokens)",
         }
     }
 }
@@ -260,6 +264,8 @@ struct ViewFile {
     many_callers: Option<u32>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     keep_versions_days: Option<u32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    duplicate_tokens: Option<u32>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     hidden: Vec<String>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
@@ -352,6 +358,7 @@ impl ViewFile {
             Threshold::ComplexityHigh => &mut self.complexity_high,
             Threshold::ManyCallers => &mut self.many_callers,
             Threshold::KeepVersionsDays => &mut self.keep_versions_days,
+            Threshold::DuplicateTokens => &mut self.duplicate_tokens,
         }
     }
 
@@ -680,6 +687,7 @@ impl Settings {
             test_paths: self.test_paths.iter().map(|t| t.value.clone()).collect(),
             filters: self.filters.iter().map(|f| f.value.clone()).collect(),
             index: self.index.as_ref().map(|i| i.value.clone()),
+            duplicate_tokens: self.threshold(Threshold::DuplicateTokens).value,
         }
     }
 }

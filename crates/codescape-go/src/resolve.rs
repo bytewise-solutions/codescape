@@ -601,6 +601,8 @@ impl<'a> Resolver<'a> {
                     annotations: Vec::new(),
                     is_main: func.name == "main" && func.receiver.is_none() && f.gf.package == "main",
                     overrides_external: None,
+                    tokens: func.tokens.ids.clone(),
+                    token_lines: func.tokens.lines.clone(),
                 });
                 self.record_uses(fi, node, &func.type_uses, &mut ff.type_uses);
                 let scope = if f.is_test { Scope::Test } else { Scope::Main };

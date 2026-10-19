@@ -1,5 +1,6 @@
 pub mod analysis;
 mod cache;
+pub mod clones;
 mod config;
 mod pipeline;
 pub mod review;

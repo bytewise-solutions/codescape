@@ -31,6 +31,8 @@ pub struct FnFacts {
     pub annotations: Vec<Annotation>,
     pub is_main: bool,
     pub overrides_external: Option<String>,
+    pub tokens: Vec<u32>,
+    pub token_lines: Vec<u32>,
 }
 
 #[derive(Clone, Debug, Default, PartialEq)]
@@ -196,4 +198,57 @@ pub fn complexity_detail(node: tree_sitter::Node, src: &[u8], d: &Decisions) -> 
 
 pub fn cyclomatic(node: tree_sitter::Node, src: &[u8], d: &Decisions) -> u16 {
     complexity_detail(node, src, d).total
+}
+
+const IDENTIFIER_TOKEN: u32 = 0;
+
+fn token_id(tag: u8, text: &str) -> u32 {
+    let mut h: u32 = 0x811c_9dc5 ^ u32::from(tag);
+    for b in text.bytes() {
+        h = (h ^ u32::from(b)).wrapping_mul(0x0100_0193);
+    }
+    h.max(1)
+}
+
+fn is_literal_block(kind: &str) -> bool {
+    kind == "string" || kind == "template_string" || kind.ends_with("string_literal") || kind.ends_with("char_literal") || kind.ends_with("character_literal")
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct Tokens {
+    pub ids: Vec<u32>,
+    pub lines: Vec<u32>,
+}
+
+pub fn body_tokens(node: tree_sitter::Node) -> Tokens {
+    let body = node.child_by_field_name("body").unwrap_or(node);
+    let (mut ids, mut lines) = (Vec::new(), Vec::new());
+    let mut c = body.walk();
+    'walk: loop {
+        let n = c.node();
+        let kind = n.kind();
+        let id = if kind.contains("comment") {
+            None
+        } else if !n.is_named() && n.child_count() == 0 {
+            Some(token_id(b'k', kind))
+        } else if kind.ends_with("identifier") {
+            Some(IDENTIFIER_TOKEN)
+        } else if n.child_count() == 0 || is_literal_block(kind) {
+            Some(token_id(b'l', kind))
+        } else if c.goto_first_child() {
+            continue;
+        } else {
+            None
+        };
+        if let Some(id) = id {
+            ids.push(id);
+            lines.push(n.start_position().row as u32 + 1);
+        }
+        while !c.goto_next_sibling() {
+            if !c.goto_parent() {
+                break 'walk;
+            }
+        }
+    }
+    Tokens { ids, lines }
 }

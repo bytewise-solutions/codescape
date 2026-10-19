@@ -184,12 +184,12 @@ fn open_rejects_wrong_version_and_truncation() {
     write_graph(&b.finish(), &path).unwrap();
     let mut bytes = std::fs::read(&path).unwrap();
 
-    assert_eq!(FORMAT_VERSION, 19);
+    assert_eq!(FORMAT_VERSION, 20);
     let mut previous = bytes.clone();
-    previous[8..12].copy_from_slice(&18u32.to_le_bytes());
+    previous[8..12].copy_from_slice(&19u32.to_le_bytes());
     let p2 = dir.path().join("v.codescape");
     std::fs::write(&p2, &previous).unwrap();
-    assert!(matches!(IndexFile::open(&p2), Err(FormatError::Version { found: 18, expected: 19 })));
+    assert!(matches!(IndexFile::open(&p2), Err(FormatError::Version { found: 19, expected: 20 })));
 
     bytes.truncate(bytes.len() / 2);
     let p3 = dir.path().join("t.codescape");
@@ -544,4 +544,24 @@ fn complexity_detail_round_trips() {
     assert_eq!(g.complexity(hard), Some(5));
     assert_eq!(g.complexity_detail(find(g, t, "easy")), Some((1, vec![], 0)));
     assert_eq!(g.complexity_detail(t), None);
+}
+
+#[test]
+fn clone_groups_round_trip_and_name_the_other_copies() {
+    let mut b = GraphBuilder::new("proj");
+    let t = b.add_node(b.root(), NodeKind::Type, SubKind::Class, "T", Lang::Java);
+    let x = b.add_node(t, NodeKind::Member, SubKind::Method, "x", Lang::Java);
+    let y = b.add_node(t, NodeKind::Member, SubKind::Method, "y", Lang::Java);
+    let z = b.add_node(t, NodeKind::Member, SubKind::Method, "z", Lang::Java);
+    b.add_clone_group(80, &[(x, 3, 20), (y, 30, 47)]);
+    b.add_clone_group(55, &[(x, 5, 12), (z, 60, 66)]);
+    let (_d, file) = roundtrip(b);
+    let g = file.graph();
+    let t = find(g, g.root(), "T");
+    let (x, y, z) = (find(g, t, "x"), find(g, t, "y"), find(g, t, "z"));
+    let groups: Vec<_> = g.clone_groups().collect();
+    assert_eq!(groups, vec![(80, vec![(x, 3, 20), (y, 30, 47)]), (55, vec![(x, 5, 12), (z, 60, 66)])]);
+    assert_eq!(g.clones_of(x), vec![(0, vec![(y, 30, 47)]), (1, vec![(z, 60, 66)])]);
+    assert_eq!(g.clones_of(z), vec![(1, vec![(x, 5, 12)])]);
+    assert!(g.clones_of(t).is_empty());
 }

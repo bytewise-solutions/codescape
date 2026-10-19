@@ -68,6 +68,8 @@ impl Fx {
             annotations: Vec::new(),
             is_main,
             overrides_external: overrides.map(String::from),
+            tokens: Vec::new(),
+            token_lines: Vec::new(),
         });
         node
     }
@@ -679,6 +681,8 @@ fn member(fx: &mut Fx, file: usize, owner: NodeId, name: &str, sub: SubKind) -> 
         annotations: Vec::new(),
         is_main: false,
         overrides_external: None,
+        tokens: Vec::new(),
+        token_lines: Vec::new(),
     });
     n
 }

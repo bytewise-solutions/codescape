@@ -1469,6 +1469,8 @@ impl<'a> Resolver<'a> {
                     annotations: func.attrs.clone(),
                     is_main,
                     overrides_external: occ.overrides_external.clone(),
+                    tokens: func.tokens.ids.clone(),
+                    token_lines: func.tokens.lines.clone(),
                 });
                 self.record_uses(occ.pkg, &func.local_items, Some(node), &func.type_uses, &mut ff.type_uses);
                 let test = is_test || self.b.flags(node).contains(NodeFlags::TEST);

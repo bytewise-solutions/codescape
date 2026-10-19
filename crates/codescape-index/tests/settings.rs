@@ -296,3 +296,18 @@ fn types_can_be_hidden_by_what_they_extend() {
     assert_eq!(list(store.settings()), [("(^|\\.)Discount$".to_string(), Layer::Personal)]);
     assert!(!store.index_dirty());
 }
+
+#[test]
+fn duplicate_tokens_default_to_fifty_and_reach_the_index_config() {
+    let e = env();
+    let store = SettingsStore::load(e.paths.clone()).unwrap();
+    assert_eq!(store.settings().threshold(Threshold::DuplicateTokens), Sourced { value: 50, layer: Layer::Default });
+    assert_eq!(store.config().duplicate_tokens, 50);
+    assert_eq!(ProjectConfig::default().duplicate_tokens, 50);
+    let before = store.config().fingerprint();
+    write(&e.paths.shared, "[view]\nduplicate_tokens = 30\n");
+    let store = SettingsStore::load(e.paths.clone()).unwrap();
+    assert_eq!(store.settings().threshold(Threshold::DuplicateTokens), Sourced { value: 30, layer: Layer::Shared });
+    assert_eq!(store.config().duplicate_tokens, 30);
+    assert_ne!(store.config().fingerprint(), before, "a new threshold reindexes");
+}

@@ -1,4 +1,4 @@
-use crate::settings::{Layer, Settings, SettingsFile};
+use crate::settings::{Layer, Settings, SettingsFile, Threshold};
 use anyhow::{Result, anyhow};
 use codescape_format::Category;
 use codescape_rules::{Pack, PackSelection, Rule};
@@ -43,6 +43,7 @@ pub struct ProjectConfig {
     pub test_paths: Vec<String>,
     pub filters: Vec<Filter>,
     pub index: Option<PathBuf>,
+    pub duplicate_tokens: u32,
 }
 
 impl Default for ProjectConfig {
@@ -56,6 +57,7 @@ impl Default for ProjectConfig {
             test_paths: Vec::new(),
             filters: Vec::new(),
             index: None,
+            duplicate_tokens: Threshold::DuplicateTokens.default_value(),
         }
     }
 }
@@ -75,7 +77,7 @@ impl ProjectConfig {
     }
 
     pub fn fingerprint(&self) -> String {
-        blake3::hash(format!("{:?}{:?}", self.name, self.exclude).as_bytes()).to_hex()[..16].to_string()
+        blake3::hash(format!("{:?}{:?}{}", self.name, self.exclude, self.duplicate_tokens).as_bytes()).to_hex()[..16].to_string()
     }
 
     pub fn config_pack(&self) -> Option<Pack> {

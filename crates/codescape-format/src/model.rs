@@ -272,6 +272,27 @@ pub struct Graph {
     pub complexity: Vec<Metric>,
     pub breakdowns: Vec<Breakdown>,
     pub refs: Vec<Ref>,
+    pub clones: Vec<CloneRec>,
+    pub clone_members: Vec<CloneMember>,
+}
+
+#[derive(Archive, Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ClonePlace {
+    pub node: u32,
+    pub start_line: u32,
+    pub end_line: u32,
+}
+
+#[derive(Archive, Serialize, Deserialize, Debug, Clone)]
+pub struct CloneRec {
+    pub tokens: u32,
+    pub places: Vec<ClonePlace>,
+}
+
+#[derive(Archive, Serialize, Deserialize, Debug, Clone, Copy)]
+pub struct CloneMember {
+    pub node: u32,
+    pub group: u32,
 }
 
 #[derive(Archive, Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq)]

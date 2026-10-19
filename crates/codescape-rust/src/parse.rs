@@ -1,4 +1,4 @@
-use codescape_facts::{Annotation, ComplexityDetail, Decisions, FieldDecl, complexity_detail};
+use codescape_facts::{Annotation, ComplexityDetail, Decisions, FieldDecl, Tokens, body_tokens, complexity_detail};
 
 const DECISIONS: Decisions = Decisions {
     branches: &["if_expression", "while_expression", "for_expression"],
@@ -80,6 +80,7 @@ pub struct RsFn {
     pub has_self: bool,
     pub visibility: Visibility,
     pub complexity: ComplexityDetail,
+    pub tokens: Tokens,
     pub ret: Option<String>,
     pub generics: Vec<(String, String)>,
     pub locals: Vec<(String, Expr, (u32, u32))>,
@@ -513,6 +514,7 @@ impl<'s> Ctx<'s> {
             attrs,
             visibility: self.visibility(n),
             complexity: complexity_detail(n, self.src, &DECISIONS),
+            tokens: body_tokens(n),
             ret: n.child_by_field_name("return_type").map(|t| self.type_name(t, RESULTS)).filter(|s| !s.is_empty()),
             generics,
             start_line: line(n),

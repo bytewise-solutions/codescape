@@ -1077,6 +1077,8 @@ impl<'a> Resolver<'a> {
                         annotations: m.decorators.clone(),
                         is_main: false,
                         overrides_external: None,
+                        tokens: m.tokens.ids.clone(),
+                        token_lines: m.tokens.lines.clone(),
                     });
                     self.record_uses(fi, node, &m.type_uses, &m.declared, &mut ff.type_uses);
                     let ctx = Ctx { fi, ti: Some(ti), func: Some(m) };
@@ -1099,6 +1101,8 @@ impl<'a> Resolver<'a> {
                     annotations: Vec::new(),
                     is_main: false,
                     overrides_external: None,
+                    tokens: func.tokens.ids.clone(),
+                    token_lines: func.tokens.lines.clone(),
                 });
                 self.record_uses(fi, node, &func.type_uses, &func.declared, &mut ff.type_uses);
                 let ctx = Ctx { fi, ti: None, func: Some(func) };
@@ -1117,6 +1121,8 @@ impl<'a> Resolver<'a> {
                     annotations: Vec::new(),
                     is_main: self.entry_files.contains(&fi),
                     overrides_external: None,
+                    tokens: Vec::new(),
+                    token_lines: Vec::new(),
                 });
                 self.record_uses(fi, node, &top.type_uses, &top.declared, &mut ff.type_uses);
                 let ctx = Ctx { fi, ti: None, func: Some(top) };

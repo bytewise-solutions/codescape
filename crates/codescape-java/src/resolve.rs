@@ -665,6 +665,8 @@ impl<'a> Resolver<'a> {
                         annotations: m.annotations.clone(),
                         is_main: is_main(m),
                         overrides_external,
+                        tokens: m.tokens.ids.clone(),
+                        token_lines: m.tokens.lines.clone(),
                     });
                     self.record_uses(fi, node, Some(ti), &m.type_uses, &mut ff.type_uses);
                     for call in &m.calls {

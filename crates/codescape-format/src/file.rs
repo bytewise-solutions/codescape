@@ -6,7 +6,7 @@ use std::ops::Range;
 use std::path::Path;
 
 pub const MAGIC: &[u8; 8] = b"CODESCP1";
-pub const FORMAT_VERSION: u32 = 19;
+pub const FORMAT_VERSION: u32 = 20;
 const HEADER: usize = 48;
 
 #[derive(Debug, thiserror::Error)]
@@ -124,6 +124,27 @@ impl ArchivedGraph {
             None => (Vec::new(), 0),
         };
         Some((total, parts, nesting))
+    }
+
+    pub fn clone_groups(&self) -> impl ExactSizeIterator<Item = (u32, Vec<(NodeId, u32, u32)>)> + '_ {
+        self.clones.iter().map(|c| (c.tokens.to_native(), Self::places(c)))
+    }
+
+    pub fn clones_of(&self, n: NodeId) -> Vec<(u32, Vec<(NodeId, u32, u32)>)> {
+        let all = &self.clone_members;
+        let start = all.partition_point(|m| m.node.to_native() < n);
+        all[start..]
+            .iter()
+            .take_while(|m| m.node.to_native() == n)
+            .map(|m| {
+                let group = m.group.to_native();
+                (group, Self::places(&self.clones[group as usize]).into_iter().filter(|p| p.0 != n).collect())
+            })
+            .collect()
+    }
+
+    fn places(c: &ArchivedCloneRec) -> Vec<(NodeId, u32, u32)> {
+        c.places.iter().map(|p| (p.node.to_native(), p.start_line.to_native(), p.end_line.to_native())).collect()
     }
 
     pub fn fields(&self, owner: NodeId) -> impl Iterator<Item = FieldView<'_>> {

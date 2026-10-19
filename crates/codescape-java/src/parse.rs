@@ -1,4 +1,4 @@
-use codescape_facts::{Annotation, ComplexityDetail, Decisions, FieldDecl, Import, complexity_detail};
+use codescape_facts::{Annotation, ComplexityDetail, Decisions, FieldDecl, Import, Tokens, body_tokens, complexity_detail};
 
 const DECISIONS: Decisions = Decisions {
     branches: &[
@@ -61,6 +61,7 @@ pub struct JMethod {
     pub is_public: bool,
     pub visibility: Visibility,
     pub complexity: ComplexityDetail,
+    pub tokens: Tokens,
     pub annotations: Vec<Annotation>,
     pub locals: Vec<(String, String)>,
     pub calls: Vec<JCall>,
@@ -379,6 +380,7 @@ impl<'s> Ctx<'s> {
             is_public: self.has_modifier(m, "public"),
             visibility: self.visibility(m),
             complexity: complexity_detail(m, self.src, &DECISIONS),
+            tokens: body_tokens(m),
             annotations: self.annotations(Self::modifiers(m)),
             start_line: line(m),
             end_line: end_line(m),

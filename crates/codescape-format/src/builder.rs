@@ -56,6 +56,7 @@ pub struct GraphBuilder {
     child_index: HashMap<(NodeId, u32), NodeId>,
     edges: Vec<RawEdge>,
     refs: Vec<Ref>,
+    clones: Vec<(u32, Vec<(NodeId, u32, u32)>)>,
     entries: Vec<EntryPointSpec>,
     stats: Stats,
     provenance: Vec<(String, String, String)>,
@@ -70,6 +71,7 @@ impl GraphBuilder {
             child_index: HashMap::new(),
             edges: Vec::new(),
             refs: Vec::new(),
+            clones: Vec::new(),
             entries: Vec::new(),
             stats: Stats::default(),
             provenance: Vec::new(),
@@ -210,6 +212,10 @@ impl GraphBuilder {
     pub fn add_ref(&mut self, from: NodeId, to: NodeId, line: u32, col: u32, len: u32) {
         let Ok(col) = u16::try_from(col) else { return };
         self.refs.push(Ref { from, to, line, col, len: u16::try_from(len).unwrap_or(u16::MAX) });
+    }
+
+    pub fn add_clone_group(&mut self, tokens: u32, places: &[(NodeId, u32, u32)]) {
+        self.clones.push((tokens, places.to_vec()));
     }
 
     pub fn refs(&self) -> &[Ref] {
@@ -480,6 +486,22 @@ impl GraphBuilder {
             .collect();
         refs.sort_by_key(|r| (r.from, r.line, r.col, r.to, r.len));
         refs.dedup();
+        let clones: Vec<CloneRec> = std::mem::take(&mut self.clones)
+            .into_iter()
+            .map(|(tokens, places)| CloneRec {
+                tokens,
+                places: places
+                    .into_iter()
+                    .map(|(n, start_line, end_line)| ClonePlace { node: new_id[n as usize], start_line, end_line })
+                    .filter(|p| p.node != NONE)
+                    .collect(),
+            })
+            .filter(|c| c.places.len() > 1)
+            .collect();
+        let mut clone_members: Vec<CloneMember> =
+            clones.iter().enumerate().flat_map(|(g, c)| c.places.iter().map(move |p| CloneMember { node: p.node, group: g as u32 })).collect();
+        clone_members.sort_by_key(|m| (m.node, m.group));
+        clone_members.dedup_by_key(|m| (m.node, m.group));
 
         let mut subtree = vec![0u64; n];
         for new in (0..n).rev() {
@@ -584,6 +606,8 @@ impl GraphBuilder {
             complexity,
             breakdowns,
             refs,
+            clones,
+            clone_members,
         }
     }
 }

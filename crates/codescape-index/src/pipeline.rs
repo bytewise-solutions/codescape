@@ -42,6 +42,30 @@ pub fn project_packs(project_dir: &Path, cfg: &ProjectConfig) -> Result<Packs> {
     Ok(Packs::from_packs(packs, &cfg.packs))
 }
 
+fn add_clones(facts: &ProjectFacts, min_tokens: usize, b: &mut GraphBuilder) {
+    let left_out = NodeFlags::TEST | NodeFlags::MOCK | NodeFlags::GENERATED;
+    let shown = |mut n: NodeId| loop {
+        if b.flags(n).intersects(left_out) {
+            return false;
+        }
+        match b.parent(n) {
+            Some(p) => n = p,
+            None => return true,
+        }
+    };
+    let bodies: Vec<(NodeId, &[u32], &[u32])> = facts
+        .files
+        .iter()
+        .filter(|f| !f.is_test)
+        .flat_map(|f| &f.functions)
+        .filter(|func| func.tokens.len() >= min_tokens && shown(func.node))
+        .map(|func| (func.node, func.tokens.as_slice(), func.token_lines.as_slice()))
+        .collect();
+    for g in crate::clones::find_clones(&bodies, min_tokens) {
+        b.add_clone_group(g.tokens, &g.places);
+    }
+}
+
 pub fn index_project(dir: &Path, cfg: &ProjectConfig, progress: &dyn Fn(Progress)) -> Result<IndexOutcome> {
     let start = Instant::now();
     let dir = dir.canonicalize().with_context(|| format!("opening {}", dir.display()))?;
@@ -63,6 +87,7 @@ pub fn index_project(dir: &Path, cfg: &ProjectConfig, progress: &dyn Fn(Progress
     let packs = project_packs(&dir, cfg)?;
     let root = d.root.clone();
     apply_detection(&packs, &facts, &move |rel: &str| std::fs::read(root.join(rel)).ok(), &mut b);
+    add_clones(&facts, cfg.duplicate_tokens as usize, &mut b);
     for p in packs.packs() {
         b.add_provenance(&p.name, &p.version, &p.hash);
     }

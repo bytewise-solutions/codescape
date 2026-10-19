@@ -63,6 +63,8 @@ impl Fx {
             annotations: Vec::new(),
             is_main,
             overrides_external: None,
+            tokens: Vec::new(),
+            token_lines: Vec::new(),
         });
         node
     }
