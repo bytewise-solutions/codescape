@@ -11,7 +11,7 @@ use crate::input::{CHEATSHEET, Nav, Step, interpret, nearest_in};
 use crate::inspector;
 use crate::keys::{Action as KeyAction, Keymap};
 use crate::panels::{EntryGroupView, group_entries};
-use crate::reading::{fill_view, leave_zoom, zoom_text};
+use crate::reading::{fill_view, leave_zoom, level_node, zoom_text};
 use crate::review_view::{CommitStep, ItemKind, Limits, MarkState, ReviewItem, ReviewMarks, Risk, by_risk, items_with as review_items, step as review_step};
 use crate::search::{self, SearchIndex, member_at_line};
 use crate::settings_window::{self, SettingsForm};
@@ -1574,7 +1574,7 @@ impl Project {
 
     pub(crate) fn breadcrumb(&mut self, ui: &mut egui::Ui) {
         let g = self.file.graph();
-        let deepest = self.scene.deepest_open_at(self.view.center()).unwrap_or(g.root());
+        let deepest = level_node(g, &self.scene, self.reading, self.view.center()).unwrap_or(g.root());
         let mut fly = None;
         let root = match (&self.home, &self.version) {
             (Some((dir, _)), Some(v)) => format!("{} @ {v}", dir.file_name().map_or(String::new(), |n| n.to_string_lossy().into_owned())),
@@ -1602,7 +1602,7 @@ impl Project {
         let s = g.stats();
         let (r, gu, u) = (s.calls_resolved.to_native(), s.calls_guessed.to_native(), s.calls_unresolved.to_native());
         let total = (r + gu + u).max(1) as f32;
-        let level = self.scene.deepest_open_at(self.view.center()).map(|n| format!("{:?}", g.kind(n))).unwrap_or_else(|| "Project".into());
+        let level = level_node(g, &self.scene, self.reading, self.view.center()).map(|n| format!("{:?}", g.kind(n))).unwrap_or_else(|| "Project".into());
         let up = self.cache.get(g.root()).map_or(0, |l| l.up_edges());
         ui.horizontal(|ui| {
             if let Some((shown, _)) = &self.review_job {

@@ -558,3 +558,20 @@ fn an_open_file_fills_the_view_alone_and_keeps_its_text_size() {
     assert_eq!(fill_view(&mut closed, Some((api, 20.0)), VIEW), None);
     assert_eq!(closed.boxes.len(), boxes, "the map is untouched when no file is open");
 }
+
+#[test]
+fn while_reading_the_breadcrumb_level_stays_at_the_file_s_package() {
+    use codescape::reading::{fill_view, level_node};
+    let fx = fixture();
+    let g = fx.file.graph();
+    let mut cache = LayoutCache::new(Vec::new(), LayoutOptions::default());
+    let api = node(g, &["left", "left.api", "T"]);
+    let r = world_rect(g, &mut cache, api).unwrap();
+    let cam = Camera { center: r.center(), zoom: 400.0 / r.w as f64 };
+    let mut s = build_scene_at(g, &mut cache, &cam, VIEW, &VisualRules::default(), None, VIEW.center(), &[]);
+    let before = s.deepest_open_at(VIEW.center());
+    assert_eq!(before, Some(node(g, &["left", "left.api"])));
+    let reading = fill_view(&mut s, None, VIEW);
+    assert_eq!(level_node(g, &s, reading, VIEW.center()), before);
+    assert_eq!(level_node(g, &s, None, VIEW.center()), s.deepest_open_at(VIEW.center()));
+}

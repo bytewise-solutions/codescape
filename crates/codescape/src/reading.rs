@@ -1,5 +1,5 @@
 use crate::canvas::{FILE_OPEN_PX, Scene};
-use codescape_format::NodeId;
+use codescape_format::{ArchivedGraph, NodeId};
 use codescape_layout::Rect;
 
 pub const READING_OPEN_PT: f32 = 13.0;
@@ -28,4 +28,8 @@ pub fn fill_view(scene: &mut Scene, reading: Option<(NodeId, f32)>, view: Rect) 
     scene.frames.clear();
     scene.labels.clear();
     Some((scene.boxes[0].node, font))
+}
+
+pub fn level_node(g: &ArchivedGraph, scene: &Scene, reading: Option<(NodeId, f32)>, p: [f32; 2]) -> Option<NodeId> {
+    reading.and_then(|(n, _)| g.parent(n)).filter(|&n| n != g.root()).or_else(|| scene.deepest_open_at(p))
 }
