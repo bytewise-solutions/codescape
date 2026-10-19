@@ -800,7 +800,6 @@ impl<'a> Resolver<'a> {
             [target] => {
                 let target = *target;
                 self.b.add_edge_at(caller, target, EdgeKind::Calls, scope, Confidence::Guessed, EdgeFlags::NONE, cf.line);
-                self.b.add_ref(caller, target, cf.line, cf.col, cf.len);
                 cf.target = Some(target);
                 self.stats.guessed += 1;
             }

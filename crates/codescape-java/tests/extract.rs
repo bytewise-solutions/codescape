@@ -119,6 +119,15 @@ fn unresolved_counted_and_unique_name_guessed() {
 }
 
 #[test]
+fn a_guessed_call_records_no_reference() {
+    let r = run();
+    let go = at(&r.b, &["app", "com.example.app", "ViewUser", "go"]);
+    let widget = at(&r.b, &["core", "com.example.core", "Widgets", "buildWidgetOnce"]);
+    assert!(has_edge(&r.b, go, widget, EdgeKind::Calls).is_some());
+    assert!(!refs_from(&r.b, go).iter().any(|&(to, ..)| to == widget));
+}
+
+#[test]
 fn test_files_flagged() {
     let r = run();
     let fx = r.facts.files.iter().find(|f| f.rel_path.ends_with("FakeViewManager.java")).unwrap();
