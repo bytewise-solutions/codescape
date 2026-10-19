@@ -107,7 +107,8 @@ impl Project {
                 if chain.len() == 1 && !calls.callers(q.focus).is_empty() {
                     ui.label(egui::RichText::new(format!("({} callers, no entry point found)", calls.callers(q.focus).len())).small().color(style::MUTED));
                 }
-                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                ui.end_row();
+                {
                     let label = if view.whole { "One level" } else { "Whole chain" };
                     if ui.button(label).clicked() {
                         act = Some(Act::Whole);
@@ -125,9 +126,8 @@ impl Project {
                                 }
                             }
                         });
-                        ui.label(egui::RichText::new(format!("method of {}", owner.map_or("", |o| g.name(o)))).small().color(style::MUTED));
                     }
-                });
+                }
             });
         });
         let lanes = d.lifelines.len().max(1);
