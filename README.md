@@ -56,9 +56,16 @@ The screenshots show [ripgrep](https://github.com/BurntSushi/ripgrep) (MIT / Unl
 
 ## Install
 
-Download the archive for your system from the [releases page](https://github.com/bytewise-solutions/codescape/releases):
-`…-x86_64-unknown-linux-gnu.tar.gz` for Linux, `…-x86_64-pc-windows-msvc.zip` for Windows (64-bit only). Unpack it and
-run `codescape` (`codescape.exe`); `SHA256SUMS` lists each archive's checksum.
+Download the file for your system from the [releases page](https://github.com/bytewise-solutions/codescape/releases):
+
+- **Linux** (x86-64): `Codescape-<version>-x86_64.AppImage`. Make it executable (`chmod +x`) and run it. If it
+  complains about FUSE, install `libfuse2` or start it with `--appimage-extract-and-run`.
+- **Windows** (x86-64): `codescape-<version>-x86_64.exe`. Run it directly; there is nothing to install.
+- **macOS** (Apple Silicon and Intel): `Codescape-<version>-macos.dmg`. Drag Codescape to Applications. The app is not
+  signed yet, so the first time right-click it ▸ **Open** and confirm, or run
+  `xattr -d com.apple.quarantine /Applications/Codescape.app`.
+
+`SHA256SUMS` on the same page lists each file's checksum.
 
 To build from source instead, you need a recent stable Rust (edition 2024) and a C compiler for the tree-sitter
 grammars.
@@ -153,7 +160,8 @@ builds on macOS and Windows.
 
 [Releases](.github/workflows/release.yml) are cut by pushing a tag that matches the workspace version in
 `Cargo.toml`: bump `version`, commit, then `git tag v0.2.0 && git push origin v0.2.0`. The workflow runs the tests,
-builds Linux and Windows x86-64 archives and publishes them with `SHA256SUMS` as a GitHub release.
+builds the AppImage, the Windows executable and the macOS disk image, and publishes them with `SHA256SUMS` as a
+GitHub release. Run it by hand from the Actions tab to build the same files as artifacts without publishing.
 
 ## Limits
 

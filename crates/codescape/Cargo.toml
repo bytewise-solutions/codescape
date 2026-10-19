@@ -38,3 +38,6 @@ path = "tests/all.rs"
 
 [lints]
 workspace = true
+
+[build-dependencies]
+winresource = "0.1.34"

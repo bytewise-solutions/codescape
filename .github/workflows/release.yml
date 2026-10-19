@@ -3,12 +3,15 @@ name: Release
 on:
   push:
     tags: ["v*"]
+  workflow_dispatch:
 
 permissions:
   contents: write
 
 env:
   CARGO_TERM_COLOR: always
+  APPIMAGETOOL_URL: https://github.com/AppImage/appimagetool/releases/download/1.9.1/appimagetool-x86_64.AppImage
+  APPIMAGETOOL_SHA256: ed4ce84f0d9caff66f50bcca6ff6f35aae54ce8135408b3fa33abfc3cb384eb0
 
 jobs:
   check:
@@ -17,6 +20,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Tag matches the workspace version
+        if: github.ref_type == 'tag'
         run: |
           version=$(grep -m1 '^version' Cargo.toml | cut -d'"' -f2)
           if [ "${GITHUB_REF_NAME}" != "v${version}" ]; then
@@ -27,51 +31,67 @@ jobs:
       - uses: Swatinem/rust-cache@v2
       - run: cargo test --workspace --release --locked
 
-  build:
-    name: Build (${{ matrix.target }})
+  linux:
+    name: Linux AppImage
     needs: check
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          # The oldest supported runner, so the binary runs on older glibc versions too.
-          - os: ubuntu-22.04
-            target: x86_64-unknown-linux-gnu
-          - os: windows-latest
-            target: x86_64-pc-windows-msvc
-    runs-on: ${{ matrix.os }}
+    # The oldest supported runner, so the binary runs on older glibc versions too.
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo build --release --locked -p codescape
+      - name: Fetch appimagetool
+        run: |
+          curl -sSL -o appimagetool "$APPIMAGETOOL_URL"
+          echo "$APPIMAGETOOL_SHA256  appimagetool" | sha256sum -c -
+          chmod +x appimagetool
+      - run: packaging/linux/appimage.sh target/release/codescape "$GITHUB_REF_NAME" ./appimagetool dist
+      - uses: actions/upload-artifact@v4
+        with:
+          name: linux
+          path: dist/*
+
+  windows:
+    name: Windows executable
+    needs: check
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo build --release --locked -p codescape
+      - shell: bash
+        run: mkdir dist && cp target/release/codescape.exe "dist/codescape-${GITHUB_REF_NAME}-x86_64.exe"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: windows
+          path: dist/*
+
+  macos:
+    name: macOS disk image
+    needs: check
+    runs-on: macos-latest
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
         with:
-          targets: ${{ matrix.target }}
+          targets: aarch64-apple-darwin,x86_64-apple-darwin
       - uses: Swatinem/rust-cache@v2
-        with:
-          key: ${{ matrix.target }}
-      - run: cargo build --release --locked --target ${{ matrix.target }} -p codescape -p codescape-index
-      - name: Package
-        shell: bash
-        run: |
-          name="codescape-${GITHUB_REF_NAME}-${{ matrix.target }}"
-          mkdir "$name"
-          cp README.md "$name/"
-          if [ "${{ runner.os }}" = "Windows" ]; then
-            cp target/${{ matrix.target }}/release/codescape.exe target/${{ matrix.target }}/release/codescape-index.exe "$name/"
-            7z a -tzip "$name.zip" "$name" > /dev/null
-            echo "ASSET=$name.zip" >> "$GITHUB_ENV"
-          else
-            cp target/${{ matrix.target }}/release/codescape target/${{ matrix.target }}/release/codescape-index "$name/"
-            tar czf "$name.tar.gz" "$name"
-            echo "ASSET=$name.tar.gz" >> "$GITHUB_ENV"
-          fi
+      - run: |
+          cargo build --release --locked -p codescape --target aarch64-apple-darwin
+          cargo build --release --locked -p codescape --target x86_64-apple-darwin
+          lipo -create -output codescape target/aarch64-apple-darwin/release/codescape target/x86_64-apple-darwin/release/codescape
+      - run: packaging/macos/dmg.sh codescape "$GITHUB_REF_NAME" dist
       - uses: actions/upload-artifact@v4
         with:
-          name: ${{ matrix.target }}
-          path: ${{ env.ASSET }}
+          name: macos
+          path: dist/*
 
   publish:
     name: Publish the release
-    needs: build
+    needs: [linux, windows, macos]
+    if: github.ref_type == 'tag'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/download-artifact@v4
