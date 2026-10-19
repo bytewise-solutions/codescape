@@ -87,8 +87,9 @@ enough to read.
   the map. The wheel and dragging scroll the file, sideways too (horizontal wheel, `Shift` + wheel or a sideways
   drag), and so do `Page Up`/`Page Down`/`Home`/`End`. It opens at the type's first line. The type's own lines and
   its methods sit on a light band. Hold `Ctrl` and point at a name: the name the index resolved is underlined and
-  `Ctrl`+click opens its definition (a field leads to its class); names it could not resolve stay plain. Types that
-  hold other boxes (an interface with its implementations) stay boxes. Lines are read from disk.
+  `Ctrl`+click opens its definition (a field leads to its class). Names it could not resolve stay plain, and so do
+  names defined in code the map hides (tests, errors, loggers, wiring, details or boxes you hid) until you show that
+  code. Types that hold other boxes (an interface with its implementations) stay boxes. Lines are read from disk.
 - **Quiet arrows.** Every dependency is drawn, but faint, slightly stronger for the heaviest ones in a container. Hover
   or select a box and its own arrows light up at full strength, as thick as the number of classes they link. Turn
   **View ▸ Quiet arrows** off to draw every arrow by its weight instead.
@@ -154,9 +155,9 @@ enough to read.
   structs or classes that implement it.
 - **Error and exception types are set aside** (Java `*Exception` and subclasses of Exception/Throwable/Error, Go
   types with an `Error()` method or named `*Error`); tick **View ▸ Errors** to show them in their own row.
-- **Loggers are set aside:** types named `*Logger`/`*Logging` (or `Logger`, `LoggerFactory`, `LogManager`, Go
-  `SugaredLogger`/`Entry`) and types extending them, plus fields of those types on cards and in the inspector, and their
-  entries in USES / USED BY lists. Tick **View ▸ Logging** to show them.
+- **Loggers are set aside:** types named `Logger` or `*Logger` (Java also `*Logging`, `LoggerFactory`, `LogManager`;
+  Go also `SugaredLogger`) and types extending them, plus fields of those types on cards and in the inspector, and
+  their entries in USES / USED BY lists. Tick **View ▸ Logging** to show them.
 - **Test code is out:** test sources, test helpers (files importing `testing`/testify or JUnit/Mockito, folders such
   as `testutil`/`testdata`, globs under `[test] paths`) and test mains are not drawn or listed. Tick **View ▸ Tests**
   to draw them and **View ▸ Test dependencies** to see test-only dependencies.
