@@ -116,6 +116,7 @@ struct TypeInfo {
     supers: Vec<TypeRef>,
     fields: HashMap<String, String>,
     methods: HashMap<String, NodeId>,
+    returns: HashMap<String, String>,
     decl: (usize, Vec<usize>),
     is_test: bool,
 }
@@ -253,7 +254,9 @@ impl<'a> Resolver<'a> {
             self.b.add_flags(node, NodeFlags::TEST);
         }
         let mut methods = HashMap::new();
+        let mut returns = HashMap::new();
         for m in &t.methods {
+            returns.entry(m.name.clone()).or_insert_with(|| m.return_type.clone());
             let id = *methods.entry(m.name.clone()).or_insert_with(|| {
                 let id = self.b.add_node(node, NodeKind::Member, SubKind::Method, &m.name, Lang::Java);
                 self.b.set_span(id, &f.rel, m.start_line, m.end_line);
@@ -290,6 +293,7 @@ impl<'a> Resolver<'a> {
             supers: Vec::new(),
             fields: t.fields.iter().cloned().collect(),
             methods,
+            returns,
             decl: decl.clone(),
             is_test: f.is_test,
         });
@@ -796,7 +800,13 @@ impl<'a> Resolver<'a> {
     fn returns_library_value(&self, fi: usize, ti: usize, m: &JMethod, head: &Receiver, method: &str) -> bool {
         match self.receiver_type(fi, ti, m, head, method) {
             Some(TypeRef::External(_)) => true,
-            Some(TypeRef::Project(t)) => self.lookup_method(t, method).is_none() && self.external_super(t).is_some(),
+            Some(TypeRef::Project(t)) => match self.lookup_method(t, method) {
+                None => self.external_super(t).is_some(),
+                Some((owner, _)) => {
+                    let ret = self.types[owner].returns.get(method).map(String::as_str).unwrap_or_default();
+                    matches!(self.resolve_type(ret, self.types[owner].file, Some(owner)), Some(TypeRef::External(_)))
+                }
+            },
             None => false,
         }
     }

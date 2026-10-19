@@ -332,3 +332,24 @@ public class Svc {\n  private List<String> items;\n  void helper() {}\n  long co
     let count = at(&b, &["app", "v", "Svc", "count"]);
     assert!(has_edge(&b, run, count, EdgeKind::Calls).is_none(), "a chain from a library value is a library call");
 }
+
+#[test]
+fn library_value_returned_by_a_project_method_is_a_library_call() {
+    let tmp = tempfile::tempdir().unwrap();
+    let r = tmp.path();
+    std::fs::write(r.join("settings.gradle"), "include 'app'\n").unwrap();
+    let src = r.join("app/src/main/java/v");
+    std::fs::create_dir_all(&src).unwrap();
+    std::fs::write(src.join("Svc.java"), "package v;\npublic class Svc {\n  String name() { return \"\"; }\n  void run() {\n    name().trim();\n  }\n}\n")
+        .unwrap();
+    std::fs::write(src.join("Other.java"), "package v;\npublic class Other {\n  void trim() {}\n}\n").unwrap();
+    let d = discover(r, &default_excludes()).unwrap();
+    let mut b = GraphBuilder::new("lib");
+    let module_nodes: Vec<NodeId> = d.modules.iter().map(|m| b.add_node(b.root(), NodeKind::Module, SubKind::None, &m.name, Lang::Java)).collect();
+    let mut facts = ProjectFacts::default();
+    let s = extract_java(&d, &module_nodes, &default_excludes(), &mut b, &mut facts);
+    assert_eq!((s.resolved, s.external, s.guessed, s.unresolved), (1, 1, 0, 0), "{s:?}");
+    let run = at(&b, &["app", "v", "Svc", "run"]);
+    let trim = at(&b, &["app", "v", "Other", "trim"]);
+    assert!(has_edge(&b, run, trim, EdgeKind::Calls).is_none());
+}
