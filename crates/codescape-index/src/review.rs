@@ -325,7 +325,7 @@ pub fn clean_versions(project_dir: &Path, cache_root: &Path, unused_for: std::ti
     Ok(removed)
 }
 
-fn git(dir: &Path, args: &[&str]) -> anyhow::Result<String> {
+pub(crate) fn git(dir: &Path, args: &[&str]) -> anyhow::Result<String> {
     let out = std::process::Command::new("git").args(args).current_dir(dir).output().map_err(|e| anyhow::anyhow!("running git: {e}"))?;
     if !out.status.success() {
         anyhow::bail!("git {}: {}", args.join(" "), String::from_utf8_lossy(&out.stderr).trim());

@@ -311,3 +311,14 @@ fn duplicate_tokens_default_to_fifty_and_reach_the_index_config() {
     assert_eq!(store.config().duplicate_tokens, 30);
     assert_ne!(store.config().fingerprint(), before, "a new threshold reindexes");
 }
+
+#[test]
+fn hotspot_period_defaults_to_a_year_and_reads_from_settings() {
+    let e = env();
+    let store = SettingsStore::load(e.paths.clone()).unwrap();
+    assert_eq!(store.settings().threshold(Threshold::HotspotDays), Sourced { value: 365, layer: Layer::Default });
+    write(&e.paths.shared, "[view]\nhotspot_days = 90\n");
+    let store = SettingsStore::load(e.paths.clone()).unwrap();
+    assert_eq!(store.settings().threshold(Threshold::HotspotDays), Sourced { value: 90, layer: Layer::Shared });
+    assert_eq!(Threshold::HotspotDays.label(), "Hotspot period (days)");
+}

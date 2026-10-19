@@ -112,11 +112,18 @@ pub enum Threshold {
     ManyCallers,
     KeepVersionsDays,
     DuplicateTokens,
+    HotspotDays,
 }
 
 impl Threshold {
-    pub const ALL: [Threshold; 5] =
-        [Threshold::ComplexityHint, Threshold::ComplexityHigh, Threshold::ManyCallers, Threshold::KeepVersionsDays, Threshold::DuplicateTokens];
+    pub const ALL: [Threshold; 6] = [
+        Threshold::ComplexityHint,
+        Threshold::ComplexityHigh,
+        Threshold::ManyCallers,
+        Threshold::KeepVersionsDays,
+        Threshold::DuplicateTokens,
+        Threshold::HotspotDays,
+    ];
 
     pub fn default_value(self) -> u32 {
         match self {
@@ -125,6 +132,7 @@ impl Threshold {
             Threshold::ManyCallers => 5,
             Threshold::KeepVersionsDays => 14,
             Threshold::DuplicateTokens => 50,
+            Threshold::HotspotDays => 365,
         }
     }
 
@@ -135,6 +143,7 @@ impl Threshold {
             Threshold::ManyCallers => "Many callers from",
             Threshold::KeepVersionsDays => "Keep compared versions (days)",
             Threshold::DuplicateTokens => "Duplicates from (tokens)",
+            Threshold::HotspotDays => "Hotspot period (days)",
         }
     }
 }
@@ -266,6 +275,8 @@ struct ViewFile {
     keep_versions_days: Option<u32>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     duplicate_tokens: Option<u32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    hotspot_days: Option<u32>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     hidden: Vec<String>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
@@ -359,6 +370,7 @@ impl ViewFile {
             Threshold::ManyCallers => &mut self.many_callers,
             Threshold::KeepVersionsDays => &mut self.keep_versions_days,
             Threshold::DuplicateTokens => &mut self.duplicate_tokens,
+            Threshold::HotspotDays => &mut self.hotspot_days,
         }
     }
 
