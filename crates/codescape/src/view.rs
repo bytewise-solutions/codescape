@@ -41,9 +41,9 @@ pub fn map_options(g: &ArchivedGraph, s: &Settings, visual: &VisualRules) -> Lay
     (opts.hidden_nodes, opts.always_shown) = resolve_hidden(g, s);
     opts.logging_types = visual.logging_types.clone();
     for n in (0..g.node_count() as NodeId).filter(|&n| g.kind(n) == NodeKind::Type && g.flags(n).contains(NodeFlags::LOGGING)) {
-        let name = g.name(n).to_string();
-        if !opts.logging_types.contains(&name) {
-            opts.logging_types.push(name);
+        let entry = (g.lang(n), g.name(n).to_string());
+        if !opts.logging_types.contains(&entry) {
+            opts.logging_types.push(entry);
         }
     }
     opts

@@ -784,11 +784,13 @@ impl Packs {
                 v.entry_groups = p.visual.entry_groups.clone();
             }
         }
-        for (_, rule) in self.rules() {
-            if let Rule::Logging { type_names, .. } = rule {
-                for n in type_names {
-                    if !v.logging_types.contains(n) {
-                        v.logging_types.push(n.clone());
+        for &lang in Lang::ALL {
+            for (_, rule) in self.rules_for(lang) {
+                if let Rule::Logging { type_names, .. } = rule {
+                    for n in type_names {
+                        if !v.logging_types.iter().any(|(l, x)| *l == lang && x == n) {
+                            v.logging_types.push((lang, n.clone()));
+                        }
                     }
                 }
             }

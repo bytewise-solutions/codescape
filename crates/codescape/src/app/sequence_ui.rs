@@ -32,7 +32,7 @@ enum Act {
 impl Project {
     fn calls(&mut self) -> Rc<CallIndex> {
         if self.calls.is_none() {
-            self.calls = Some(Rc::new(CallIndex::new(self.file.graph())));
+            self.calls = Some(Rc::new(CallIndex::new(self.file.graph(), self.cache.options())));
         }
         self.calls.clone().unwrap()
     }

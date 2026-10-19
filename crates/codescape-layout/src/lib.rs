@@ -10,7 +10,7 @@ pub use size::{
     card_rows_bottom, is_constructor, is_logging_type,
 };
 
-use codescape_format::{ArchivedGraph, NodeFlags, NodeId};
+use codescape_format::{ArchivedGraph, Lang, NodeFlags, NodeId, NodeKind};
 use codescape_rules::FrameRule;
 use std::collections::HashMap;
 use std::rc::Rc;
@@ -93,7 +93,7 @@ pub struct LayoutOptions {
     pub show_wiring: bool,
     pub show_noise: bool,
     pub show_logging: bool,
-    pub logging_types: Vec<String>,
+    pub logging_types: Vec<(Lang, String)>,
     pub show_details: bool,
     pub show_generated: bool,
     pub details_in: Vec<NodeId>,
@@ -158,6 +158,23 @@ impl LayoutOptions {
             keep |= NodeFlags::GENERATED.0;
         }
         NodeFlags(self.hidden.0 & !keep)
+    }
+
+    pub fn is_logging(&self, g: &ArchivedGraph, node: NodeId) -> bool {
+        let path = g.path(node);
+        if path.iter().any(|&p| g.flags(p).contains(NodeFlags::LOGGING)) {
+            return true;
+        }
+        if !(g.flags(node).contains(NodeFlags::EXTERNAL) || g.kind(node) == NodeKind::External) {
+            return false;
+        }
+        let lang = g.lang(node);
+        let owner = path.iter().rev().find(|&&p| g.kind(p) == NodeKind::Type).copied();
+        [Some(node), owner].into_iter().flatten().any(|n| self.logging_types.iter().any(|(l, t)| *l == lang && t == g.name(n)))
+    }
+
+    pub fn hides_logging(&self, g: &ArchivedGraph, node: NodeId) -> bool {
+        !self.show_logging && self.is_logging(g, node)
     }
 
     pub fn tag_hidden(&self, g: &ArchivedGraph, node: NodeId) -> bool {

@@ -150,7 +150,7 @@ enough to read.
   structs or classes that implement it.
 - **Error and exception types are set aside** (Java `*Exception` and subclasses of Exception/Throwable/Error, Go
   types with an `Error()` method or named `*Error`); tick **View ▸ Errors** to show them in their own row.
-- **Loggers are set aside:** types named `*Logger`/`*Logging` (or `Logger`, `Log`, `LoggerFactory`, `LogManager`, Go
+- **Loggers are set aside:** types named `*Logger`/`*Logging` (or `Logger`, `LoggerFactory`, `LogManager`, Go
   `SugaredLogger`/`Entry`) and types extending them, plus fields of those types on cards and in the inspector, and their
   entries in USES / USED BY lists. Tick **View ▸ Logging** to show them.
 - **Test code is out:** test sources, test helpers (files importing `testing`/testify or JUnit/Mockito, folders such

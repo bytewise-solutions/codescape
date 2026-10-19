@@ -830,6 +830,7 @@ impl Project {
         let mut opts = map_options(self.file.graph(), self.settings.settings(), &self.visual);
         opts.details_in = self.details_in.clone();
         self.cache.set_options(opts);
+        self.calls = None;
         self.form.error = self.settings.save_view().err().map(|e| format!("{e:#}"));
     }
 
@@ -2055,7 +2056,7 @@ impl Project {
                 }
             }
             let opts = self.cache.options().clone();
-            let fields: Vec<_> = g.fields(n).filter(|f| opts.show_logging || !is_logging_type(f.ty, &opts.logging_types)).collect();
+            let fields: Vec<_> = g.fields(n).filter(|f| opts.show_logging || !is_logging_type(f.ty, g.lang(n), &opts.logging_types)).collect();
             if !fields.is_empty() {
                 ui.add_space(10.0);
                 ui.label(egui::RichText::new(format!("FIELDS ({})", fields.len())).small().strong().color(style::MUTED));

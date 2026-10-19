@@ -1,6 +1,8 @@
 use codescape_format::{ArchivedGraph, EdgeFlags, EdgeKind, NodeFlags, NodeId, NodeKind, Scope, SubKind};
 use std::collections::{HashMap, HashSet, VecDeque};
 
+use codescape_layout::LayoutOptions;
+
 const LEVELS: u32 = 2;
 
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -18,7 +20,7 @@ pub struct CallIndex {
 }
 
 impl CallIndex {
-    pub fn new(g: &ArchivedGraph) -> CallIndex {
+    pub fn new(g: &ArchivedGraph, opts: &LayoutOptions) -> CallIndex {
         let count = g.node_count();
         let mut out: Vec<Vec<Call>> = vec![Vec::new(); count];
         let mut callers: Vec<Vec<NodeId>> = vec![Vec::new(); count];
@@ -32,7 +34,7 @@ impl CallIndex {
                     continue;
                 }
                 let main = Scope::from_u8(e.scope) == Scope::Main && !EdgeFlags(e.flags).contains(EdgeFlags::NOISE);
-                if !kind.is_call_like() || !main || g.flags(to).contains(NodeFlags::EXTERNAL) || g.kind(to) == NodeKind::External {
+                if !kind.is_call_like() || !main || g.flags(to).contains(NodeFlags::EXTERNAL) || g.kind(to) == NodeKind::External || opts.hides_logging(g, to) {
                     continue;
                 }
                 out[n as usize].push(Call { to, line: g.call_line(n, e), create: kind == EdgeKind::Instantiates });

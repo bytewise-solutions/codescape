@@ -20,4 +20,4 @@ noise = { name_suffixes = ["Error"], methods = ["Error"] }
 
 [[rule]]
 id = "go-core.logging"
-logging = { type_names = ["Logger", "SugaredLogger", "Entry"], name_suffixes = ["Logger"] }
+logging = { type_names = ["Logger", "SugaredLogger"], name_suffixes = ["Logger"] }

@@ -25,7 +25,7 @@ fn named(g: &ArchivedGraph, name: &str) -> NodeId {
 fn a_method_is_told_from_an_entry_point_down_two_levels_in_call_order() {
     let (_t, file) = project();
     let g = file.graph();
-    let calls = CallIndex::new(g);
+    let calls = CallIndex::new(g, &codescape_layout::LayoutOptions::default());
     let checkout = named(g, "Checkout");
     let chain = calls.default_chain(g, checkout);
     assert_eq!(chain, [named(g, "main"), checkout]);
@@ -49,7 +49,7 @@ fn a_method_is_told_from_an_entry_point_down_two_levels_in_call_order() {
 fn opening_a_call_shows_one_more_level_and_recursion_stops_there() {
     let (_t, file) = project();
     let g = file.graph();
-    let calls = CallIndex::new(g);
+    let calls = CallIndex::new(g, &codescape_layout::LayoutOptions::default());
     let checkout = named(g, "Checkout");
     let mut q = Query::new(checkout, calls.default_chain(g, checkout));
     q.expanded.insert(named(g, "sum"));
@@ -63,7 +63,7 @@ fn opening_a_call_shows_one_more_level_and_recursion_stops_there() {
 fn callers_can_be_listed_to_pick_another_chain() {
     let (_t, file) = project();
     let g = file.graph();
-    let calls = CallIndex::new(g);
+    let calls = CallIndex::new(g, &codescape_layout::LayoutOptions::default());
     let total = named(g, "total");
     let names: Vec<&str> = calls.callers(total).iter().map(|&c| g.name(c)).collect();
     assert_eq!(names, ["Checkout", "sum"]);
@@ -78,7 +78,7 @@ fn named_in(g: &ArchivedGraph, owner: &str, name: &str) -> NodeId {
 fn a_type_is_told_from_the_method_its_outside_callers_use() {
     let (_t, file) = project();
     let g = file.graph();
-    let calls = CallIndex::new(g);
+    let calls = CallIndex::new(g, &codescape_layout::LayoutOptions::default());
     let service = (0..g.node_count() as NodeId).find(|&n| g.name(n) == "Service" && g.kind(n) == NodeKind::Type).unwrap();
     assert_eq!(calls.lead_method(g, service), Some(named(g, "Checkout")));
     let methods: Vec<&str> = calls.methods(g, service).iter().map(|&m| g.name(m)).collect();
@@ -91,8 +91,33 @@ fn a_type_is_told_from_the_method_its_outside_callers_use() {
 fn one_level_keeps_only_the_caller_on_the_way_to_an_entry_point() {
     let (_t, file) = project();
     let g = file.graph();
-    let calls = CallIndex::new(g);
+    let calls = CallIndex::new(g, &codescape_layout::LayoutOptions::default());
     let (main, checkout, total) = (named(g, "main"), named(g, "Checkout"), named(g, "total"));
     assert_eq!(calls.one_level(g, total), [checkout, total]);
     assert_eq!(calls.one_level(g, main), [main]);
+}
+
+#[test]
+fn logger_calls_leave_the_diagram_unless_logging_is_shown() {
+    let mut b = GraphBuilder::new("p");
+    let m = b.add_node(b.root(), NodeKind::Module, SubKind::None, "m", Lang::Java);
+    let t = b.add_node(m, NodeKind::Type, SubKind::Class, "Service", Lang::Java);
+    let run = b.add_node(t, NodeKind::Member, SubKind::Method, "run", Lang::Java);
+    let work = b.add_node(t, NodeKind::Member, SubKind::Method, "work", Lang::Java);
+    let lg = b.add_node(m, NodeKind::Type, SubKind::Class, "AuditLogger", Lang::Java);
+    b.add_flags(lg, NodeFlags::LOGGING);
+    let record = b.add_node(lg, NodeKind::Member, SubKind::Method, "record", Lang::Java);
+    for to in [work, record] {
+        b.add_edge(run, to, EdgeKind::Calls, Scope::Main, Confidence::Resolved, EdgeFlags::NONE);
+    }
+    let dir = tempfile::tempdir().unwrap();
+    write_graph(&b.finish(), &dir.path().join("g")).unwrap();
+    let file = IndexFile::open(&dir.path().join("g")).unwrap();
+    let g = file.graph();
+    let (run, work, record) = (named(g, "run"), named(g, "work"), named(g, "record"));
+    let hidden = CallIndex::new(g, &codescape_layout::LayoutOptions::default());
+    assert_eq!(hidden.calls(run).iter().map(|c| c.to).collect::<Vec<_>>(), [work]);
+    assert!(hidden.callers(record).is_empty());
+    let shown = CallIndex::new(g, &codescape_layout::LayoutOptions { show_logging: true, ..Default::default() });
+    assert_eq!(shown.calls(run).len(), 2);
 }

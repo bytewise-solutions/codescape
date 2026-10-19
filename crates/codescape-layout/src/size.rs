@@ -1,5 +1,5 @@
 use crate::LayoutOptions;
-use codescape_format::{ArchivedGraph, FieldView, NodeFlags, NodeId, NodeKind, SubKind, Visibility};
+use codescape_format::{ArchivedGraph, FieldView, Lang, NodeFlags, NodeId, NodeKind, SubKind, Visibility};
 
 pub const CARD_TOP: f32 = 34.0;
 pub const CARD_ROW: f32 = 13.0;
@@ -11,13 +11,13 @@ pub fn card_fields<'a>(g: &'a ArchivedGraph, node: NodeId, opts: &'a LayoutOptio
     let listed = g.kind(node) == NodeKind::Type && opts.card.fields;
     g.fields(node)
         .filter(move |f| listed && (opts.card.private || f.visibility != Visibility::Private))
-        .filter(move |f| opts.show_logging || !is_logging_type(f.ty, &opts.logging_types))
+        .filter(move |f| opts.show_logging || !is_logging_type(f.ty, g.lang(node), &opts.logging_types))
 }
 
-pub fn is_logging_type(ty: &str, names: &[String]) -> bool {
+pub fn is_logging_type(ty: &str, lang: Lang, names: &[(Lang, String)]) -> bool {
     let simple = ty.split('<').next().unwrap_or(ty).trim_start_matches(['*', '&', '[', ']', ' ']);
     let simple = simple.rsplit(['.', ':']).next().unwrap_or(simple);
-    names.iter().any(|n| n == simple)
+    names.iter().any(|(l, n)| *l == lang && n == simple)
 }
 
 pub fn card_field_rows(g: &ArchivedGraph, node: NodeId, opts: &LayoutOptions) -> (usize, usize) {

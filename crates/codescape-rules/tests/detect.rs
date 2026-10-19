@@ -610,7 +610,13 @@ fn loggers_are_flagged() {
     let child = fx.ty(j, "c.Sink", &["c.Logger"], &[]);
     let service = fx.ty(j, "c.Service", &[], &[]);
     let blogger = fx.ty(j, "c.Blogger", &[], &[]);
+    let gofile = fx.file("svc", "svc/log.go", Lang::Go, false, &[]);
+    let go_entry = fx.ty(gofile, "x.Entry", &[], &[]);
+    let java_log = fx.ty(j, "c.Log", &[], &[]);
     fx.run(&builtins());
+    for n in [go_entry, java_log] {
+        assert!(!fx.b.flags(n).contains(NodeFlags::LOGGING), "{} is a domain name", fx.b.name(n));
+    }
     for n in [audit, logger, child] {
         assert!(fx.b.flags(n).contains(NodeFlags::LOGGING), "{} should be logging", fx.b.name(n));
     }

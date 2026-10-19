@@ -1,5 +1,5 @@
 use codescape::view::{ViewItem, layout_options, view_items};
-use codescape_format::{GraphBuilder, IndexFile, write_graph};
+use codescape_format::{GraphBuilder, IndexFile, Lang, write_graph};
 use codescape_index::{Key, SettingsPaths, SettingsStore, View};
 use codescape_layout::LayoutOptions;
 use codescape_rules::VisualRules;
@@ -46,7 +46,7 @@ fn logging_is_off_by_default_and_its_types_come_from_the_packs() {
     let visual = codescape_rules::load_packs(None, None, &Default::default()).unwrap().visual();
     let o = codescape::view::map_options(g.graph(), s.settings(), &visual);
     assert!(!o.show_logging);
-    assert!(o.logging_types.iter().any(|t| t == "Logger"));
+    assert!(o.logging_types.contains(&(Lang::Java, "Logger".to_string())) && !o.logging_types.iter().any(|(_, t)| t == "Entry"));
     let (_t, s) = store("[view]\nlogging = true\n");
     assert!(layout_options(s.settings(), &VisualRules::default()).show_logging);
 }

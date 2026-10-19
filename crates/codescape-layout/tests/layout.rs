@@ -814,17 +814,19 @@ fn logger_fields_stay_off_the_card_unless_logging_is_shown() {
     b.set_detail(log, "org.slf4j.Logger<Owner>");
     let repo = b.add_node(t, NodeKind::Member, SubKind::Field, "owners", Lang::Java);
     b.set_detail(repo, "OwnerRepository");
+    let entry = b.add_node(t, NodeKind::Member, SubKind::Field, "counts", Lang::Java);
+    b.set_detail(entry, "Map.Entry<String, Integer>");
     let lg = b.add_node(b.root(), NodeKind::Type, SubKind::Class, "AuditLogger", Lang::Java);
     b.add_flags(lg, NodeFlags::LOGGING);
     let (_d, f) = open(b);
     let g = f.graph();
     let t = g.children(g.root()).start;
     let lg = t + 1;
-    let base = LayoutOptions { logging_types: vec!["Logger".into()], ..Default::default() };
-    assert_eq!(card_field_rows(g, t, &base).0, 1);
-    assert_eq!(card_fields(g, t, &base).map(|f| f.name).collect::<Vec<_>>(), ["owners"]);
+    let base = LayoutOptions { logging_types: vec![(Lang::Java, "Logger".into()), (Lang::Go, "Entry".into())], ..Default::default() };
+    assert_eq!(card_field_rows(g, t, &base).0, 2);
+    assert_eq!(card_fields(g, t, &base).map(|f| f.name).collect::<Vec<_>>(), ["owners", "counts"]);
     let shown = LayoutOptions { show_logging: true, ..base.clone() };
-    assert_eq!(card_field_rows(g, t, &shown).0, 2);
+    assert_eq!(card_field_rows(g, t, &shown).0, 3);
     assert!(base.hides(g, lg) && !shown.hides(g, lg));
 }
 

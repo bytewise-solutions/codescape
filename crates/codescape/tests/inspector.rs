@@ -147,19 +147,30 @@ fn used_by_leaves_out_tests_while_tests_are_hidden() {
 }
 
 #[test]
-fn used_by_leaves_out_loggers_without_counting_them_as_tests() {
+fn used_by_leaves_out_logger_calls_without_counting_them_as_tests() {
     let mut b = GraphBuilder::new("p");
-    let m = b.add_node(b.root(), NodeKind::Module, SubKind::None, "m", Lang::Go);
-    let t = b.add_node(m, NodeKind::Type, SubKind::Struct, "T", Lang::Go);
-    b.add_node(t, NodeKind::Member, SubKind::Method, "plain", Lang::Go);
-    let log = b.add_node(t, NodeKind::Member, SubKind::Method, "logCall", Lang::Go);
-    b.add_flags(log, NodeFlags::LOGGING);
+    let m = b.add_node(b.root(), NodeKind::Module, SubKind::None, "m", Lang::Java);
+    let t = b.add_node(m, NodeKind::Type, SubKind::Class, "Service", Lang::Java);
+    b.add_node(t, NodeKind::Member, SubKind::Method, "plain", Lang::Java);
+    let lg = b.add_node(m, NodeKind::Type, SubKind::Class, "AuditLogger", Lang::Java);
+    b.add_flags(lg, NodeFlags::LOGGING);
+    b.add_node(lg, NodeKind::Member, SubKind::Method, "record", Lang::Java);
+    let ext = b.add_node(b.root(), NodeKind::External, SubKind::None, "slf4j", Lang::Java);
+    let ext_ty = b.add_node(ext, NodeKind::Type, SubKind::Interface, "Logger", Lang::Java);
+    b.add_flags(ext_ty, NodeFlags::EXTERNAL);
+    let info = b.add_node(ext_ty, NodeKind::Member, SubKind::Method, "info", Lang::Java);
+    b.add_flags(info, NodeFlags::EXTERNAL);
+    let other = b.add_node(ext, NodeKind::Type, SubKind::Interface, "Clock", Lang::Java);
+    b.add_flags(other, NodeFlags::EXTERNAL);
+    let now = b.add_node(other, NodeKind::Member, SubKind::Method, "now", Lang::Java);
+    b.add_flags(now, NodeFlags::EXTERNAL);
     let dir = tempfile::tempdir().unwrap();
     write_graph(&b.finish(), &dir.path().join("g")).unwrap();
     let file = IndexFile::open(&dir.path().join("g")).unwrap();
     let g = file.graph();
-    let both = [named(g, "plain"), named(g, "logCall")];
-    assert_eq!(visible_links(g, &both, &codescape_layout::LayoutOptions::default()), (vec![both[0]], 0));
-    let opts = codescape_layout::LayoutOptions { show_logging: true, ..Default::default() };
-    assert_eq!(visible_links(g, &both, &opts), (both.to_vec(), 0));
+    let all = [named(g, "plain"), named(g, "record"), named(g, "info"), named(g, "now")];
+    let hiding = codescape_layout::LayoutOptions { logging_types: vec![(Lang::Java, "Logger".into())], ..Default::default() };
+    assert_eq!(visible_links(g, &all, &hiding), (vec![all[0], all[3]], 0));
+    let showing = codescape_layout::LayoutOptions { show_logging: true, ..hiding };
+    assert_eq!(visible_links(g, &all, &showing), (all.to_vec(), 0));
 }

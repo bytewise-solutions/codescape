@@ -24,4 +24,4 @@ noise = { name_suffixes = ["Exception"], supertype_suffixes = ["Exception", "Thr
 
 [[rule]]
 id = "java-core.logging"
-logging = { type_names = ["Logger", "Log", "LoggerFactory", "LogManager"], name_suffixes = ["Logger", "Logging"] }
+logging = { type_names = ["Logger", "LoggerFactory", "LogManager"], name_suffixes = ["Logger", "Logging"] }
