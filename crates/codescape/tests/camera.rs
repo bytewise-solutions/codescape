@@ -76,10 +76,10 @@ fn deep_zoom_stays_precise() {
 #[test]
 fn reading_a_tall_card_zooms_until_its_file_opens_with_its_top_in_view() {
     let card = Rect::new(0.0, 0.0, 100.0, 1000.0);
-    assert!(100.0 * Camera::fit(card, VIEW).zoom < (VIEW.w * codescape::canvas::FILE_VIEW_SHARE) as f64, "fitting alone leaves it too narrow");
+    assert!(100.0 * Camera::fit(card, VIEW).zoom < codescape::canvas::FILE_OPEN_PX as f64, "fitting alone leaves it too narrow");
     let cam = Camera::reading(card, VIEW);
     let r = cam.world_to_screen_rect(card.into(), VIEW);
-    assert!(r.w >= VIEW.w * codescape::canvas::FILE_VIEW_SHARE, "{} px wide", r.w);
+    assert!(r.w >= codescape::canvas::FILE_OPEN_PX, "{} px wide", r.w);
     assert!(r.y >= VIEW.y && r.y < VIEW.y + VIEW.h * 0.1, "top at {}", r.y);
     assert!((r.center()[0] - VIEW.center()[0]).abs() < 1.0);
     let wide = Rect::new(0.0, 0.0, 1000.0, 300.0);

@@ -499,3 +499,22 @@ fn aiming_at_a_nested_type_lets_it_grow_instead_of_opening_its_outer_file() {
     let on_bodies = at(&mut cache, [bodies.x + 4.0, bodies.bottom() - 4.0]);
     assert!(on_bodies.boxes.iter().any(|b| b.node == outer && b.source), "aiming at Records itself still opens its file");
 }
+
+#[test]
+fn a_file_opens_at_the_same_zoom_whatever_the_view_width() {
+    let fx = fixture();
+    let g = fx.file.graph();
+    let mut cache = LayoutCache::new(Vec::new(), LayoutOptions::default());
+    let api = node(g, &["left", "left.api", "T"]);
+    let r = world_rect(g, &mut cache, api).unwrap();
+    let narrow = VIEW;
+    let wide = Rect::new(0.0, 0.0, 2400.0, 800.0);
+    for (px, opens) in [(450.0, true), (300.0, false)] {
+        let cam = Camera { center: r.center(), zoom: px / r.w as f64 };
+        for view in [narrow, wide] {
+            let s = build_scene_at(g, &mut cache, &cam, view, &VisualRules::default(), None, view.center(), &[]);
+            let b = s.boxes.iter().find(|b| b.node == api).unwrap();
+            assert_eq!(b.source, opens, "{px} px box in a {} px view", view.w);
+        }
+    }
+}

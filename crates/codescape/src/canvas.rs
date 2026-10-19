@@ -12,7 +12,7 @@ pub const OPEN_THRESHOLD_PX: f32 = 220.0;
 pub const MIN_DRAW_PX: f32 = 3.0;
 pub const MIN_LABEL_PX: f32 = 7.0;
 pub const MIN_CHILD_PX: f32 = 36.0;
-pub const FILE_VIEW_SHARE: f32 = 0.45;
+pub const FILE_OPEN_PX: f32 = 380.0;
 pub const MIN_ROW_PX: f32 = 7.0;
 
 #[derive(Clone, Debug, PartialEq)]
@@ -327,7 +327,7 @@ impl Builder<'_> {
             NodeKind::Member => g.parent(node).is_some_and(|p| g.kind(p) == NodeKind::Package),
             _ => false,
         };
-        let wide = rect.w >= FILE_VIEW_SHARE * self.view.w;
+        let wide = rect.w >= FILE_OPEN_PX;
         let nested = shown.iter().any(|&c| g.kind(c) == NodeKind::Type);
         let chosen = if self.open_files.is_empty() {
             rect.contains(self.anchor) && !(nested && file_level && wide && self.anchor_on_nested_type(node, world))
