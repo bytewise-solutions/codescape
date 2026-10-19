@@ -77,3 +77,25 @@ fn calls_record_the_line_they_are_made_on() {
     assert!(lines.contains(&("New", Some(6))), "{lines:?}");
     assert!(lines.contains(&("Add", Some(7))), "{lines:?}");
 }
+
+#[test]
+fn a_class_holding_an_entry_point_is_used() {
+    let tmp = tempfile::tempdir().unwrap();
+    let dir = tmp.path().join("proj");
+    std::fs::create_dir_all(dir.join("src/main/java/b")).unwrap();
+    std::fs::write(dir.join("settings.gradle"), "rootProject.name = 'proj'\n").unwrap();
+    std::fs::write(dir.join("build.gradle"), "apply plugin: 'java'\n").unwrap();
+    std::fs::write(
+        dir.join("src/main/java/b/BotLauncher.java"),
+        "package b;\n\npublic class BotLauncher {\n    public static void main(String[] args) {\n        run();\n    }\n\n    static void run() {}\n\n    public void stale() {}\n}\n",
+    )
+    .unwrap();
+    let cfg = ProjectConfig { index: Some(tmp.path().join("i.codescape")), ..Default::default() };
+    let file = IndexFile::open(&index_project(&dir, &cfg, &|_| {}).unwrap().path).unwrap();
+    let g = file.graph();
+    let a = analyse(g, &dir);
+    let named = |name: &str| (0..g.node_count() as NodeId).find(|&n| g.name(n) == name).unwrap_or_else(|| panic!("no {name}"));
+    assert_eq!(a.usage[named("BotLauncher") as usize], Usage::Used, "it holds the main");
+    assert_eq!(a.usage[named("run") as usize], Usage::Used);
+    assert_ne!(a.usage[named("stale") as usize], Usage::Used, "other members are still judged on their own");
+}

@@ -102,13 +102,23 @@ pub fn analyse(g: &ArchivedGraph, root: &Path) -> Analysis {
         entry[ep.node.to_native() as usize] = true;
     }
     let entered = |n: NodeId| g.path(n).into_iter().any(|p| entry[p as usize]);
+    let mut holds_entry = vec![false; count];
+    for ep in g.entries() {
+        for p in g.path(ep.node.to_native()) {
+            holds_entry[p as usize] = true;
+        }
+    }
     let mut usage = vec![Usage::Used; count];
     for n in 0..count as NodeId {
-        if !matches!(g.kind(n), NodeKind::Type | NodeKind::Member) || set_aside(g, n) || main_use[n as usize] || entered(n) {
+        if !matches!(g.kind(n), NodeKind::Type | NodeKind::Member) || set_aside(g, n) || main_use[n as usize] || entered(n) || holds_entry[n as usize] {
             continue;
         }
         let owner = g.parent(n).filter(|&p| g.kind(p) == NodeKind::Type);
-        if owner.is_some_and(|o| !main_use[o as usize] && !entered(o)) || (is_constructor(g, n) && owner.is_some()) || file_body(g, n) || overrides(g, n) {
+        if owner.is_some_and(|o| !main_use[o as usize] && !entered(o) && !holds_entry[o as usize])
+            || (is_constructor(g, n) && owner.is_some())
+            || file_body(g, n)
+            || overrides(g, n)
+        {
             continue;
         }
         usage[n as usize] = if test_use[n as usize] {
