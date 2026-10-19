@@ -11,6 +11,7 @@ pub mod minimap;
 pub mod panels;
 pub mod reach;
 pub mod reading;
+pub mod refs;
 pub mod review_view;
 pub mod search;
 pub mod sequence;

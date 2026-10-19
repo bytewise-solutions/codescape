@@ -44,6 +44,8 @@ struct Args {
     structure: bool,
     #[arg(long, help = "With --screenshot: open the keyboard shortcuts editor")]
     keys: bool,
+    #[arg(long, help = "With --screenshot: underline every name in the open file that Ctrl+click follows")]
+    links: bool,
 }
 
 fn main() -> eframe::Result {
@@ -75,6 +77,7 @@ fn main() -> eframe::Result {
         find: args.find,
         structure: args.structure,
         keys: args.keys,
+        links: args.links,
     });
     eframe::run_native("Codescape", options, Box::new(move |cc| Ok(Box::new(codescape::app::CodescapeApp::new(cc, args.dir, args.config, shot)))))
 }

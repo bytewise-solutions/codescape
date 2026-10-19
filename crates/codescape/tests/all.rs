@@ -8,6 +8,7 @@ mod links;
 mod panels;
 mod reach;
 mod reading;
+mod refs;
 mod review;
 mod scene;
 mod search;

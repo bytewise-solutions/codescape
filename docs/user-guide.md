@@ -42,6 +42,7 @@ tick in View is remembered for each project.
 | Jump to a name | `Ctrl+K`, type, `Enter` |
 | Find text in the open file | `Ctrl+F`, type; `Enter` / `Shift+Enter` for the next / previous match |
 | Go to a method of the open file | `Ctrl+Shift+O`, type part of its name, `Enter` |
+| Go to a definition from the code | hold `Ctrl` over a name in the open file (it underlines), click |
 | Go back up | click a breadcrumb segment, or the minimap |
 
 Keyboard (press `?` or `F1`, or **Help ▸ Shortcuts**, for the full cheatsheet with mouse gestures). The shortcuts
@@ -85,8 +86,9 @@ enough to read.
   wheel, pinch, `+` `−`) changes only the text size; zoom out past the smallest size, or press `Esc`, to go back to
   the map. The wheel and dragging scroll the file, sideways too (horizontal wheel, `Shift` + wheel or a sideways
   drag), and so do `Page Up`/`Page Down`/`Home`/`End`. It opens at the type's first line. The type's own lines and
-  its methods sit on a light band. Types that hold other
-  boxes (an interface with its implementations) stay boxes. Lines are read from disk.
+  its methods sit on a light band. Hold `Ctrl` and point at a name: the name the index resolved is underlined and
+  `Ctrl`+click opens its definition (a field leads to its class); names it could not resolve stay plain. Types that
+  hold other boxes (an interface with its implementations) stay boxes. Lines are read from disk.
 - **Quiet arrows.** Every dependency is drawn, but faint, slightly stronger for the heaviest ones in a container. Hover
   or select a box and its own arrows light up at full strength, as thick as the number of classes they link. Turn
   **View ▸ Quiet arrows** off to draw every arrow by its weight instead.
@@ -194,9 +196,9 @@ too).
 
 ```sh
 codescape <dir> --screenshot out.png [--focus NAME] [--entry LABEL] [--zoom FACTOR] [--settings] [--review REV] [--review-target REV] [--review-by-commit]
-         [--open METHOD] [--sequence METHOD] [--map-only] [--fly NAME]
+         [--open METHOD] [--sequence METHOD] [--map-only] [--fly NAME] [--links]
 ```
 
 Renders one frame after zooming to the first node matching `NAME`, selecting an entry point, opening the settings
 window and/or reviewing (base `REV`, `main` for the merge-base; another target; commit by commit), writes a PNG
-and exits.
+and exits. `--links` underlines every name of the open file that `Ctrl`+click follows.

@@ -23,6 +23,7 @@ pub struct ShotPlan {
     pub find: Option<String>,
     pub structure: bool,
     pub keys: bool,
+    pub links: bool,
 }
 
 pub struct Shot {

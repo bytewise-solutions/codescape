@@ -87,6 +87,7 @@ pub const CHEATSHEET: &[(&str, &[(&str, &str)])] = &[
             ("Ctrl + wheel, + −", "in an open file, change the text size"),
             ("Double-click a method row", "open the file at that method"),
             ("Click in the code", "select the method there; S for its sequence diagram"),
+            ("Ctrl+click a name", "go to its definition (Ctrl alone underlines it)"),
             ("Wheel / Shift + wheel / drag", "scroll the file down / sideways"),
             ("Page Up Page Down Home End", "scroll the file"),
             ("Drag the scrollbar", "move through the file"),

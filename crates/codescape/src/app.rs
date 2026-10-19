@@ -13,6 +13,7 @@ use crate::inspector;
 use crate::keys::{Action as KeyAction, Keymap};
 use crate::panels::{EntryGroupView, group_entries};
 use crate::reading::{fill_view, leave_zoom, level_node, zoom_text};
+use crate::refs::FileRefs;
 use crate::review_view::{CommitStep, ItemKind, Limits, MarkState, ReviewItem, ReviewMarks, Risk, by_risk, items_with as review_items, step as review_step};
 use crate::search::{self, SearchIndex, member_at_line};
 use crate::settings_window::{self, SettingsForm};
@@ -479,6 +480,9 @@ struct Project {
     reading: Option<(NodeId, f32)>,
     file_scroll: HashMap<NodeId, f32>,
     file_hscroll: HashMap<NodeId, f32>,
+    file_refs: std::cell::RefCell<HashMap<NodeId, std::rc::Rc<FileRefs>>>,
+    link_hover: Option<(NodeId, usize, usize, usize)>,
+    show_links: bool,
     scripted: bool,
     scroll_drag: Option<NodeId>,
     review: Option<ReviewState>,
@@ -696,6 +700,9 @@ impl Project {
             reading: None,
             file_scroll: HashMap::new(),
             file_hscroll: HashMap::new(),
+            file_refs: Default::default(),
+            link_hover: None,
+            show_links: false,
             scripted: false,
             scroll_drag: None,
             review: None,
@@ -771,6 +778,7 @@ impl Project {
         self.map_panel_open |= plan.map_panel;
         self.shortcuts_open |= plan.shortcuts;
         self.keys_open |= plan.keys;
+        self.show_links |= plan.links;
         let reviewing = plan.review.is_some() || plan.review_target.is_some() || plan.review_by_commit;
         if reviewing {
             self.deferred_plan = Some(plan.clone());
@@ -2247,12 +2255,16 @@ impl Project {
         let mut clicked_arrow = None;
         let mut display = None;
         let mut details_toggle: Option<(NodeId, bool)> = None;
+        let mut follow = None;
+        let ctrl = ui.input(|i| i.modifiers.ctrl || i.modifiers.command);
         if resp.clicked()
             && let Some(p) = resp.interact_pointer_pos()
         {
             let root = self.cache.shared(g, g.root());
             let (legend, legend_toggle) = self.legend_rects();
-            if let Some(node) = self.scrollbar_at(p) {
+            if let Some((.., target)) = ctrl.then(|| self.link_at(p)).flatten() {
+                follow = Some(target);
+            } else if let Some(node) = self.scrollbar_at(p) {
                 if let Some(v) = self.pointer_scroll(node, p) {
                     self.file_scroll.insert(node, v);
                 }
@@ -2315,6 +2327,7 @@ impl Project {
             self.scene.boxes.iter().filter(|b| b.source).filter_map(|b| Some((b.node, b.rect.y, self.page_font(b)? * LINE_SPACING))).collect();
         self.file_scroll.retain(|n, _| shown.iter().any(|(s, _, _)| s == n));
         self.file_hscroll.retain(|n, _| shown.iter().any(|(s, _, _)| s == n));
+        self.file_refs.borrow_mut().retain(|n, _| shown.iter().any(|(s, _, _)| s == n));
         for (n, y, line_h) in shown {
             let start = g.span(n).0;
             let view_y = self.view.y;
@@ -2332,6 +2345,10 @@ impl Project {
             self.goto_line = None;
         }
         self.scene_ms = started.elapsed().as_secs_f32() * 1000.0;
+        self.link_hover = self.pointer.filter(|_| ctrl).and_then(|p| self.link_at(p)).map(|(node, line, col, len, _)| (node, line, col, len));
+        if self.link_hover.is_some() {
+            ui.ctx().set_cursor_icon(egui::CursorIcon::PointingHand);
+        }
         self.paint(&painter);
         let root = self.cache.shared(g, g.root());
         if self.reading.is_none() {
@@ -2340,6 +2357,9 @@ impl Project {
         }
         if let Some((a, b)) = clicked_arrow {
             self.open_arrow(a, b);
+        }
+        if let Some(t) = follow {
+            self.open_member_at(t, None);
         }
         if let Some(n) = clicked_box {
             self.set_focus(n, None, false, true);
@@ -2746,6 +2766,37 @@ impl Project {
         (line >= 0.0).then(|| member_at_line(self.file.graph(), node, line as u32 + 1)).flatten()
     }
 
+    fn file_refs(&self, node: NodeId) -> Option<std::rc::Rc<FileRefs>> {
+        if let Some(refs) = self.file_refs.borrow().get(&node) {
+            return Some(refs.clone());
+        }
+        let g = self.file.graph();
+        let raw = self.source.borrow_mut().raw(g.file(node)?)?;
+        let refs = std::rc::Rc::new(FileRefs::new(g, node, &raw));
+        self.file_refs.borrow_mut().insert(node, refs.clone());
+        Some(refs)
+    }
+
+    fn link_at(&self, p: Pos2) -> Option<(NodeId, usize, usize, usize, NodeId)> {
+        let node = self.file_page_at(p)?;
+        let b = self.scene.boxes.iter().find(|b| b.node == node && b.source)?;
+        let size = self.page_font(b)?;
+        let total = self.source.borrow_mut().file(self.file.graph().file(node)?)?.len();
+        if !self.file_text_area(b, size, total).contains(p) {
+            return None;
+        }
+        let line_h = size * LINE_SPACING;
+        let top = self.file_page(b).top() + 6.0 - self.file_scroll.get(&node).copied().unwrap_or(0.0) * line_h;
+        let gutter = total.to_string().len() as f32 * advance(size) + 2.0 * advance(size);
+        let x = p.x - (b.rect.x + gutter + advance(size)) + self.file_hscroll.get(&node).copied().unwrap_or(0.0);
+        let (line, col) = (((p.y - top) / line_h).floor(), (x / advance(size)).floor());
+        if line < 0.0 || col < 0.0 {
+            return None;
+        }
+        let (col, len, target) = self.file_refs(node)?.at(line as usize + 1, col as usize)?;
+        Some((node, line as usize + 1, col, len, target))
+    }
+
     fn file_metrics(&self, node: NodeId) -> Option<(f32, usize, usize)> {
         let b = self.scene.boxes.iter().find(|b| b.node == node && b.source)?;
         let line_h = self.page_font(b)? * LINE_SPACING;
@@ -2854,6 +2905,19 @@ impl Project {
                 job.append(&text, 0.0, egui::TextFormat { font_id: mono.clone(), color, ..Default::default() });
             }
             text_clip.galley(Pos2::new(b.rect.x + gutter + advance(size) - hscroll, y), text_clip.layout_job(job), style::TEXT);
+        }
+        let mut links: Vec<(usize, usize, usize)> = self.link_hover.filter(|h| h.0 == b.node).map(|(_, l, c, n)| (l, c, n)).into_iter().collect();
+        if self.show_links
+            && let Some(refs) = self.file_refs(b.node)
+        {
+            for (i, l) in lines.iter().enumerate().take(last).skip(first) {
+                links.extend((0..l.chars().count()).filter_map(|c| refs.at(i + 1, c).filter(|r| r.0 == c)).map(|(c, n, _)| (i + 1, c, n)));
+            }
+        }
+        for (line, col, len) in links {
+            let x = b.rect.x + gutter + advance(size) * (1.0 + col as f32) - hscroll;
+            let y = top + (line - 1) as f32 * line_h + size * 1.15;
+            text_clip.line_segment([Pos2::new(x, y), Pos2::new(x + advance(size) * len as f32, y)], Stroke::new((size / 12.0).max(1.0), style::ACCENT));
         }
         let Some(d) = diff else { return };
         let mut hovered: Option<(f32, &Vec<String>)> = None;

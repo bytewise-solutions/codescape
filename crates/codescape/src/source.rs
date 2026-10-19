@@ -6,8 +6,9 @@ use std::sync::Arc;
 pub const FILE_MIN_PT: f32 = 7.0;
 const FILE_COLUMNS: f32 = 100.0;
 const MONO_ADVANCE: f32 = 0.62;
+const GLYPH_ADVANCE: f32 = 1233.0 / 2048.0;
 pub const LINE_SPACING: f32 = 1.25;
-const TAB: &str = "    ";
+pub(crate) const TAB: &str = "    ";
 
 const GO_WORDS: &[&str] = &[
     "break",
@@ -181,22 +182,30 @@ const CHAR_LITERAL_MAX: usize = 4;
 
 pub struct SourceCache {
     root: PathBuf,
+    raw: HashMap<String, Option<Arc<Vec<String>>>>,
     files: HashMap<String, Option<Arc<Vec<String>>>>,
 }
 
 impl SourceCache {
     pub fn new(root: &Path) -> SourceCache {
-        SourceCache { root: root.to_path_buf(), files: HashMap::new() }
+        SourceCache { root: root.to_path_buf(), raw: HashMap::new(), files: HashMap::new() }
+    }
+
+    pub fn raw(&mut self, file: &str) -> Option<Arc<Vec<String>>> {
+        let root = &self.root;
+        self.raw
+            .entry(file.to_string())
+            .or_insert_with(|| std::fs::read_to_string(root.join(file)).ok().map(|s| Arc::new(s.lines().map(str::to_string).collect())))
+            .clone()
     }
 
     pub fn file(&mut self, file: &str) -> Option<Arc<Vec<String>>> {
-        let root = &self.root;
-        self.files
-            .entry(file.to_string())
-            .or_insert_with(|| {
-                std::fs::read_to_string(root.join(file)).ok().map(|s| Arc::new(s.lines().map(|l| l.replace('\t', TAB).trim_end().to_string()).collect()))
-            })
-            .clone()
+        if let Some(lines) = self.files.get(file) {
+            return lines.clone();
+        }
+        let lines = self.raw(file).map(|raw| Arc::new(raw.iter().map(|l| l.replace('\t', TAB).trim_end().to_string()).collect()));
+        self.files.insert(file.to_string(), lines.clone());
+        lines
     }
 }
 
@@ -206,7 +215,7 @@ pub fn file_font(box_width: f32) -> Option<f32> {
 }
 
 pub fn advance(font: f32) -> f32 {
-    font * MONO_ADVANCE
+    font * GLYPH_ADVANCE
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
