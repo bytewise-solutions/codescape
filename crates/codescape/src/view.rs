@@ -102,7 +102,8 @@ pub fn resolve_hidden(g: &ArchivedGraph, s: &Settings) -> (HashSet<NodeId>, Hash
 
 pub fn view_items(s: &Settings) -> Vec<ViewItem> {
     let item = |v: View| ViewItem { key: Key::View(v), label: v.label().into(), checked: s.view(v).value };
-    let in_menu = [View::Tests, View::TestDeps, View::Details, View::Errors, View::Logging, View::Wiring, View::Complexity, View::Unused];
+    let in_menu =
+        [View::Tests, View::TestDeps, View::Details, View::Errors, View::Logging, View::Wiring, View::Complexity, View::ComplexityColour, View::Unused];
     let mut out: Vec<ViewItem> = in_menu.into_iter().map(item).collect();
     for f in &s.filters {
         let name = &f.value.name;

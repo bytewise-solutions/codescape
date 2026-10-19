@@ -297,3 +297,21 @@ fn marks_on_one_line_merge_and_keep_every_flag_for_the_tooltip() {
     assert_eq!(marks[1].kinds(), [FlagKind::Complex, FlagKind::Unused]);
     assert_eq!(marks[1].flags.iter().map(|f| f.short.as_str()).collect::<Vec<_>>(), ["b", "c", "a"]);
 }
+
+#[test]
+fn the_worst_complexity_climbs_to_every_shown_ancestor_and_skips_hidden_code() {
+    let fx = fixture();
+    let g = fx.file.graph();
+    let worst = worst_complexity(g, &LayoutOptions::default());
+    assert_eq!(worst.get(&node(g, "shop.Svc.total")), Some(&14));
+    assert_eq!(worst.get(&node(g, "shop.Svc")), Some(&14));
+    assert_eq!(worst.get(&node(g, "shop.Repo")), Some(&18));
+    assert_eq!(worst.get(&node(g, "shop")), Some(&18), "the test's 30 is hidden by default");
+    assert_eq!(worst.get(&g.root()), Some(&18));
+    assert!(!worst.contains_key(&node(g, "shop.SvcTest")));
+    let shown = worst_complexity(
+        g,
+        &LayoutOptions { show_tests: true, hidden: NodeFlags(LayoutOptions::default().hidden.0 & !NodeFlags::TEST.0), ..LayoutOptions::default() },
+    );
+    assert_eq!(shown.get(&node(g, "shop")), Some(&30));
+}

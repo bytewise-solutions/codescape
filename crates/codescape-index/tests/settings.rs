@@ -322,3 +322,9 @@ fn hotspot_period_defaults_to_a_year_and_reads_from_settings() {
     assert_eq!(store.settings().threshold(Threshold::HotspotDays), Sourced { value: 90, layer: Layer::Shared });
     assert_eq!(Threshold::HotspotDays.label(), "Hotspot period (days)");
 }
+
+#[test]
+fn colouring_by_complexity_is_off_by_default() {
+    assert!(!View::ComplexityColour.default_value());
+    assert!(View::ALL.contains(&View::ComplexityColour));
+}

@@ -86,6 +86,7 @@ pub enum LegendSample {
     Pill { color: Color32, text: &'static str },
     Text { text: &'static str },
     Lines,
+    Ramp,
 }
 
 #[derive(Clone, Copy, Debug, Default, PartialEq)]
@@ -102,6 +103,7 @@ pub struct LegendShown {
     pub used_outside: bool,
     pub complexity: bool,
     pub complexity_high: bool,
+    pub complexity_colour: bool,
     pub unused: bool,
     pub added: bool,
     pub changed: bool,
@@ -138,6 +140,7 @@ impl LegendShown {
             used_outside: true,
             complexity: true,
             complexity_high: true,
+            complexity_colour: true,
             unused: true,
             added: true,
             changed: true,
@@ -192,6 +195,7 @@ pub fn legend(on: LegendShown) -> Vec<LegendItem> {
         (on.used_outside, item("used from outside its type", Dot { color: MUTED })),
         (on.complexity, item("complexity from 10", Pill { color: EDGE_SIDEWAYS, text: "10" })),
         (on.complexity_high, item("complexity from 20", Pill { color: EDGE_UP, text: "20" })),
+        (on.complexity_colour, item("box tint: complexity", Ramp)),
         (on.unused, item("unused code", Outline { stroke: EDGE_UP, width: 1.5 })),
         (on.added, item("new", Pill { color: ADDED, text: "NEW" })),
         (on.changed, item("changed", Pill { color: EDGE_SIDEWAYS, text: "+1" })),
@@ -264,3 +268,18 @@ pub fn complexity_hint(value: u16, hint: u16, high: u16) -> Option<Color32> {
         _ => None,
     }
 }
+
+pub const RAMP_COOL: Color32 = Color32::from_rgb(70, 130, 200);
+
+pub fn complexity_ramp(value: u16, hint: u16, high: u16) -> Color32 {
+    let hint = hint.max(2);
+    let high = high.max(hint + 1);
+    if value < hint {
+        let t = f32::from(value.saturating_sub(1)) / f32::from(hint - 1);
+        return tint(RAMP_COOL, EDGE_SIDEWAYS, t);
+    }
+    let t = f32::from((value - hint).min(high - hint)) / f32::from(high - hint);
+    tint(EDGE_SIDEWAYS, EDGE_UP, t)
+}
+
+pub const RAMP_TINT: f32 = 0.3;

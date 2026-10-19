@@ -167,6 +167,7 @@ impl Project {
                     }
                     heading(ui, "HINTS");
                     switch(ui, View::Complexity, None);
+                    switch(ui, View::ComplexityColour, None);
                     switch(ui, View::Unused, None);
                     for t in Threshold::ALL {
                         ui.horizontal(|ui| {

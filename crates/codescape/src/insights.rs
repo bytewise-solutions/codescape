@@ -344,3 +344,18 @@ impl FileMarks {
         self.held.borrow_mut().retain(|n, _| keep(*n));
     }
 }
+
+pub fn worst_complexity(g: &ArchivedGraph, opts: &LayoutOptions) -> HashMap<NodeId, u16> {
+    let mut worst = HashMap::new();
+    for n in 0..g.node_count() as NodeId {
+        let Some(c) = g.complexity(n) else { continue };
+        if g.path(n).iter().any(|&p| opts.hides(g, p)) {
+            continue;
+        }
+        for p in g.path(n) {
+            let w = worst.entry(p).or_insert(0);
+            *w = (*w).max(c);
+        }
+    }
+    worst
+}

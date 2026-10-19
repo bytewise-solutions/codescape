@@ -109,7 +109,10 @@ enough to read.
 - **Complexity hints.** Every function's cyclomatic complexity is counted while indexing (1 + each `if`, loop,
   non-default `case` or extra `match` arm, `catch`, ternary, `&&`, `||`, `??`). From 10 a method row or function box
   carries an amber number, red from 20; a card's header shows its highest. The right panel gives the exact value.
-  **View ▸ Complexity hints** turns them off.
+  **View ▸ Complexity hints** turns them off. Hovering a number explains it: the decisions counted, the nesting and
+  the level it passed, as in the right panel. **View ▸ Colour by complexity** (off by default) also tints every box by
+  the most complex function inside it, on a ramp from blue through amber (at the hint level) to red (at the high
+  level); boxes without functions stay neutral, and code hidden from the map is not counted. The legend shows the ramp.
 - **Review mode.** The **Overview | Review** switch at the top says which mode you are in (Review is greyed out
   outside a git repository). In Review an orange bar picks what to compare: **Base** (by default where the target
   left `main` or `master`) and **Target** (by default the working copy, uncommitted changes included), each from the

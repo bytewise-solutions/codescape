@@ -36,7 +36,7 @@ names = ["Migration$"]         # regexes on type and function names
 shown = false                  # default for View ▸ migrations
 
 [view]
-details = true                 # tests, test_deps, details, errors, logging, wiring, generated, legend, ...
+details = true                 # tests, test_deps, details, errors, logging, wiring, generated, legend, complexity_colour, ...
 private_members = false        # cards: private_members, fields, accessors, constructors
 guessed_calls = false          # arrows: guessed_calls, implements_arrows, import_arrows, quiet_arrows
 complexity_hint = 12           # also complexity_high, many_callers, keep_versions_days, duplicate_tokens, hotspot_days

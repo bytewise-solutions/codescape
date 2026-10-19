@@ -512,6 +512,7 @@ struct Project {
     map_panel_open: bool,
     hide_pattern: String,
     flag_counts: Option<map_panel::FlagCounts>,
+    worst: std::cell::RefCell<Option<(codescape_layout::LayoutOptions, std::rc::Rc<HashMap<NodeId, u16>>)>>,
     pending_hide: Option<map_panel::HideRequest>,
     show_left: bool,
     show_right: bool,
@@ -746,6 +747,7 @@ impl Project {
             map_panel_open: false,
             hide_pattern: String::new(),
             flag_counts: None,
+            worst: Default::default(),
             pending_hide: None,
             show_left: true,
             show_right: true,
@@ -757,6 +759,23 @@ impl Project {
             details_in: Vec::new(),
             pointer: None,
         })
+    }
+
+    fn worst_complexity(&self) -> std::rc::Rc<HashMap<NodeId, u16>> {
+        let opts = self.cache.options();
+        let mut slot = self.worst.borrow_mut();
+        match &*slot {
+            Some((o, w)) if o == opts => w.clone(),
+            _ => {
+                let w = std::rc::Rc::new(crate::insights::worst_complexity(self.file.graph(), opts));
+                *slot = Some((opts.clone(), w.clone()));
+                w
+            }
+        }
+    }
+
+    fn colours_by_complexity(&self) -> bool {
+        self.settings.settings().view(View::ComplexityColour).value
     }
 
     fn levels(&self) -> (u16, u16) {
@@ -2465,6 +2484,13 @@ impl Project {
         }
     }
 
+    fn box_complexity(&self, b: &crate::canvas::SceneBox) -> Option<u16> {
+        if !self.colours_by_complexity() || b.flags.contains(NodeFlags::EXTERNAL) || b.source {
+            return None;
+        }
+        self.worst_complexity().get(&b.node).copied()
+    }
+
     fn paint_box(&self, painter: &egui::Painter, b: &crate::canvas::SceneBox) {
         let r = erect(b.rect);
         let external = b.flags.contains(NodeFlags::EXTERNAL);
@@ -2480,6 +2506,10 @@ impl Project {
         };
         let fill =
             if external { Color32::from_rgb(43, 43, 43) } else { style::tint(style::depth_fill(b.depth, b.open), accent, if b.open { 0.05 } else { 0.12 }) };
+        let fill = match self.box_complexity(b) {
+            Some(v) => style::tint(fill, style::complexity_ramp(v, self.levels().0, self.levels().1), style::RAMP_TINT),
+            None => fill,
+        };
         let fill = if b.dimmed { style::tint(fill, style::BG, 0.6) } else { fill };
         painter.rect_filled(r, 3.0, fill);
         let mut stroke = Stroke::new(if b.open { 1.5 } else { 1.0 }, accent);
@@ -2526,7 +2556,7 @@ impl Project {
         }
         if b.kind == NodeKind::Member && !b.source && b.rect.w > 48.0 {
             let size = (b.rect.h * 0.18).clamp(8.0, 12.0);
-            self.complexity_pill(painter, Pos2::new(b.rect.right() - 6.0, b.rect.y + size), self.file.graph().complexity(b.node), size);
+            self.complexity_pill(painter, Pos2::new(b.rect.right() - 6.0, b.rect.y + size), Some(b.node), size);
         }
         if self.app_counts.contains_key(&b.node) && b.rect.w > 24.0 {
             painter.circle_filled(Pos2::new(b.rect.right() - 9.0, b.rect.y + 9.0), 4.0, style::ENTRY);
@@ -2670,6 +2700,7 @@ impl Project {
             }
             on.lines |= b.source && rv.zip(g.file(b.node)).is_some_and(|(rv, f)| rv.review.file(f).is_some());
         }
+        on.complexity_colour = self.scene.boxes.iter().any(|b| self.box_complexity(b).is_some());
         on.group = !self.scene.frames.is_empty();
         for e in &self.scene.edges {
             on.added_arrow |= rv.is_some_and(|rv| rv.new_arrows.contains(&(e.a, e.b)));
@@ -2776,6 +2807,16 @@ impl Project {
                 }
                 style::LegendSample::Text { text } => {
                     painter.text(sample.left_center(), Align2::LEFT_CENTER, text, FontId::monospace(8.5), style::TEXT);
+                }
+                style::LegendSample::Ramp => {
+                    let (hint, high) = self.levels();
+                    let steps = 9;
+                    for i in 0..steps {
+                        let v = 1 + (u32::from(high) * i / (steps - 1)) as u16;
+                        let w = sample.width() / steps as f32;
+                        let cell = egui::Rect::from_min_size(Pos2::new(sample.min.x + w * i as f32, sample.min.y), egui::vec2(w + 0.5, sample.height()));
+                        painter.rect_filled(cell, 0.0, style::tint(style::BOX_FILL, style::complexity_ramp(v, hint, high), style::RAMP_TINT));
+                    }
                 }
                 style::LegendSample::Lines => {
                     let top = egui::Rect::from_min_size(sample.min, egui::vec2(sample.width(), sample.height() / 2.0));
@@ -3091,7 +3132,7 @@ impl Project {
         if let Some(st) = stereo {
             clip.text(Pos2::new(header.center().x, name_y - title * 1.05), Align2::CENTER_CENTER, st, FontId::proportional(title * 0.75), dim(style::MUTED));
         }
-        let highest = b.rows.iter().filter_map(|r| g.complexity(r.node)).max();
+        let highest = b.rows.iter().filter_map(|r| g.complexity(r.node).map(|c| (c, r.node))).max_by_key(|(c, _)| *c).map(|(_, n)| n);
         self.complexity_pill(&clip, Pos2::new(header.right() - 6.0, header.top() + title * 0.9), highest, (title * 0.8).max(7.0));
         let name = fit_label(g.name(b.node), header.width() - 12.0, title);
         let title_color = if self.selected == Some(b.node) { style::ACCENT } else { dim(style::BOX_TITLE) };
@@ -3160,7 +3201,7 @@ impl Project {
             let base = if g.name(row.node) == "<init>" { g.parent(row.node).map_or("<init>", |t| g.name(t)) } else { g.name(row.node) };
             let vis = g.visibility(row.node).uml();
             let shown = if vis.is_empty() { format!("{base}()") } else { format!("{vis} {base}()") };
-            let mut pill = self.complexity_pill(&clip, Pos2::new(row.rect.right(), r.center().y), g.complexity(row.node), size);
+            let mut pill = self.complexity_pill(&clip, Pos2::new(row.rect.right(), r.center().y), Some(row.node), size);
             if let Some((d, c)) = delta {
                 let galley = clip.layout_no_wrap(d, FontId::proportional(size * 0.85), c);
                 let w = galley.size().x;
@@ -3182,10 +3223,11 @@ impl Project {
         }
     }
 
-    fn complexity_pill(&self, painter: &egui::Painter, right_center: Pos2, value: Option<u16>, size: f32) -> f32 {
-        let Some((v, color)) = value
+    fn complexity_pill(&self, painter: &egui::Painter, right_center: Pos2, node: Option<NodeId>, size: f32) -> f32 {
+        let Some((n, v, color)) = node
+            .and_then(|n| self.file.graph().complexity(n).map(|v| (n, v)))
             .filter(|_| self.settings.settings().view(View::Complexity).value)
-            .and_then(|v| style::complexity_hint(v, self.levels().0, self.levels().1).map(|c| (v, c)))
+            .and_then(|(n, v)| style::complexity_hint(v, self.levels().0, self.levels().1).map(|c| (n, v, c)))
         else {
             return 0.0;
         };
@@ -3194,6 +3236,12 @@ impl Project {
         let r = egui::Rect::from_center_size(right_center - egui::vec2(w / 2.0, 0.0), egui::vec2(w, size * 1.15));
         painter.rect_filled(r, size * 0.55, color);
         painter.galley(r.center() - galley.size() / 2.0, galley, style::BG);
+        if self.pointer.is_some_and(|p| r.contains(p) && painter.clip_rect().contains(p)) {
+            let flags = self.complex_flags(n);
+            if !flags.is_empty() {
+                *self.flag_tip.borrow_mut() = Some((r.left_bottom(), flags));
+            }
+        }
         w + size * 0.3
     }
 

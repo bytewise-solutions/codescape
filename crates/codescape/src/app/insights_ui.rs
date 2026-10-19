@@ -152,6 +152,14 @@ impl Project {
         })
     }
 
+    pub(super) fn complex_flags(&self, node: NodeId) -> Vec<crate::insights::Flag> {
+        let Some(analysis) = self.analysis.clone() else { return Vec::new() };
+        let churn = self.churn.data.clone().flatten();
+        let none = HashMap::new();
+        let all = crate::insights::flags(self.file.graph(), &analysis, churn.as_deref().unwrap_or(&none), self.cache.options(), &self.limits(), node);
+        all.into_iter().filter(|f| f.kind == crate::insights::FlagKind::Complex).collect()
+    }
+
     pub(super) fn refresh_flags(&mut self) {
         let (Some(analysis), Some(n)) = (self.analysis.clone(), self.selected) else { return };
         let churn = self.churn.data.clone().flatten();

@@ -141,3 +141,26 @@ fn no_interface_text_is_smaller_than_eleven_px() {
     assert!(styles.values().all(|f| f.size >= 11.0), "{styles:?}");
     assert!(styles[&egui::TextStyle::Small].size < styles[&egui::TextStyle::Body].size);
 }
+
+#[test]
+fn complexity_ramp_runs_cool_to_hot_anchored_at_the_thresholds() {
+    use codescape::style::complexity_ramp;
+    let (cool, at_hint, at_high) = (complexity_ramp(1, 10, 20), complexity_ramp(10, 10, 20), complexity_ramp(20, 10, 20));
+    assert!(cool.b() > cool.r(), "below the hint is cool: {cool:?}");
+    assert!(at_hint.r() > at_hint.b() && at_hint.g() > at_high.g(), "the hint is warm: {at_hint:?}");
+    assert!(at_high.r() > at_high.g() && at_high.r() > at_high.b(), "the high level is red: {at_high:?}");
+    assert_eq!(complexity_ramp(500, 10, 20), at_high, "beyond high stays at the hot end");
+    assert_eq!(complexity_ramp(0, 10, 20), complexity_ramp(1, 10, 20), "one and zero share the cool end");
+    let greens: Vec<u8> = (10..=20).map(|v| complexity_ramp(v, 10, 20).g()).collect();
+    assert!(greens.windows(2).all(|w| w[0] >= w[1]), "between hint and high the colour only heats up: {greens:?}");
+    let _ = complexity_ramp(5, 20, 10);
+    let _ = complexity_ramp(5, 0, 0);
+}
+
+#[test]
+fn the_legend_shows_the_complexity_ramp_only_when_the_map_is_tinted() {
+    use codescape::style::{LegendSample, LegendShown, legend};
+    assert!(legend(LegendShown::all()).iter().any(|i| matches!(i.sample, LegendSample::Ramp)));
+    assert!(legend(LegendShown { complexity_colour: true, ..Default::default() }).iter().any(|i| matches!(i.sample, LegendSample::Ramp)));
+    assert!(legend(LegendShown::default()).is_empty());
+}

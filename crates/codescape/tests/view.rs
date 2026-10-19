@@ -72,6 +72,7 @@ fn view_menu_lists_built_in_toggles_then_filters_then_arrows_and_legend() {
             "Logging",
             "Wiring",
             "Complexity hints",
+            "Colour by complexity",
             "Unused code",
             "migrations",
             "generated",
@@ -80,11 +81,11 @@ fn view_menu_lists_built_in_toggles_then_filters_then_arrows_and_legend() {
         ]
     );
     assert_eq!(items[6], ViewItem { key: Key::View(View::Complexity), label: "Complexity hints".into(), checked: true });
-    assert_eq!(items[7], ViewItem { key: Key::View(View::Unused), label: "Unused code".into(), checked: false });
-    assert_eq!(items[8], ViewItem { key: Key::FilterShown("migrations".into()), label: "migrations".into(), checked: false });
-    assert!(items[9].checked);
-    assert_eq!(items[10], ViewItem { key: Key::View(View::QuietArrows), label: "Quiet arrows".into(), checked: true });
-    assert_eq!(items[11], ViewItem { key: Key::View(View::Legend), label: "Legend".into(), checked: true });
+    assert_eq!(items[8], ViewItem { key: Key::View(View::Unused), label: "Unused code".into(), checked: false });
+    assert_eq!(items[9], ViewItem { key: Key::FilterShown("migrations".into()), label: "migrations".into(), checked: false });
+    assert!(items[10].checked);
+    assert_eq!(items[11], ViewItem { key: Key::View(View::QuietArrows), label: "Quiet arrows".into(), checked: true });
+    assert_eq!(items[12], ViewItem { key: Key::View(View::Legend), label: "Legend".into(), checked: true });
 }
 
 #[test]

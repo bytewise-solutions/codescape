@@ -42,6 +42,7 @@ pub enum View {
     Logging,
     Wiring,
     Complexity,
+    ComplexityColour,
     Unused,
     QuietArrows,
     Legend,
@@ -56,7 +57,7 @@ pub enum View {
 }
 
 impl View {
-    pub const ALL: [View; 18] = [
+    pub const ALL: [View; 19] = [
         View::Tests,
         View::TestDeps,
         View::Details,
@@ -64,6 +65,7 @@ impl View {
         View::Logging,
         View::Wiring,
         View::Complexity,
+        View::ComplexityColour,
         View::Unused,
         View::QuietArrows,
         View::Legend,
@@ -78,7 +80,18 @@ impl View {
     ];
 
     pub fn default_value(self) -> bool {
-        !matches!(self, View::Tests | View::TestDeps | View::Details | View::Errors | View::Logging | View::Wiring | View::Unused | View::Generated)
+        !matches!(
+            self,
+            View::Tests
+                | View::TestDeps
+                | View::Details
+                | View::Errors
+                | View::Logging
+                | View::Wiring
+                | View::ComplexityColour
+                | View::Unused
+                | View::Generated
+        )
     }
 
     pub fn label(self) -> &'static str {
@@ -90,6 +103,7 @@ impl View {
             View::Logging => "Logging",
             View::Wiring => "Wiring",
             View::Complexity => "Complexity hints",
+            View::ComplexityColour => "Colour by complexity",
             View::Unused => "Unused code",
             View::QuietArrows => "Quiet arrows",
             View::Legend => "Legend",
@@ -244,6 +258,8 @@ struct ViewFile {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     complexity: Option<bool>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    complexity_colour: Option<bool>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     unused: Option<bool>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     quiet_arrows: Option<bool>,
@@ -345,6 +361,7 @@ impl ViewFile {
             View::Logging => &mut self.logging,
             View::Wiring => &mut self.wiring,
             View::Complexity => &mut self.complexity,
+            View::ComplexityColour => &mut self.complexity_colour,
             View::Unused => &mut self.unused,
             View::QuietArrows => &mut self.quiet_arrows,
             View::Legend => &mut self.legend,
