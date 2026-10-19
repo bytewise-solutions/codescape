@@ -58,7 +58,7 @@ pub const CHEATSHEET: &[(&str, &[(&str, &str)])] = &[
         &[
             ("Wheel", "scroll up and down"),
             ("Shift + wheel", "scroll sideways"),
-            ("Ctrl + wheel", "zoom around the pointer (pinch on a trackpad)"),
+            ("Ctrl + wheel", "zoom at the pointer (or pinch)"),
             ("Drag", "pan"),
             ("+ −", "zoom in / out"),
             ("F", "fit the whole project"),
@@ -70,27 +70,27 @@ pub const CHEATSHEET: &[(&str, &[(&str, &str)])] = &[
     (
         "Select and follow",
         &[
-            ("Click", "select a box or a method row; its links light up"),
+            ("Click", "select a box or method row; links light up"),
             ("← → ↑ ↓", "select the nearest box in that direction"),
-            ("1 2 3", "show neighbours / everything it reaches / everywhere it's used"),
+            ("1 2 3", "neighbours / what it reaches / where it is used"),
             ("Alt+←", "back to the previous selection"),
-            ("Esc", "clear the selection"),
-            ("Ctrl+K", "jump to a name (Up / Down to pick, Enter to go)"),
+            ("Esc", "close the top window; else leave the file, the diagram, the selection"),
+            ("Ctrl+K", "jump to a name (Up / Down, Enter)"),
             ("S", "sequence diagram of the selected method or class"),
         ],
     ),
     (
         "Code",
         &[
-            ("Zoom in close", "a type or function opens its whole file across the map; zoom out or Esc to close it"),
+            ("Zoom in close", "zoom in until a file opens; zoom out or Esc to leave"),
             ("Ctrl + wheel, + −", "in an open file, change the text size"),
             ("Double-click a method row", "open the file at that method"),
             ("Click in the code", "select the method there; S for its sequence diagram"),
             ("Wheel / Shift + wheel / drag", "scroll the file down / sideways"),
-            ("Page Up Page Down Home End", "scroll the file under the pointer or the selected one"),
+            ("Page Up Page Down Home End", "scroll the file"),
             ("Drag the scrollbar", "move through the file"),
             ("Ctrl+F", "find in the open file"),
-            ("Ctrl+Shift+O", "the file's methods; type to filter, Enter to go"),
+            ("Ctrl+Shift+O", "the file's methods; type to filter"),
             ("F3", "next match of the find bar"),
             ("Shift+F3", "previous match of the find bar"),
         ],
@@ -98,7 +98,7 @@ pub const CHEATSHEET: &[(&str, &[(&str, &str)])] = &[
     (
         "Review",
         &[
-            ("Review (top right)", "compare two versions: pick base and target in the review bar"),
+            ("Review (top right)", "compare two versions in the review bar"),
             ("N / P", "next / previous change"),
             ("R", "mark the current change reviewed (again: unmark)"),
             ("[ ]", "previous / next commit, commit by commit"),
@@ -112,7 +112,7 @@ pub const CHEATSHEET: &[(&str, &[(&str, &str)])] = &[
             ("Ctrl+B", "hide / show the left panel"),
             ("Ctrl+I", "hide / show the right panel"),
             ("F11", "hide / show both panels"),
-            ("? or F1", "this cheatsheet; rebind keys in the Help menu"),
+            ("? or F1", "this cheatsheet; rebind in Help menu"),
         ],
     ),
 ];
