@@ -1,3 +1,4 @@
+use crate::insights::{Flag, FlagKind};
 use codescape_format::{ArchivedGraph, Lang, NodeFlags, NodeId, NodeKind, SubKind, Visibility};
 use codescape_layout::{LayoutOptions, display_children};
 use std::collections::BTreeMap;
@@ -80,11 +81,14 @@ pub fn header(g: &ArchivedGraph, n: NodeId) -> Header {
         let lines = end - start + 1;
         format!("{base}:{start}-{end} · {lines} line{}", if lines == 1 { "" } else { "s" })
     });
-    let location = match g.complexity(n) {
-        Some(c) => Some(format!("{} · complexity {c}", location.unwrap_or_default()).trim_start_matches(" · ").to_string()),
-        None => location,
-    };
     Header { kind, name: g.name(n).to_string(), owners, location }
+}
+
+pub fn complexity_line(g: &ArchivedGraph, n: NodeId, flags: &[Flag]) -> Option<(String, String)> {
+    let c = g.complexity(n).filter(|_| !flags.iter().any(|f| f.kind == FlagKind::Complex))?;
+    let facts = crate::insights::complexity_facts(g, n);
+    let why = if facts.is_empty() { "no decision points".to_string() } else { facts.join("; ") };
+    Some((format!("complexity {c}"), format!("Complexity {c}: {why}.")))
 }
 
 pub fn visible_links(g: &ArchivedGraph, list: &[NodeId], opts: &LayoutOptions) -> (Vec<NodeId>, usize) {

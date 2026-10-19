@@ -25,7 +25,8 @@ fn fixture() -> Fx {
     let publish = b.add_node(client, NodeKind::Member, SubKind::Method, "PublishRetrying", Lang::Go);
     let wire = b.add_node(job, NodeKind::Member, SubKind::Function, "provideJobs", Lang::Go);
     b.add_flags(wire, NodeFlags::WIRING);
-    let _ = (ctor, fail, dto, ent, publish);
+    b.set_complexity_detail(fail, 9, &[("if", 4), ("&&", 3), ("catch", 1)], 2);
+    let _ = (ctor, dto, ent, publish);
     let dir = tempfile::tempdir().unwrap();
     write_graph(&b.finish(), &dir.path().join("g")).unwrap();
     let file = IndexFile::open(&dir.path().join("g")).unwrap();
@@ -45,7 +46,7 @@ fn header_says_what_and_where() {
     assert_eq!(h.name, "processJobBatch");
     let owners: Vec<&str> = h.owners.iter().map(|(_, s)| s.as_str()).collect();
     assert_eq!(owners, ["jobProducer", "internal/jobs/producer"]);
-    assert_eq!(h.location.as_deref(), Some("job_producer.go:187-259 · 73 lines · complexity 1"));
+    assert_eq!(h.location.as_deref(), Some("job_producer.go:187-259 · 73 lines"));
     let pkg = header(g, named(g, "messaging"));
     assert_eq!((pkg.kind.as_str(), pkg.location), ("PACKAGE · Go", None));
     assert_eq!(pkg.owners.iter().map(|(_, s)| s.as_str()).collect::<Vec<_>>(), ["job-engine"]);
@@ -173,4 +174,19 @@ fn used_by_leaves_out_logger_calls_without_counting_them_as_tests() {
     assert_eq!(visible_links(g, &all, &hiding), (vec![all[0], all[3]], 0));
     let showing = codescape_layout::LayoutOptions { show_logging: true, ..hiding };
     assert_eq!(visible_links(g, &all, &showing), (all.to_vec(), 0));
+}
+
+#[test]
+fn complexity_is_explained_in_the_header_only_when_no_complex_flag_carries_it() {
+    use codescape::insights::{Flag, FlagKind};
+    let fx = fixture();
+    let g = fx.file.graph();
+    let fail = named(g, "handleFailure");
+    let (text, hover) = complexity_line(g, fail, &[]).unwrap();
+    assert_eq!(text, "complexity 9");
+    assert_eq!(hover, "Complexity 9: 8 decision points — if ×4, && ×3, catch ×1; nesting 2.");
+    let complex = Flag { kind: FlagKind::Complex, short: "complexity 9".into(), explanation: String::new(), links: vec![] };
+    assert_eq!(complexity_line(g, fail, &[complex]), None);
+    assert_eq!(complexity_line(g, named(g, "NewJobDTO"), &[]).unwrap().1, "Complexity 1: no decision points.");
+    assert_eq!(complexity_line(g, named(g, "messaging"), &[]), None);
 }

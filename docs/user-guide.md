@@ -108,7 +108,8 @@ enough to read.
   that live directly in a package (Go, TypeScript, Rust) stay boxes.
 - **Complexity hints.** Every function's cyclomatic complexity is counted while indexing (1 + each `if`, loop,
   non-default `case` or extra `match` arm, `catch`, ternary, `&&`, `||`, `??`). From 10 a method row or function box
-  carries an amber number, red from 20; a card's header shows its highest. The right panel gives the exact value.
+  carries an amber number, red from 20; a card's header shows its highest. The right panel gives the exact value:
+  under the method's header (hover for the breakdown) below the hint, in its FLAGS once it is flagged.
   **View ▸ Complexity hints** turns them off. Hovering a number explains it: the decisions counted, the nesting and
   the level it passed, as in the right panel. **View ▸ Colour by complexity** (off by default) also tints every box by
   the most complex function inside it, on a ramp from amber (at the hint level) to red (at the high level); below the

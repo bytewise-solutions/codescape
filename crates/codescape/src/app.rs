@@ -2043,6 +2043,9 @@ impl Project {
             if let Some(loc) = &h.location {
                 ui.label(egui::RichText::new(loc).small().color(style::MUTED)).on_hover_text(g.file(n).unwrap_or(""));
             }
+            if let Some((text, hover)) = inspector::complexity_line(g, n, self.flags.current()) {
+                ui.label(egui::RichText::new(text).small().color(style::MUTED)).on_hover_text(hover);
+            }
             if let Some((path, by_you, always, hidden, why)) = &shown_state {
                 for w in why {
                     ui.label(egui::RichText::new(format!("Set aside: {w}")).small().color(style::MUTED));

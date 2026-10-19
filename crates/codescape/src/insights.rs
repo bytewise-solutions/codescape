@@ -174,6 +174,20 @@ pub fn compute(g: &ArchivedGraph, analysis: &Analysis, churn: &HashMap<String, u
     }
 }
 
+pub fn complexity_facts(g: &ArchivedGraph, n: NodeId) -> Vec<String> {
+    let (_, parts, nesting) = g.complexity_detail(n).unwrap_or_default();
+    let mut facts = Vec::new();
+    if !parts.is_empty() {
+        let count: u32 = parts.iter().map(|p| u32::from(p.1)).sum();
+        let kinds: Vec<String> = parts.iter().map(|(l, k)| format!("{l} ×{k}")).collect();
+        facts.push(format!("{} — {}", plural(count, "decision point", "decision points"), kinds.join(", ")));
+    }
+    if nesting > 0 {
+        facts.push(format!("nesting {nesting}"));
+    }
+    facts
+}
+
 const NAME_NOWHERE: &str = "its name appears nowhere else in the sources; reflection or a framework could still use it.";
 
 pub fn flags(g: &ArchivedGraph, analysis: &Analysis, churn: &HashMap<String, u32>, opts: &LayoutOptions, limits: &Limits, n: NodeId) -> Vec<Flag> {
@@ -184,16 +198,7 @@ pub fn flags(g: &ArchivedGraph, analysis: &Analysis, churn: &HashMap<String, u32
     }
     let flag = |kind: FlagKind, short: String, explanation: String, links: Vec<NodeId>| Flag { kind, short, explanation, links };
     if let Some(c) = cx.complex(n) {
-        let (_, parts, nesting) = g.complexity_detail(n).unwrap_or_default();
-        let mut facts = Vec::new();
-        if !parts.is_empty() {
-            let count: u32 = parts.iter().map(|p| u32::from(p.1)).sum();
-            let kinds: Vec<String> = parts.iter().map(|(l, k)| format!("{l} ×{k}")).collect();
-            facts.push(format!("{} — {}", plural(count, "decision point", "decision points"), kinds.join(", ")));
-        }
-        if nesting > 0 {
-            facts.push(format!("nesting {nesting}"));
-        }
+        let mut facts = complexity_facts(g, n);
         facts.push(plural(cx.lines(n), "line", "lines"));
         let explanation = format!("Complexity {c} (flagged from {}): {}.", limits.complexity_hint, facts.join("; "));
         out.push(flag(FlagKind::Complex, format!("complexity {c}"), explanation, Vec::new()));
