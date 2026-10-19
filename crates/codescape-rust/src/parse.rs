@@ -577,7 +577,7 @@ impl<'s> Ctx<'s> {
                     if let Some(arg) = n.child_by_field_name("argument") {
                         self.use_tree(arg, &[], &mut uses);
                     }
-                    f.local_items.extend(uses.into_iter().filter_map(|u| u.alias.or(u.path.last().cloned())));
+                    f.local_items.extend(uses.into_iter().filter(|u| !u.glob).filter_map(|u| u.alias.or(u.path.last().cloned())));
                     continue;
                 }
                 "macro_invocation" | "impl_item" | "mod_item" => continue,

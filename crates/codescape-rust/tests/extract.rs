@@ -868,3 +868,19 @@ pub fn ok(x: Thing) {}
     let (l, c, n) = span(lib, "pub fn ok(x: Thing)", "Thing");
     assert!(refs_from(&b, at(&b, &["u", "(lib)", "ok"])).contains(&(thing, l, c, n)), "control");
 }
+
+#[test]
+fn glob_uses_inside_a_fn_do_not_shadow_their_module() {
+    let lib = "mod m;
+pub fn f() {
+    use crate::m::*;
+    m::free();
+}
+";
+    let (b, _) = project(&[("lib.rs", lib), ("m.rs", REF_M)]);
+    let f = at(&b, &["u", "(lib)", "f"]);
+    let free = at(&b, &["u", "m", "free"]);
+    let (l, c, n) = span(lib, "m::free()", "free");
+    assert!(edge(&b, f, free, EdgeKind::Calls).is_some());
+    assert!(refs_from(&b, f).contains(&(free, l, c, n)));
+}
