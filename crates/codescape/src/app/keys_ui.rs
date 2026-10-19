@@ -1,7 +1,7 @@
 use super::Project;
-use crate::keys::{Action, Keymap, format};
+use crate::keys::{Action, Capture, Keymap, capture, format, held};
 use crate::style;
-use egui::{Align2, Key};
+use egui::Align2;
 use std::path::PathBuf;
 
 fn keys_file() -> Option<PathBuf> {
@@ -31,27 +31,22 @@ pub(super) fn take_pressed(ctx: &egui::Context, keys: &Keymap) -> Vec<Action> {
 impl Project {
     pub(super) fn capture_key(&mut self, ctx: &egui::Context) -> bool {
         let Some(action) = self.capturing else { return false };
-        let pressed = ctx.input_mut(|i| {
-            let hit = i.events.iter().find_map(|e| match e {
-                egui::Event::Key { key, pressed: true, modifiers, .. } => Some((*key, *modifiers)),
-                _ => None,
-            });
-            if hit.is_some() {
-                i.events.clear();
-            }
-            hit
+        let result = ctx.input_mut(|i| {
+            let result = capture(&i.events);
+            i.events.retain(|e| !matches!(e, egui::Event::Key { .. } | egui::Event::Text(_)));
+            result
         });
-        match pressed {
-            Some((Key::Escape, _)) => self.capturing = None,
-            Some((key, modifiers)) => {
-                let taken = self.keys.bind(action, egui::KeyboardShortcut::new(modifiers, key));
+        match result {
+            Capture::Cancelled => self.capturing = None,
+            Capture::Bound(shortcut) => {
+                let taken = self.keys.bind(action, shortcut);
                 self.keys_note = taken.map(|o| format!("{} was on {}; it has no key now", o.label(), shown(&self.keys, action)));
                 self.capturing = None;
                 if let Err(e) = save_keys(&self.keys) {
                     self.keys_note = Some(e);
                 }
             }
-            None => {}
+            Capture::Waiting => {}
         }
         true
     }
@@ -75,7 +70,7 @@ impl Project {
                     for a in Action::ALL {
                         ui.label(a.label());
                         let text = if self.capturing == Some(a) {
-                            "press keys…".to_string()
+                            ui.input(|i| if i.modifiers.is_none() { "press keys…".to_string() } else { held(i.modifiers) })
                         } else {
                             Some(shown(&self.keys, a)).filter(|s| !s.is_empty()).unwrap_or_else(|| "none".to_string())
                         };

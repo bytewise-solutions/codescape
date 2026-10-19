@@ -184,3 +184,42 @@ impl Keymap {
         map
     }
 }
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Capture {
+    Waiting,
+    Cancelled,
+    Bound(KeyboardShortcut),
+}
+
+const MODIFIER_KEYS: [Key; 8] =
+    [Key::ShiftLeft, Key::ShiftRight, Key::ControlLeft, Key::ControlRight, Key::AltLeft, Key::AltRight, Key::SuperLeft, Key::SuperRight];
+
+pub fn capture(events: &[egui::Event]) -> Capture {
+    for e in events {
+        let egui::Event::Key { key, pressed: true, modifiers, .. } = e else { continue };
+        if MODIFIER_KEYS.contains(key) {
+            continue;
+        }
+        if *key == Key::Escape && modifiers.is_none() {
+            return Capture::Cancelled;
+        }
+        return Capture::Bound(KeyboardShortcut::new(*modifiers, *key));
+    }
+    Capture::Waiting
+}
+
+pub fn held(modifiers: Modifiers) -> String {
+    let mut parts: Vec<&str> = Vec::new();
+    if modifiers.command || modifiers.ctrl || modifiers.mac_cmd {
+        parts.push("Ctrl");
+    }
+    if modifiers.shift {
+        parts.push("Shift");
+    }
+    if modifiers.alt {
+        parts.push("Alt");
+    }
+    parts.push("…");
+    parts.join("+")
+}

@@ -56,3 +56,19 @@ fn a_shortcut_with_more_modifiers_is_checked_before_the_one_it_contains() {
     assert!(at(Action::FindPrevious) < at(Action::FindNext));
     assert!(at(Action::Structure) < at(Action::OpenFolder));
 }
+
+#[test]
+fn a_shortcut_is_captured_only_once_a_non_modifier_key_is_pressed() {
+    use codescape::keys::{Capture, capture};
+    use egui::Event;
+    let press = |key, modifiers| Event::Key { key, physical_key: None, pressed: true, repeat: false, modifiers };
+    let ctrl_shift = Modifiers { shift: true, ..Modifiers::COMMAND };
+    assert_eq!(capture(&[press(Key::ControlLeft, Modifiers::COMMAND)]), Capture::Waiting);
+    assert_eq!(capture(&[press(Key::ControlLeft, Modifiers::COMMAND), press(Key::ShiftLeft, ctrl_shift)]), Capture::Waiting);
+    assert_eq!(
+        capture(&[press(Key::ControlLeft, Modifiers::COMMAND), press(Key::ShiftLeft, ctrl_shift), press(Key::O, ctrl_shift)]),
+        Capture::Bound(KeyboardShortcut::new(ctrl_shift, Key::O))
+    );
+    assert_eq!(capture(&[press(Key::Escape, Modifiers::NONE)]), Capture::Cancelled);
+    assert_eq!(capture(&[]), Capture::Waiting);
+}
