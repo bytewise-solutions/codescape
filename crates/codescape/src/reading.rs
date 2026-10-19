@@ -15,8 +15,9 @@ pub fn leave_zoom(box_screen_w: f32) -> f64 {
     0.7 * FILE_OPEN_PX as f64 / box_screen_w.max(1.0) as f64
 }
 
-pub fn fill_view(scene: &mut Scene, reading: Option<(NodeId, f32)>, view: Rect) -> Option<(NodeId, f32)> {
-    let i = scene.boxes.iter().position(|b| b.source)?;
+pub fn fill_view(scene: &mut Scene, reading: Option<(NodeId, f32)>, jump: Option<NodeId>, view: Rect) -> Option<(NodeId, f32)> {
+    let source = |n: Option<NodeId>| scene.boxes.iter().position(|b| b.source && Some(b.node) == n);
+    let i = source(jump).or_else(|| source(reading.map(|r| r.0))).or_else(|| scene.boxes.iter().position(|b| b.source))?;
     let mut b = scene.boxes.swap_remove(i);
     let font = match reading {
         Some((n, f)) if n == b.node => f,

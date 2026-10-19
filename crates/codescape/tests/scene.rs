@@ -546,17 +546,17 @@ fn an_open_file_fills_the_view_alone_and_keeps_its_text_size() {
     let cam = Camera { center: r.center(), zoom: 400.0 / r.w as f64 };
     let mut s = build_scene_at(g, &mut cache, &cam, VIEW, &VisualRules::default(), None, VIEW.center(), &[]);
     assert!(s.boxes.len() > 1);
-    assert_eq!(fill_view(&mut s, None, VIEW), Some((api, READING_OPEN_PT)));
+    assert_eq!(fill_view(&mut s, None, None, VIEW), Some((api, READING_OPEN_PT)));
     assert_eq!(s.boxes.len(), 1, "nothing hides under the code");
     assert!(s.boxes[0].source && s.boxes[0].rect == VIEW);
     assert!(s.edges.is_empty() && s.labels.is_empty() && s.frames.is_empty());
-    assert_eq!(fill_view(&mut s, Some((api, 20.0)), VIEW), Some((api, 20.0)), "same file keeps its size");
+    assert_eq!(fill_view(&mut s, Some((api, 20.0)), None, VIEW), Some((api, 20.0)), "same file keeps its size");
     let other = node(g, &["right", "right.api", "T"]);
-    assert_eq!(fill_view(&mut s, Some((other, 20.0)), VIEW), Some((api, READING_OPEN_PT)), "a new file starts at the open size");
+    assert_eq!(fill_view(&mut s, Some((other, 20.0)), None, VIEW), Some((api, READING_OPEN_PT)), "a new file starts at the open size");
     let far = Camera { zoom: cam.zoom / 10.0, ..cam };
     let mut closed = build_scene_at(g, &mut cache, &far, VIEW, &VisualRules::default(), None, VIEW.center(), &[]);
     let boxes = closed.boxes.len();
-    assert_eq!(fill_view(&mut closed, Some((api, 20.0)), VIEW), None);
+    assert_eq!(fill_view(&mut closed, Some((api, 20.0)), None, VIEW), None);
     assert_eq!(closed.boxes.len(), boxes, "the map is untouched when no file is open");
 }
 
@@ -572,7 +572,7 @@ fn while_reading_the_breadcrumb_level_stays_at_the_file_s_package() {
     let mut s = build_scene_at(g, &mut cache, &cam, VIEW, &VisualRules::default(), None, VIEW.center(), &[]);
     let before = s.deepest_open_at(VIEW.center());
     assert_eq!(before, Some(node(g, &["left", "left.api"])));
-    let reading = fill_view(&mut s, None, VIEW);
+    let reading = fill_view(&mut s, None, None, VIEW);
     assert_eq!(level_node(g, &s, reading, VIEW.center()), before);
     assert_eq!(level_node(g, &s, None, VIEW.center()), s.deepest_open_at(VIEW.center()));
 }
@@ -613,4 +613,26 @@ fn edge_at_ignores_a_click_just_inside_a_box_beside_a_parallel_arrow() {
     assert_eq!(s.edge_at([x - 3.0, y]), Some(0));
     assert!(s.box_at([x + 2.0, y]).is_some());
     assert_eq!(s.edge_at([x + 2.0, y]), None);
+}
+
+#[test]
+fn with_two_files_open_the_jump_target_fills_the_view_then_the_file_being_read() {
+    use codescape::reading::{READING_OPEN_PT, fill_view};
+    let fx = fixture();
+    let g = fx.file.graph();
+    let mut cache = LayoutCache::new(Vec::new(), LayoutOptions::default());
+    let (api, imp) = (node(g, &["left", "left.api", "T"]), node(g, &["left", "left.impl", "T"]));
+    let (a, b) = (world_rect(g, &mut cache, api).unwrap(), world_rect(g, &mut cache, imp).unwrap());
+    let cam = Camera { center: [(a.center()[0] + b.center()[0]) / 2.0, (a.center()[1] + b.center()[1]) / 2.0], zoom: 420.0 / a.w };
+    let both = || {
+        build_scene_at(g, &mut LayoutCache::new(Vec::new(), LayoutOptions::default()), &cam, VIEW, &VisualRules::default(), None, VIEW.center(), &[api, imp])
+    };
+    let s = both();
+    let open: Vec<NodeId> = s.boxes.iter().filter(|b| b.source).map(|b| b.node).collect();
+    assert!(open.contains(&api) && open.contains(&imp), "both files open: {open:?}");
+    let first = open[0];
+    let other = if first == api { imp } else { api };
+    assert_eq!(fill_view(&mut both(), Some((first, 20.0)), Some(other), VIEW), Some((other, READING_OPEN_PT)), "the jump target");
+    assert_eq!(fill_view(&mut both(), Some((other, 20.0)), None, VIEW), Some((other, 20.0)), "the file being read");
+    assert_eq!(fill_view(&mut both(), None, None, VIEW), Some((first, READING_OPEN_PT)));
 }

@@ -2325,7 +2325,7 @@ impl Project {
         if let Some(rv) = &self.review {
             review_dim(rv, &mut self.scene);
         }
-        self.reading = fill_view(&mut self.scene, self.reading, self.view);
+        self.reading = fill_view(&mut self.scene, self.reading, self.goto_line.map(|(t, _)| t), self.view);
         let shown: Vec<(NodeId, f32, f32)> =
             self.scene.boxes.iter().filter(|b| b.source).filter_map(|b| Some((b.node, b.rect.y, self.page_font(b)? * LINE_SPACING))).collect();
         self.file_scroll.retain(|n, _| shown.iter().any(|(s, _, _)| s == n));
