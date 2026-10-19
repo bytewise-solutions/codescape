@@ -1,4 +1,4 @@
-use codescape_facts::{Annotation, Decisions, FieldDecl, cyclomatic};
+use codescape_facts::{Annotation, ComplexityDetail, Decisions, FieldDecl, complexity_detail};
 
 const DECISIONS: Decisions = Decisions {
     branches: &["if_statement", "for_statement", "for_in_statement", "while_statement", "do_statement", "catch_clause", "ternary_expression", "switch_case"],
@@ -94,7 +94,7 @@ pub struct TsFunc {
     pub name: String,
     pub sub: SubKind,
     pub visibility: Visibility,
-    pub complexity: u16,
+    pub complexity: ComplexityDetail,
     pub param_fields: Vec<FieldDecl>,
     pub params: Vec<(String, String)>,
     pub returns: Option<String>,
@@ -113,7 +113,7 @@ impl Default for TsFunc {
             name: String::new(),
             sub: SubKind::Function,
             visibility: Visibility::Unknown,
-            complexity: 1,
+            complexity: ComplexityDetail::default(),
             param_fields: Vec::new(),
             params: Vec::new(),
             returns: None,
@@ -503,7 +503,7 @@ impl<'s> Ctx<'s> {
         let mut f = TsFunc {
             name: name.to_string(),
             sub,
-            complexity: cyclomatic(n, self.src, &DECISIONS),
+            complexity: complexity_detail(n, self.src, &DECISIONS),
             start_line: line(n),
             end_line: end_line(n),
             ..Default::default()

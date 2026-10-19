@@ -1,4 +1,4 @@
-use codescape_facts::{Decisions, FieldDecl, Import, cyclomatic};
+use codescape_facts::{ComplexityDetail, Decisions, FieldDecl, Import, complexity_detail};
 
 const DECISIONS: Decisions = Decisions {
     branches: &["if_statement", "for_statement", "expression_case", "type_case", "communication_case"],
@@ -44,7 +44,7 @@ pub struct GoType {
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct GoFunc {
     pub name: String,
-    pub complexity: u16,
+    pub complexity: ComplexityDetail,
     pub receiver: Option<String>,
     pub params: Vec<(String, String)>,
     pub results: Vec<String>,
@@ -331,7 +331,7 @@ impl<'s> Ctx<'s> {
     fn func(&self, n: Node) -> GoFunc {
         let mut f = GoFunc {
             name: n.child_by_field_name("name").map(|x| self.text(x).to_string()).unwrap_or_default(),
-            complexity: cyclomatic(n, self.src, &DECISIONS),
+            complexity: complexity_detail(n, self.src, &DECISIONS),
             start_line: line(n),
             end_line: end_line(n),
             ..Default::default()

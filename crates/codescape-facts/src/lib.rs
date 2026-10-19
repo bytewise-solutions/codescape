@@ -118,27 +118,82 @@ pub struct Decisions {
     pub arm: Option<(&'static str, &'static str)>,
 }
 
-pub fn cyclomatic(node: tree_sitter::Node, src: &[u8], d: &Decisions) -> u16 {
-    let mut count: i64 = 1;
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ComplexityDetail {
+    pub total: u16,
+    pub decisions: Vec<(&'static str, u16)>,
+    pub nesting: u16,
+}
+
+impl Default for ComplexityDetail {
+    fn default() -> Self {
+        ComplexityDetail { total: 1, decisions: Vec::new(), nesting: 0 }
+    }
+}
+
+fn label(kind: &'static str) -> &'static str {
+    match kind {
+        "if_statement" | "if_expression" => "if",
+        "for_statement" | "enhanced_for_statement" | "for_in_statement" | "for_expression" => "for",
+        "while_statement" | "while_expression" => "while",
+        "do_statement" => "do",
+        "catch_clause" => "catch",
+        "ternary_expression" => "?:",
+        "switch_label" | "switch_case" | "expression_case" | "type_case" | "communication_case" => "case",
+        "match_arm" => "match arm",
+        other => other,
+    }
+}
+
+fn tally(counts: &mut Vec<(&'static str, i64)>, name: &'static str, by: i64) {
+    match counts.iter_mut().find(|(n, _)| *n == name) {
+        Some((_, c)) => *c += by,
+        None => counts.push((name, by)),
+    }
+}
+
+pub fn complexity_detail(node: tree_sitter::Node, src: &[u8], d: &Decisions) -> ComplexityDetail {
+    let mut counts: Vec<(&'static str, i64)> = Vec::new();
+    let mut nesting = 0u16;
     let mut cursor = node.walk();
-    let mut stack = vec![node];
-    while let Some(n) = stack.pop() {
+    let mut stack = vec![(node, 0u16)];
+    while let Some((n, depth)) = stack.pop() {
         let kind = n.kind();
-        let text = || n.utf8_text(src).unwrap_or("");
-        if d.branches.contains(&kind) && !d.not_branch.iter().any(|(k, prefix)| *k == kind && text().trim_start().starts_with(prefix)) {
-            count += 1;
+        let mut depth = depth;
+        if let Some(&k) = d.branches.iter().find(|&&k| k == kind)
+            && !d.not_branch.iter().any(|(nk, prefix)| *nk == kind && n.utf8_text(src).unwrap_or("").trim_start().starts_with(prefix))
+        {
+            let name = label(k);
+            tally(&mut counts, name, 1);
+            if name != "case" {
+                depth += 1;
+                nesting = nesting.max(depth);
+            }
         }
-        if kind == "binary_expression" && n.child_by_field_name("operator").is_some_and(|o| d.operators.contains(&o.utf8_text(src).unwrap_or(""))) {
-            count += 1;
+        if kind == "binary_expression"
+            && let Some(op) = n.child_by_field_name("operator").and_then(|o| o.utf8_text(src).ok())
+            && let Some(&known) = d.operators.iter().find(|&&k| k == op)
+        {
+            tally(&mut counts, known, 1);
         }
         if let Some((arm, parent)) = d.arm {
             if kind == arm {
-                count += 1;
+                tally(&mut counts, label(arm), 1);
             } else if kind == parent {
-                count -= 1;
+                tally(&mut counts, label(arm), -1);
             }
         }
-        stack.extend(n.named_children(&mut cursor));
+        let children: Vec<_> = n.named_children(&mut cursor).collect();
+        stack.extend(children.into_iter().rev().map(|c| (c, depth)));
     }
-    count.clamp(1, u16::MAX as i64) as u16
+    let sum: i64 = counts.iter().map(|(_, c)| *c).sum();
+    ComplexityDetail {
+        total: (1 + sum).clamp(1, u16::MAX as i64) as u16,
+        decisions: counts.into_iter().filter(|(_, c)| *c > 0).map(|(n, c)| (n, c.min(u16::MAX as i64) as u16)).collect(),
+        nesting,
+    }
+}
+
+pub fn cyclomatic(node: tree_sitter::Node, src: &[u8], d: &Decisions) -> u16 {
+    complexity_detail(node, src, d).total
 }

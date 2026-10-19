@@ -6,7 +6,7 @@ use std::ops::Range;
 use std::path::Path;
 
 pub const MAGIC: &[u8; 8] = b"CODESCP1";
-pub const FORMAT_VERSION: u32 = 18;
+pub const FORMAT_VERSION: u32 = 19;
 const HEADER: usize = 48;
 
 #[derive(Debug, thiserror::Error)]
@@ -113,6 +113,17 @@ impl ArchivedGraph {
         let all = &self.complexity;
         let i = all.partition_point(|m| m.node.to_native() < id);
         Some(all.get(i).filter(|m| m.node.to_native() == id).map_or(1, |m| m.value.to_native()))
+    }
+
+    pub fn complexity_detail(&self, id: NodeId) -> Option<(u16, Vec<(&str, u16)>, u16)> {
+        let total = self.complexity(id)?;
+        let all = &self.breakdowns;
+        let i = all.partition_point(|b| b.node.to_native() < id);
+        let (parts, nesting) = match all.get(i).filter(|b| b.node.to_native() == id) {
+            Some(b) => (b.parts.iter().map(|p| (self.str(p.label.to_native()), p.count.to_native())).collect(), b.nesting.to_native()),
+            None => (Vec::new(), 0),
+        };
+        Some((total, parts, nesting))
     }
 
     pub fn fields(&self, owner: NodeId) -> impl Iterator<Item = FieldView<'_>> {

@@ -270,6 +270,7 @@ pub struct Graph {
     pub provenance: Vec<PackStamp>,
     pub fields: Vec<FieldRec>,
     pub complexity: Vec<Metric>,
+    pub breakdowns: Vec<Breakdown>,
     pub refs: Vec<Ref>,
 }
 
@@ -286,6 +287,19 @@ pub struct Ref {
 pub struct Metric {
     pub node: u32,
     pub value: u16,
+}
+
+#[derive(Archive, Serialize, Deserialize, Debug, Clone, Copy)]
+pub struct Part {
+    pub label: u32,
+    pub count: u16,
+}
+
+#[derive(Archive, Serialize, Deserialize, Debug, Clone)]
+pub struct Breakdown {
+    pub node: u32,
+    pub nesting: u16,
+    pub parts: Vec<Part>,
 }
 
 #[derive(Archive, Serialize, Deserialize, Debug, Clone, Copy)]

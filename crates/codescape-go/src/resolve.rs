@@ -292,7 +292,7 @@ impl<'a> Resolver<'a> {
                     None => self.b.add_node(parent, NodeKind::Member, sub, &func.name, Lang::Go),
                 };
                 self.b.set_span(id, &f.rel, func.start_line, func.end_line);
-                self.b.set_complexity(id, func.complexity);
+                self.b.set_complexity_detail(id, func.complexity.total, &func.complexity.decisions, func.complexity.nesting);
                 self.b.set_lines(id, func.end_line - func.start_line + 1);
                 self.flag(id, f);
                 match owner {

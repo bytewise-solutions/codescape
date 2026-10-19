@@ -176,3 +176,27 @@ class Fine {}
     assert!(broken.methods.iter().any(|m| m.name == "good"));
     assert!(f.types.iter().any(|t| t.name == "Fine"));
 }
+
+#[test]
+fn methods_record_what_makes_them_complex() {
+    let src = r#"
+class C {
+    int hard(int x, boolean a) {
+        if (x > 0) { x--; }
+        for (int i = 0; i < x; i++) {
+            if (a && i > 1) { return 1; }
+        }
+        return 0;
+    }
+    int easy() { return 1; }
+}
+"#;
+    let f = parse_java(src.as_bytes());
+    let t = ty(&f, "C");
+    let hard = &method(t, "hard").complexity;
+    assert_eq!(hard.total, 5);
+    assert_eq!(hard.decisions, [("if", 2), ("for", 1), ("&&", 1)]);
+    assert_eq!(hard.nesting, 2);
+    let easy = &method(t, "easy").complexity;
+    assert_eq!((easy.total, easy.decisions.len(), easy.nesting), (1, 0, 0));
+}

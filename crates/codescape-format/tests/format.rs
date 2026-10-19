@@ -184,12 +184,12 @@ fn open_rejects_wrong_version_and_truncation() {
     write_graph(&b.finish(), &path).unwrap();
     let mut bytes = std::fs::read(&path).unwrap();
 
-    assert_eq!(FORMAT_VERSION, 18);
+    assert_eq!(FORMAT_VERSION, 19);
     let mut previous = bytes.clone();
-    previous[8..12].copy_from_slice(&17u32.to_le_bytes());
+    previous[8..12].copy_from_slice(&18u32.to_le_bytes());
     let p2 = dir.path().join("v.codescape");
     std::fs::write(&p2, &previous).unwrap();
-    assert!(matches!(IndexFile::open(&p2), Err(FormatError::Version { found: 17, expected: 18 })));
+    assert!(matches!(IndexFile::open(&p2), Err(FormatError::Version { found: 18, expected: 19 })));
 
     bytes.truncate(bytes.len() / 2);
     let p3 = dir.path().join("t.codescape");
@@ -527,4 +527,21 @@ fn references_round_trip_sorted_by_line_and_column() {
     assert_eq!(gr.refs_from(g).len(), 1);
     assert!(gr.refs_from(h).is_empty());
     assert!(gr.refs_from(gr.root()).is_empty());
+}
+
+#[test]
+fn complexity_detail_round_trips() {
+    let mut b = GraphBuilder::new("proj");
+    let t = b.add_node(b.root(), NodeKind::Type, SubKind::Class, "T", Lang::Java);
+    let hard = b.add_node(t, NodeKind::Member, SubKind::Method, "hard", Lang::Java);
+    b.add_node(t, NodeKind::Member, SubKind::Method, "easy", Lang::Java);
+    b.set_complexity_detail(hard, 5, &[("if", 2), ("for", 1), ("&&", 1)], 2);
+    let (_d, file) = roundtrip(b);
+    let g = file.graph();
+    let t = find(g, g.root(), "T");
+    let hard = find(g, t, "hard");
+    assert_eq!(g.complexity_detail(hard), Some((5, vec![("if", 2), ("for", 1), ("&&", 1)], 2)));
+    assert_eq!(g.complexity(hard), Some(5));
+    assert_eq!(g.complexity_detail(find(g, t, "easy")), Some((1, vec![], 0)));
+    assert_eq!(g.complexity_detail(t), None);
 }

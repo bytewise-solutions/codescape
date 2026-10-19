@@ -22,6 +22,8 @@ struct BNode {
     vis: Visibility,
     detail: u32,
     complexity: u16,
+    breakdown: Vec<(u32, u16)>,
+    nesting: u16,
     lines: u32,
     file: u32,
     start_line: u32,
@@ -89,6 +91,8 @@ impl GraphBuilder {
             vis: Visibility::Unknown,
             detail: NONE,
             complexity: 1,
+            breakdown: Vec::new(),
+            nesting: 0,
             lines: 0,
             file: NONE,
             start_line: 0,
@@ -151,6 +155,14 @@ impl GraphBuilder {
 
     pub fn set_complexity(&mut self, node: NodeId, value: u16) {
         self.nodes[node as usize].complexity = value.max(1);
+    }
+
+    pub fn set_complexity_detail(&mut self, node: NodeId, total: u16, decisions: &[(&str, u16)], nesting: u16) {
+        self.set_complexity(node, total);
+        let parts = decisions.iter().map(|(label, count)| (self.strings.intern(label), *count)).collect();
+        let n = &mut self.nodes[node as usize];
+        n.breakdown = parts;
+        n.nesting = nesting;
     }
 
     pub fn complexity(&self, node: NodeId) -> u16 {
@@ -296,6 +308,15 @@ impl GraphBuilder {
             .enumerate()
             .filter(|(_, old)| self.nodes[**old as usize].complexity > 1)
             .map(|(new, &old)| Metric { node: new as u32, value: self.nodes[old as usize].complexity })
+            .collect();
+        let breakdowns: Vec<Breakdown> = order
+            .iter()
+            .enumerate()
+            .filter(|(_, old)| self.nodes[**old as usize].complexity > 1)
+            .map(|(new, &old)| {
+                let n = &self.nodes[old as usize];
+                Breakdown { node: new as u32, nesting: n.nesting, parts: n.breakdown.iter().map(|&(label, count)| Part { label, count }).collect() }
+            })
             .collect();
         let n = order.len();
         child_offsets.truncate(n + 1);
@@ -561,6 +582,7 @@ impl GraphBuilder {
             provenance,
             fields,
             complexity,
+            breakdowns,
             refs,
         }
     }

@@ -711,7 +711,7 @@ impl<'a> Resolver<'a> {
     fn add_fn(&mut self, parent: NodeId, sub: SubKind, f: &RsFn, rel: &str, test: bool) -> NodeId {
         let id = self.b.add_node(parent, NodeKind::Member, sub, &f.name, Lang::Rust);
         self.b.set_visibility(id, f.visibility);
-        self.b.set_complexity(id, f.complexity);
+        self.b.set_complexity_detail(id, f.complexity.total, &f.complexity.decisions, f.complexity.nesting);
         self.b.set_span(id, rel, f.start_line, f.end_line);
         self.b.set_lines(id, f.end_line - f.start_line + 1);
         self.flag_test(id, test);
