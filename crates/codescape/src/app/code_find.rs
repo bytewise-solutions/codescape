@@ -1,7 +1,7 @@
 use super::Project;
 use crate::find::{Hit, find_in, hit_from, step_hit};
 use crate::search::{file_structure, filter_structure, step_selection};
-use crate::source::{advance, file_font};
+use crate::source::advance;
 use crate::style;
 use codescape_format::{NodeId, NodeKind};
 use egui::{Align2, Key};
@@ -78,7 +78,7 @@ impl Project {
             }
         }
         let Some(b) = self.scene.boxes.iter().find(|b| b.node == node && b.source) else { return };
-        let Some(size) = file_font(b.rect.w) else { return };
+        let Some(size) = self.page_font(b) else { return };
         let total = self.file_metrics(node).map_or(0, |m| m.1);
         let width = self.file_text_area(b, size, total).width();
         let (start, end) = (hit.col as f32 * advance(size), (hit.col + hit.len) as f32 * advance(size));

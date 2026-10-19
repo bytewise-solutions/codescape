@@ -11,6 +11,7 @@ use crate::input::{CHEATSHEET, Nav, Step, interpret, nearest_in};
 use crate::inspector;
 use crate::keys::{Action as KeyAction, Keymap};
 use crate::panels::{EntryGroupView, group_entries};
+use crate::reading::{fill_view, leave_zoom, zoom_text};
 use crate::review_view::{CommitStep, ItemKind, Limits, MarkState, ReviewItem, ReviewMarks, Risk, by_risk, items_with as review_items, step as review_step};
 use crate::search::{self, SearchIndex, member_at_line};
 use crate::settings_window::{self, SettingsForm};
@@ -470,6 +471,7 @@ struct Project {
     scene_ms: f32,
     last_frame: Instant,
     source: std::cell::RefCell<SourceCache>,
+    reading: Option<(NodeId, f32)>,
     file_scroll: HashMap<NodeId, f32>,
     file_hscroll: HashMap<NodeId, f32>,
     scripted: bool,
@@ -684,6 +686,7 @@ impl Project {
             scene_ms: 0.0,
             last_frame: Instant::now(),
             source,
+            reading: None,
             file_scroll: HashMap::new(),
             file_hscroll: HashMap::new(),
             scripted: false,
@@ -1306,8 +1309,26 @@ impl Project {
     }
 
     fn zoom_by(&mut self, f: f64) {
-        let c = self.view.center();
-        self.cam.zoom_at(c, f, self.view);
+        self.zoom_at(self.view.center(), f);
+    }
+
+    fn zoom_at(&mut self, at: [f32; 2], f: f64) {
+        self.target = None;
+        match self.reading {
+            Some((n, font)) => match zoom_text(font, f as f32) {
+                Some(next) => self.reading = Some((n, next)),
+                None => self.leave_reading(),
+            },
+            None => self.cam.zoom_at(at, f, self.view),
+        }
+    }
+
+    fn leave_reading(&mut self) {
+        let Some((n, _)) = self.reading.take() else { return };
+        if let Some(w) = world_rect(self.file.graph(), &mut self.cache, n) {
+            let shown = (w.w * self.cam.zoom) as f32;
+            self.cam.zoom_at(self.view.center(), leave_zoom(shown), self.view);
+        }
         self.target = None;
     }
 
@@ -1426,6 +1447,8 @@ impl Project {
         }
         if ui.input(|i| i.key_pressed(Key::Escape)) {
             if self.close_top_window() {
+            } else if self.reading.is_some() {
+                self.leave_reading();
             } else if self.sequence.is_some() {
                 self.sequence = None;
             } else {
@@ -2156,8 +2179,17 @@ impl Project {
             }
         } else if resp.dragged() {
             let d = resp.drag_delta();
-            self.cam.pan_by([d.x, d.y]);
-            self.target = None;
+            if let Some((node, _)) = self.reading {
+                if let Some(v) = self.scrolled(node, d.y) {
+                    self.file_scroll.insert(node, v);
+                }
+                if let Some(v) = self.hscrolled(node, d.x) {
+                    self.file_hscroll.insert(node, v);
+                }
+            } else {
+                self.cam.pan_by([d.x, d.y]);
+                self.target = None;
+            }
         }
         if resp.drag_stopped() {
             self.scroll_drag = None;
@@ -2175,10 +2207,7 @@ impl Project {
                 }
             } else {
                 match interpret(mods.command || mods.ctrl, mods.shift, [scroll.x, scroll.y], pinch) {
-                    Nav::Zoom(f) => {
-                        self.cam.zoom_at([p.x, p.y], f, self.view);
-                        self.target = None;
-                    }
+                    Nav::Zoom(f) => self.zoom_at([p.x, p.y], f),
                     Nav::Pan(d) => {
                         self.cam.pan_by(d);
                         self.target = None;
@@ -2187,6 +2216,7 @@ impl Project {
                 }
             }
         }
+        let g = self.file.graph();
         let mut clicked_box = None;
         let mut display = None;
         let mut details_toggle: Option<(NodeId, bool)> = None;
@@ -2199,6 +2229,8 @@ impl Project {
                 if let Some(v) = self.pointer_scroll(node, p) {
                     self.file_scroll.insert(node, v);
                 }
+            } else if self.reading.is_some() {
+                clicked_box = self.code_member_at(p).or_else(|| self.file_page_at(p));
             } else if legend_toggle.contains(Pos2::new(p.x, p.y)) {
                 let shown = self.settings.settings().view(View::Legend).value;
                 display = Some((View::Legend, !shown));
@@ -2241,8 +2273,9 @@ impl Project {
         if let Some(rv) = &self.review {
             review_dim(rv, &mut self.scene);
         }
+        self.reading = fill_view(&mut self.scene, self.reading, self.view);
         let shown: Vec<(NodeId, f32, f32)> =
-            self.scene.boxes.iter().filter(|b| b.source).filter_map(|b| Some((b.node, b.rect.y, file_font(b.rect.w)? * LINE_SPACING))).collect();
+            self.scene.boxes.iter().filter(|b| b.source).filter_map(|b| Some((b.node, b.rect.y, self.page_font(b)? * LINE_SPACING))).collect();
         self.file_scroll.retain(|n, _| shown.iter().any(|(s, _, _)| s == n));
         self.file_hscroll.retain(|n, _| shown.iter().any(|(s, _, _)| s == n));
         for (n, y, line_h) in shown {
@@ -2264,8 +2297,10 @@ impl Project {
         self.scene_ms = started.elapsed().as_secs_f32() * 1000.0;
         self.paint(&painter);
         let root = self.cache.shared(g, g.root());
-        minimap::draw(&painter, &root, &self.cam, self.view);
-        self.paint_legend(&painter);
+        if self.reading.is_none() {
+            minimap::draw(&painter, &root, &self.cam, self.view);
+            self.paint_legend(&painter);
+        }
         if let Some(n) = clicked_box {
             self.set_focus(n, None, false, true);
         }
@@ -2645,6 +2680,13 @@ impl Project {
         }
     }
 
+    pub(super) fn page_font(&self, b: &crate::canvas::SceneBox) -> Option<f32> {
+        match self.reading {
+            Some((n, f)) if n == b.node => Some(f),
+            _ => file_font(b.rect.w),
+        }
+    }
+
     fn file_page(&self, b: &crate::canvas::SceneBox) -> egui::Rect {
         egui::Rect::from_min_max(Pos2::new(b.rect.x, self.view.y), Pos2::new(b.rect.right(), self.view.bottom())).intersect(erect(self.view))
     }
@@ -2656,7 +2698,7 @@ impl Project {
     fn code_member_at(&self, p: Pos2) -> Option<NodeId> {
         let node = self.file_page_at(p)?;
         let b = self.scene.boxes.iter().find(|b| b.node == node && b.source)?;
-        let line_h = file_font(b.rect.w)? * LINE_SPACING;
+        let line_h = self.page_font(b)? * LINE_SPACING;
         let top = self.file_page(b).top() + 6.0 - self.file_scroll.get(&node).copied().unwrap_or(0.0) * line_h;
         let line = ((p.y - top) / line_h).floor();
         (line >= 0.0).then(|| member_at_line(self.file.graph(), node, line as u32 + 1)).flatten()
@@ -2664,14 +2706,14 @@ impl Project {
 
     fn file_metrics(&self, node: NodeId) -> Option<(f32, usize, usize)> {
         let b = self.scene.boxes.iter().find(|b| b.node == node && b.source)?;
-        let line_h = file_font(b.rect.w)? * LINE_SPACING;
+        let line_h = self.page_font(b)? * LINE_SPACING;
         let total = self.source.borrow_mut().file(self.file.graph().file(node)?)?.len();
         Some((line_h, total, (self.view.h / line_h) as usize))
     }
 
     fn hscrolled(&self, node: NodeId, wheel_px: f32) -> Option<f32> {
         let b = self.scene.boxes.iter().find(|b| b.node == node && b.source)?;
-        let size = file_font(b.rect.w)?;
+        let size = self.page_font(b)?;
         let lines = self.source.borrow_mut().file(self.file.graph().file(node)?)?;
         let longest = lines.iter().map(|l| l.chars().count()).max().unwrap_or(0);
         let text = self.file_text_area(b, size, lines.len());
@@ -2696,7 +2738,7 @@ impl Project {
         let g = self.file.graph();
         let Some(path) = g.file(b.node) else { return };
         let Some(lines) = self.source.borrow_mut().file(path) else { return };
-        let Some(size) = file_font(b.rect.w) else { return };
+        let Some(size) = self.page_font(b) else { return };
         let line_h = size * LINE_SPACING;
         let scroll = self.file_scroll.get(&b.node).copied().unwrap_or(0.0);
         let sheet = self.file_page(b);

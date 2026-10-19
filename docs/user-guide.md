@@ -52,7 +52,7 @@ saved for every project in `~/.config/codescape/keys.toml` (only the ones you ch
 |---|---|
 | `←` `→` `↑` `↓` | select the nearest box in that direction |
 | `Enter` / `Backspace` | zoom into the selected box / go up to its parent |
-| `Esc` | close the window on top; with none open, leave the sequence diagram or clear the selection |
+| `Esc` | close the window on top; with none open, leave the open file, the sequence diagram or clear the selection |
 | `1` `2` `3` | show neighbours / everything it reaches / everywhere it's used |
 | `+` `−` / `F` | zoom in / out / fit the whole project |
 | `Page Up` `Page Down` `Home` `End` | scroll the file under the pointer or the selected one |
@@ -80,11 +80,12 @@ enough to read.
   constructor (dim blue). A legend sits in the bottom-left corner and lists only what the current view draws, so it changes as you zoom,
   select or review; fold it with its arrow or **View ▸ Legend**.
 - **The file when you zoom in close.** The class, struct or top-level function under the pointer (the middle of the
-  view from the keyboard) gives way to its whole file once it fills about half the view, as a page filling its
-  column; only that one opens, and it stays open until you zoom back out. The wheel scrolls the file, sideways too
-  (horizontal wheel or `Shift` + wheel). It opens with the
-  type's first line where its box was; the wheel scrolls the file, not the map (`Page Up`/`Page Down`/`Home`/`End`
-  too), `Ctrl` + wheel still zooms. The type's own lines and its methods sit on a light band. Types that hold other
+  view from the keyboard) gives way to its whole file once it is wide enough on screen, and the code then fills the
+  whole map area; the minimap and the legend step aside. Only that one opens. While it is open, zooming (`Ctrl` +
+  wheel, pinch, `+` `−`) changes only the text size; zoom out past the smallest size, or press `Esc`, to go back to
+  the map. The wheel and dragging scroll the file, sideways too (horizontal wheel, `Shift` + wheel or a sideways
+  drag), and so do `Page Up`/`Page Down`/`Home`/`End`. It opens at the type's first line. The type's own lines and
+  its methods sit on a light band. Types that hold other
   boxes (an interface with its implementations) stay boxes. Lines are read from disk.
 - **Quiet arrows.** Every dependency is drawn, but faint, slightly stronger for the heaviest ones in a container. Hover
   or select a box and its own arrows light up at full strength, as thick as the number of classes they link. Turn

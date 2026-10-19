@@ -1,6 +1,5 @@
 use crate::camera::{Camera, WRect};
 use crate::focus::{Mark, Marks};
-use crate::source::file_font;
 use codescape_format::{ArchivedGraph, NodeFlags, NodeId, NodeKind, SubKind};
 use codescape_layout::{
     CARD_MAX_ROWS, CARD_ROW, CARD_TOP, ContainerLayout, Direction, LayoutCache, Rect, box_size, card_field_rows, card_members, card_methods_top,
@@ -334,7 +333,7 @@ impl Builder<'_> {
         } else {
             self.open_files.contains(&node)
         };
-        let source = file_level && wide && chosen && g.file(node).is_some() && file_font(rect.w).is_some();
+        let source = file_level && wide && chosen && g.file(node).is_some();
         let open = !source && has_children && rect.w >= OPEN_THRESHOLD_PX;
         let tag_color = g.tags(node).find_map(|t| self.vis.style_for(t).map(|s| s.color));
         self.scene.boxes.push(SceneBox {

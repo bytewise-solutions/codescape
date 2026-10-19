@@ -90,7 +90,7 @@ impl Camera {
     pub fn reading(target: impl Into<WRect>, view: Rect) -> Camera {
         let t: WRect = target.into();
         let fit = Camera::fit(t, view);
-        let open = crate::canvas::FILE_OPEN_PX.max(crate::source::FILE_MIN_WIDTH) as f64;
+        let open = crate::canvas::FILE_OPEN_PX as f64;
         let wide = (view.w as f64 * READING_SHARE).max(open) / t.w.max(1e-12);
         if fit.zoom >= wide {
             return fit;

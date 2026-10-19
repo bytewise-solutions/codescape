@@ -82,10 +82,11 @@ pub const CHEATSHEET: &[(&str, &[(&str, &str)])] = &[
     (
         "Code",
         &[
-            ("Zoom in close", "a type or function opens its whole file; zoom out to close it"),
+            ("Zoom in close", "a type or function opens its whole file across the map; zoom out or Esc to close it"),
+            ("Ctrl + wheel, + −", "in an open file, change the text size"),
             ("Double-click a method row", "open the file at that method"),
             ("Click in the code", "select the method there; S for its sequence diagram"),
-            ("Wheel / Shift + wheel", "scroll the file down / sideways"),
+            ("Wheel / Shift + wheel / drag", "scroll the file down / sideways"),
             ("Page Up Page Down Home End", "scroll the file under the pointer or the selected one"),
             ("Drag the scrollbar", "move through the file"),
             ("Ctrl+F", "find in the open file"),

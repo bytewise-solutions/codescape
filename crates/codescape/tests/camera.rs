@@ -92,5 +92,4 @@ fn reading_in_a_narrow_view_still_opens_the_file() {
     let card = Rect::new(0.0, 0.0, 100.0, 1000.0);
     let r = Camera::reading(card, narrow).world_to_screen_rect(card.into(), narrow);
     assert!(r.w >= codescape::canvas::FILE_OPEN_PX, "{} px wide", r.w);
-    assert!(codescape::source::file_font(r.w).is_some(), "{} px is too narrow for a file", r.w);
 }

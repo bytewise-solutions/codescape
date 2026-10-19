@@ -340,10 +340,11 @@ fn an_open_file_stays_open_until_zoomed_out() {
     let g = fx.file.graph();
     let mut cache = LayoutCache::new(Vec::new(), LayoutOptions::default());
     let api = node(g, &["left", "left.api", "T"]);
-    let close = Camera::fit(world_rect(g, &mut cache, api).unwrap(), VIEW);
+    let r = world_rect(g, &mut cache, api).unwrap();
+    let close = Camera::fit(r, VIEW);
     let away = build_scene_at(g, &mut cache, &close, VIEW, &VisualRules::default(), None, [-50.0, -50.0], &[api]);
     assert_eq!(away.boxes.iter().filter(|b| b.source).map(|b| b.node).collect::<Vec<_>>(), [api], "moving the pointer off keeps it open");
-    let half = Camera { zoom: close.zoom * 0.4, ..close };
+    let half = Camera { zoom: 0.9 * FILE_OPEN_PX as f64 / r.w as f64, ..close };
     let out = build_scene_at(g, &mut cache, &half, VIEW, &VisualRules::default(), None, [600.0, 400.0], &[api]);
     assert!(out.boxes.iter().all(|b| !b.source), "zooming out closes it");
 }
@@ -517,4 +518,43 @@ fn a_file_opens_at_the_same_zoom_whatever_the_view_width() {
             assert_eq!(b.source, opens, "{px} px box in a {} px view", view.w);
         }
     }
+}
+
+#[test]
+fn a_file_opens_once_its_box_is_wide_enough_whatever_its_text_size() {
+    let fx = fixture();
+    let g = fx.file.graph();
+    let mut cache = LayoutCache::new(Vec::new(), LayoutOptions::default());
+    let api = node(g, &["left", "left.api", "T"]);
+    let r = world_rect(g, &mut cache, api).unwrap();
+    for (px, opens) in [(400.0, true), (300.0, false)] {
+        let cam = Camera { center: r.center(), zoom: px / r.w as f64 };
+        let s = build_scene_at(g, &mut cache, &cam, VIEW, &VisualRules::default(), None, VIEW.center(), &[]);
+        assert_eq!(s.boxes.iter().find(|b| b.node == api).unwrap().source, opens, "{px} px box");
+    }
+}
+
+#[test]
+fn an_open_file_fills_the_view_alone_and_keeps_its_text_size() {
+    use codescape::reading::{READING_OPEN_PT, fill_view};
+    let fx = fixture();
+    let g = fx.file.graph();
+    let mut cache = LayoutCache::new(Vec::new(), LayoutOptions::default());
+    let api = node(g, &["left", "left.api", "T"]);
+    let r = world_rect(g, &mut cache, api).unwrap();
+    let cam = Camera { center: r.center(), zoom: 400.0 / r.w as f64 };
+    let mut s = build_scene_at(g, &mut cache, &cam, VIEW, &VisualRules::default(), None, VIEW.center(), &[]);
+    assert!(s.boxes.len() > 1);
+    assert_eq!(fill_view(&mut s, None, VIEW), Some((api, READING_OPEN_PT)));
+    assert_eq!(s.boxes.len(), 1, "nothing hides under the code");
+    assert!(s.boxes[0].source && s.boxes[0].rect == VIEW);
+    assert!(s.edges.is_empty() && s.labels.is_empty() && s.frames.is_empty());
+    assert_eq!(fill_view(&mut s, Some((api, 20.0)), VIEW), Some((api, 20.0)), "same file keeps its size");
+    let other = node(g, &["right", "right.api", "T"]);
+    assert_eq!(fill_view(&mut s, Some((other, 20.0)), VIEW), Some((api, READING_OPEN_PT)), "a new file starts at the open size");
+    let far = Camera { zoom: cam.zoom / 10.0, ..cam };
+    let mut closed = build_scene_at(g, &mut cache, &far, VIEW, &VisualRules::default(), None, VIEW.center(), &[]);
+    let boxes = closed.boxes.len();
+    assert_eq!(fill_view(&mut closed, Some((api, 20.0)), VIEW), None);
+    assert_eq!(closed.boxes.len(), boxes, "the map is untouched when no file is open");
 }

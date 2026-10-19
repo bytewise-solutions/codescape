@@ -6,6 +6,7 @@ mod inspector;
 mod keys;
 mod panels;
 mod reach;
+mod reading;
 mod review;
 mod scene;
 mod search;
