@@ -231,7 +231,13 @@ pub fn flags(g: &ArchivedGraph, analysis: &Analysis, churn: &HashMap<String, u32
             0 => String::new(),
             k => format!(" and {}", plural(k as u32, "other place", "other places")),
         };
-        let explanation = format!("Same code as `{}` (lines {start}–{end}){rest}: {tokens} tokens.", label(g, first));
+        let first_label = label(g, first);
+        let ambiguous = first_label == label(g, n) || others[1..].iter().any(|p| label(g, p.0) == first_label);
+        let place = match g.file(first).filter(|_| ambiguous) {
+            Some(file) => format!(" in {file}"),
+            None => String::new(),
+        };
+        let explanation = format!("Same code as `{first_label}`{place} (lines {start}–{end}){rest}: {tokens} tokens.");
         out.push(flag(FlagKind::Duplicate, format!("duplicate · {tokens} tokens"), explanation, others.iter().map(|p| p.0).collect()));
     }
     for (to, _) in cx.upward(n) {

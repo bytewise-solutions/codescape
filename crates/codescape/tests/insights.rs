@@ -315,3 +315,25 @@ fn the_worst_complexity_climbs_to_every_shown_ancestor_and_skips_hidden_code() {
     );
     assert_eq!(shown.get(&node(g, "shop")), Some(&30));
 }
+
+#[test]
+fn a_duplicate_with_the_same_name_says_which_file_it_is_in() {
+    let mut b = GraphBuilder::new("p");
+    let (one, two) =
+        (b.add_node(b.root(), NodeKind::Package, SubKind::None, "one", Lang::Java), b.add_node(b.root(), NodeKind::Package, SubKind::None, "two", Lang::Java));
+    let mut copies = Vec::new();
+    for (pkg, file) in [(one, "one/Res.java"), (two, "two/Res.java")] {
+        let t = b.add_node(pkg, NodeKind::Type, SubKind::Class, "Res", Lang::Java);
+        b.set_span(t, file, 1, 40);
+        copies.push((method(&mut b, t, "node", file, (5, 30), Visibility::Public), 5, 30));
+    }
+    b.add_clone_group(80, &copies);
+    let dir = tempfile::tempdir().unwrap();
+    write_graph(&b.finish(), &dir.path().join("g")).unwrap();
+    let file = IndexFile::open(&dir.path().join("g")).unwrap();
+    let g = file.graph();
+    let a = Analysis { usage: vec![Usage::Used; g.node_count()], tested: vec![false; g.node_count()], callers: vec![0; g.node_count()] };
+    let all = flags(g, &a, &HashMap::new(), &LayoutOptions::default(), &Limits::default(), node(g, "one.Res.node"));
+    let f = all.iter().find(|f| f.kind == FlagKind::Duplicate).unwrap();
+    assert_eq!(f.explanation, "Same code as `Res.node` in two/Res.java (lines 5–30): 80 tokens.");
+}

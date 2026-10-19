@@ -161,7 +161,9 @@ enough to read.
 - **Flags in the code.** In an open file, every flagged method or type gets small letter icons in the gutter on its
   first line, one per kind and coloured like the inspector (`C` complex, `H` hotspot, `U` unused, `N` no caller, `T`
   only tests, `?` untested, `D` duplicate, `^` points up). Hover them for each flag's reason; this works in the
-  reading view and in the files open on the map.
+  reading view and in the files open on the map. Clicking a line, icons included, selects that method, so the
+  inspector's FLAGS section shows the same reasons with clickable rows for the other duplicate copies; a duplicate
+  names the file when the other copy has the same name.
 - **Constructors live inside their type.** A Go `func NewX(...) *X` is a row of `X`'s card, not a box of its own.
 - **Dependency injection is set aside.** Code recognised as wiring (Google Wire's generated injectors and provider
   sets, Dagger components/modules) is hidden with its arrows, so it never changes the layering. Tick **View ▸ Wiring**

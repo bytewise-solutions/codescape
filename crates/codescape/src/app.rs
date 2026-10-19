@@ -3092,6 +3092,9 @@ impl Project {
                 }
                 ui.label(egui::RichText::new(&f.short).strong().color(insights_ui::flag_color(f.kind)));
                 ui.label(egui::RichText::new(&f.explanation).small());
+                if f.kind == crate::insights::FlagKind::Duplicate {
+                    ui.label(egui::RichText::new("Click to see the other copies").small().color(style::MUTED));
+                }
             }
         });
     }
