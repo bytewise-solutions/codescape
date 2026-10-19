@@ -167,7 +167,8 @@ pub fn complexity_detail(node: tree_sitter::Node, src: &[u8], d: &Decisions) -> 
         {
             let name = label(k);
             tally(&mut counts, name, 1);
-            if name != "case" {
+            let else_if = name == "if" && n.parent().is_some_and(|p| p.kind() == "else_clause" || p.child_by_field_name("alternative") == Some(n));
+            if name != "case" && !else_if {
                 depth += 1;
                 nesting = nesting.max(depth);
             }

@@ -903,3 +903,11 @@ pub fn f(t: Thing, v: Vec<Thing>, c: C) {\n    t.go();\n    v.len();\n    c.clon
     let s = extract_rust(&d, &module_nodes, &default_excludes(), &mut b, &mut facts);
     assert_eq!((s.resolved, s.external, s.guessed, s.unresolved), (1, 4, 0, 0), "{s:?}");
 }
+
+#[test]
+fn an_else_if_chain_does_not_count_as_nesting() {
+    let src = "fn f(x: u8) -> u8 {\n    if x == 1 { 1 } else if x == 2 { 2 } else if x == 3 { 3 } else { 0 }\n}\n";
+    let file = codescape_rust::parse::parse_rust(src.as_bytes());
+    let c = &file.bodies[0].fns[0].complexity;
+    assert_eq!((c.total, c.nesting), (4, 1));
+}

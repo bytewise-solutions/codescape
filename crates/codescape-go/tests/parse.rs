@@ -123,3 +123,11 @@ fn syntax_error_still_yields_funcs() {
     let f = parse_go(src.as_bytes());
     assert!(f.funcs.iter().any(|x| x.name == "good"));
 }
+
+#[test]
+fn an_else_if_chain_does_not_count_as_nesting() {
+    let src = "package c\n\nfunc F(x int) int {\n\tif x == 1 {\n\t\treturn 1\n\t} else if x == 2 {\n\t\treturn 2\n\t} else if x == 3 {\n\t\treturn 3\n\t}\n\treturn 0\n}\n";
+    let f = parse_go(src.as_bytes());
+    let c = &func(&f, "F").complexity;
+    assert_eq!((c.total, c.nesting), (4, 1));
+}
