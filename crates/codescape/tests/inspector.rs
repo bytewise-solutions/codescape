@@ -118,3 +118,26 @@ fn header_names_the_visibility_when_known() {
     assert_eq!(header(g, named(g, "evict")).kind, "METHOD · Java · private");
     assert_eq!(header(g, named(g, "Store")).kind, "CLASS · Java", "unknown visibility says nothing");
 }
+
+#[test]
+fn used_by_leaves_out_tests_while_tests_are_hidden() {
+    let mut b = GraphBuilder::new("p");
+    let m = b.add_node(b.root(), NodeKind::Module, SubKind::None, "m", Lang::Go);
+    let t = b.add_node(m, NodeKind::Type, SubKind::Struct, "T", Lang::Go);
+    b.add_node(t, NodeKind::Member, SubKind::Method, "target", Lang::Go);
+    b.add_node(t, NodeKind::Member, SubKind::Method, "fromMain", Lang::Go);
+    let test = b.add_node(t, NodeKind::Member, SubKind::Method, "fromTest", Lang::Go);
+    b.add_flags(test, NodeFlags::TEST);
+    let dir = tempfile::tempdir().unwrap();
+    write_graph(&b.finish(), &dir.path().join("g")).unwrap();
+    let file = IndexFile::open(&dir.path().join("g")).unwrap();
+    let g = file.graph();
+    let callers = [named(g, "fromMain"), named(g, "fromTest")];
+
+    let (shown, dropped) = visible_links(g, &callers, &codescape_layout::LayoutOptions::default());
+    assert_eq!((shown, dropped), (vec![named(g, "fromMain")], 1));
+
+    let opts = codescape_layout::LayoutOptions { show_tests: true, ..Default::default() };
+    let (shown, dropped) = visible_links(g, &callers, &opts);
+    assert_eq!((shown, dropped), (callers.to_vec(), 0));
+}

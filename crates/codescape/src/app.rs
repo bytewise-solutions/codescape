@@ -2002,7 +2002,9 @@ impl Project {
                 }
             }
             if let Some(f) = self.focus.as_ref().filter(|f| f.node == n) {
+                let opts = self.cache.options().clone();
                 for (title, list, color) in [("USES", &f.calls, style::USES), ("USED BY", &f.callers, style::CALLER)] {
+                    let (list, in_tests) = inspector::visible_links(g, list, &opts);
                     ui.add_space(10.0);
                     ui.horizontal(|ui| {
                         ui.label(egui::RichText::new(format!("{title} ({})", list.len())).small().strong().color(color));
@@ -2028,7 +2030,7 @@ impl Project {
                     if list.is_empty() {
                         ui.label(egui::RichText::new("nothing").small().color(style::MUTED));
                     }
-                    for group in inspector::group_links(g, n, list) {
+                    for group in inspector::group_links(g, n, &list) {
                         egui::CollapsingHeader::new(egui::RichText::new(format!("{}  ({})", group.label, group.items.len())).small().color(style::MUTED))
                             .id_salt((title, &group.label))
                             .default_open(group.items.len() <= LIST_LIMIT)
@@ -2042,6 +2044,9 @@ impl Project {
                                     ui.label(egui::RichText::new(format!("… {} more", group.items.len() - LIST_LIMIT)).color(style::MUTED));
                                 }
                             });
+                    }
+                    if in_tests > 0 {
+                        ui.label(egui::RichText::new(format!("+{in_tests} in tests")).small().color(style::MUTED));
                     }
                 }
             }

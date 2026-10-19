@@ -37,7 +37,7 @@ tick in View is remembered for each project.
 | Zoom into a box | double-click it |
 | Inspect a box | click it (right panel) |
 | Focus an entry point or a box | click it: what it **uses** turns pink, what **uses it** turns blue, the rest dims |
-| Walk the code | click a row under *Uses* or *Used by* in the inspector; `Alt+Left` or **Back** retraces |
+| Walk the code | click a row under *Uses* or *Used by* in the inspector (tests hidden on the map are left out, with a `+N in tests` note); `Alt+Left` or **Back** retraces |
 | See everything involved | inspector **Show**: *neighbours*, *everything it reaches*, *everywhere it's used* |
 | Jump to a name | `Ctrl+K`, type, `Enter` |
 | Find text in the open file | `Ctrl+F`, type; `Enter` / `Shift+Enter` for the next / previous match |

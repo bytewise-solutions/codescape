@@ -1,5 +1,5 @@
 use codescape_format::{ArchivedGraph, Lang, NodeFlags, NodeId, NodeKind, SubKind, Visibility};
-use codescape_layout::display_children;
+use codescape_layout::{LayoutOptions, display_children};
 use std::collections::BTreeMap;
 
 pub const OWN_TYPE: &str = "this type";
@@ -85,6 +85,19 @@ pub fn header(g: &ArchivedGraph, n: NodeId) -> Header {
         None => location,
     };
     Header { kind, name: g.name(n).to_string(), owners, location }
+}
+
+pub fn visible_links(g: &ArchivedGraph, list: &[NodeId], opts: &LayoutOptions) -> (Vec<NodeId>, usize) {
+    let mut tests = 0;
+    let mut shown = Vec::with_capacity(list.len());
+    for &n in list {
+        if !opts.hides(g, n) {
+            shown.push(n);
+        } else if g.flags(n).intersects(NodeFlags::TEST | NodeFlags::MOCK) {
+            tests += 1;
+        }
+    }
+    (shown, tests)
 }
 
 pub fn group_links(g: &ArchivedGraph, selected: NodeId, nodes: &[NodeId]) -> Vec<Group> {
