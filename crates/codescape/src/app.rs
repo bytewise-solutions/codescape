@@ -20,7 +20,7 @@ use crate::settings_window::{self, SettingsForm};
 use crate::shot::{Shot, ShotPlan, ShotStep};
 use crate::source::{LINE_SPACING, SourceCache, Token, advance, file_font, highlight, hscroll_by, initial_scroll, merge_spans, scroll_at, scroll_by, thumb};
 use crate::view::{block_path, map_options, toggle, view_items};
-use crate::window_stack::WindowStack;
+use crate::window_stack::{Escape, WindowStack, escape};
 use crate::{minimap, style};
 use codescape_format::*;
 use codescape_index::analysis::{Analysis, Usage, analyse};
@@ -1463,14 +1463,16 @@ impl Project {
             action = Some(Action::OpenFolder);
         }
         if ui.input(|i| i.key_pressed(Key::Escape)) {
-            if self.close_top_window() {
-            } else if self.reading.is_some() {
-                self.leave_reading();
-            } else if self.sequence.is_some() {
-                self.sequence = None;
-            } else {
-                self.clear_focus();
-                self.selected = None;
+            match escape(!self.windows.is_empty(), self.sequence.is_some(), self.reading.is_some()) {
+                Escape::CloseWindow => {
+                    self.close_top_window();
+                }
+                Escape::CloseSequence => self.sequence = None,
+                Escape::LeaveReading => self.leave_reading(),
+                Escape::ClearSelection => {
+                    self.clear_focus();
+                    self.selected = None;
+                }
             }
         }
         if ui.input(|i| i.modifiers.alt && i.key_pressed(Key::ArrowLeft)) {

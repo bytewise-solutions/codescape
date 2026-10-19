@@ -59,3 +59,12 @@ fn a_window_with_an_explicit_id_is_the_top_layer_under_that_id() {
     let top = top_layer_after_showing(move |w| w.id(id));
     assert_eq!(top, Some(id));
 }
+
+#[test]
+fn esc_closes_a_window_then_the_diagram_then_the_file_then_the_selection() {
+    use codescape::window_stack::{Escape, escape};
+    assert_eq!(escape(true, true, true), Escape::CloseWindow);
+    assert_eq!(escape(false, true, true), Escape::CloseSequence);
+    assert_eq!(escape(false, false, true), Escape::LeaveReading);
+    assert_eq!(escape(false, false, false), Escape::ClearSelection);
+}

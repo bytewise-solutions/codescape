@@ -22,7 +22,28 @@ impl<W: Copy + PartialEq> WindowStack<W> {
         }
     }
 
+    pub fn is_empty(&self) -> bool {
+        self.stack.is_empty()
+    }
+
     pub fn pop(&mut self) -> Option<W> {
         self.stack.pop()
+    }
+}
+
+#[derive(Clone, Copy, PartialEq, Debug)]
+pub enum Escape {
+    CloseWindow,
+    CloseSequence,
+    LeaveReading,
+    ClearSelection,
+}
+
+pub fn escape(window_open: bool, sequence_open: bool, reading: bool) -> Escape {
+    match (window_open, sequence_open, reading) {
+        (true, ..) => Escape::CloseWindow,
+        (_, true, _) => Escape::CloseSequence,
+        (.., true) => Escape::LeaveReading,
+        _ => Escape::ClearSelection,
     }
 }
