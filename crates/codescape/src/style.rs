@@ -269,17 +269,14 @@ pub fn complexity_hint(value: u16, hint: u16, high: u16) -> Option<Color32> {
     }
 }
 
-pub const RAMP_COOL: Color32 = Color32::from_rgb(70, 130, 200);
-
-pub fn complexity_ramp(value: u16, hint: u16, high: u16) -> Color32 {
-    let hint = hint.max(2);
+pub fn complexity_ramp(value: u16, hint: u16, high: u16) -> Option<Color32> {
+    let hint = hint.max(1);
     let high = high.max(hint + 1);
     if value < hint {
-        let t = f32::from(value.saturating_sub(1)) / f32::from(hint - 1);
-        return tint(RAMP_COOL, EDGE_SIDEWAYS, t);
+        return None;
     }
     let t = f32::from((value - hint).min(high - hint)) / f32::from(high - hint);
-    tint(EDGE_SIDEWAYS, EDGE_UP, t)
+    Some(tint(EDGE_SIDEWAYS, EDGE_UP, t))
 }
 
 pub const RAMP_TINT: f32 = 0.3;

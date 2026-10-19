@@ -2506,8 +2506,9 @@ impl Project {
         };
         let fill =
             if external { Color32::from_rgb(43, 43, 43) } else { style::tint(style::depth_fill(b.depth, b.open), accent, if b.open { 0.05 } else { 0.12 }) };
-        let fill = match self.box_complexity(b) {
-            Some(v) => style::tint(fill, style::complexity_ramp(v, self.levels().0, self.levels().1), style::RAMP_TINT),
+        let ramp = self.box_complexity(b).and_then(|v| style::complexity_ramp(v, self.levels().0, self.levels().1));
+        let fill = match ramp {
+            Some(c) => style::tint(fill, c, if b.open { style::RAMP_TINT / 2.0 } else { style::RAMP_TINT }),
             None => fill,
         };
         let fill = if b.dimmed { style::tint(fill, style::BG, 0.6) } else { fill };
@@ -2815,7 +2816,8 @@ impl Project {
                         let v = 1 + (u32::from(high) * i / (steps - 1)) as u16;
                         let w = sample.width() / steps as f32;
                         let cell = egui::Rect::from_min_size(Pos2::new(sample.min.x + w * i as f32, sample.min.y), egui::vec2(w + 0.5, sample.height()));
-                        painter.rect_filled(cell, 0.0, style::tint(style::BOX_FILL, style::complexity_ramp(v, hint, high), style::RAMP_TINT));
+                        let fill = style::complexity_ramp(v, hint, high).map_or(style::BOX_FILL, |c| style::tint(style::BOX_FILL, c, style::RAMP_TINT));
+                        painter.rect_filled(cell, 0.0, fill);
                     }
                 }
                 style::LegendSample::Lines => {

@@ -143,15 +143,16 @@ fn no_interface_text_is_smaller_than_eleven_px() {
 }
 
 #[test]
-fn complexity_ramp_runs_cool_to_hot_anchored_at_the_thresholds() {
+fn complexity_ramp_is_neutral_below_the_hint_then_amber_to_red() {
     use codescape::style::complexity_ramp;
-    let (cool, at_hint, at_high) = (complexity_ramp(1, 10, 20), complexity_ramp(10, 10, 20), complexity_ramp(20, 10, 20));
-    assert!(cool.b() > cool.r(), "below the hint is cool: {cool:?}");
-    assert!(at_hint.r() > at_hint.b() && at_hint.g() > at_high.g(), "the hint is warm: {at_hint:?}");
+    let (at_hint, at_high) = (complexity_ramp(10, 10, 20).unwrap(), complexity_ramp(20, 10, 20).unwrap());
+    for v in [0, 1, 5, 9] {
+        assert_eq!(complexity_ramp(v, 10, 20), None, "{v} is below the hint and stays neutral");
+    }
+    assert!(at_hint.r() > at_hint.b() && at_hint.g() > at_high.g(), "the hint is amber: {at_hint:?}");
     assert!(at_high.r() > at_high.g() && at_high.r() > at_high.b(), "the high level is red: {at_high:?}");
-    assert_eq!(complexity_ramp(500, 10, 20), at_high, "beyond high stays at the hot end");
-    assert_eq!(complexity_ramp(0, 10, 20), complexity_ramp(1, 10, 20), "one and zero share the cool end");
-    let greens: Vec<u8> = (10..=20).map(|v| complexity_ramp(v, 10, 20).g()).collect();
+    assert_eq!(complexity_ramp(500, 10, 20), Some(at_high), "beyond high stays at the hot end");
+    let greens: Vec<u8> = (10..=20).map(|v| complexity_ramp(v, 10, 20).unwrap().g()).collect();
     assert!(greens.windows(2).all(|w| w[0] >= w[1]), "between hint and high the colour only heats up: {greens:?}");
     let _ = complexity_ramp(5, 20, 10);
     let _ = complexity_ramp(5, 0, 0);
