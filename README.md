@@ -169,8 +169,9 @@ licences of every bundled crate (`THIRD-PARTY-LICENSES.txt`, from `cargo about`)
 
 - Calls are resolved from what the source states (imports, declared types, return types, element types of
   collections); there is no full type inference, so pattern bindings, tuples and generic results stay unresolved,
-  and nothing inside Rust macros is read. The status bar shows the share of calls resolved (about 68–85% depending
-  on the language and the code).
+  and nothing inside Rust macros is read. The status bar shows the share of calls into your own code that were
+  resolved, with library calls counted apart: about 60–80% for Java, Go and Rust, less for TypeScript test suites
+  whose assertions run on untyped callback parameters.
 - Overloaded methods share one row.
 - Maven, Kotlin, Python and other languages are not indexed yet; their build roots are listed as skipped.
 - Review matches blocks by name, so a renamed or moved block shows as removed plus new.

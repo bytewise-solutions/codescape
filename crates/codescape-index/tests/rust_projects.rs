@@ -130,10 +130,10 @@ fn codescape_indexes_itself() {
     assert!(!g.flags(index_project_fn).contains(NodeFlags::TEST));
 
     let s = g.stats();
-    let (res, gue, unr) = (s.calls_resolved.to_native(), s.calls_guessed.to_native(), s.calls_unresolved.to_native());
+    let (res, ext, gue, unr) = (s.calls_resolved.to_native(), s.calls_external.to_native(), s.calls_guessed.to_native(), s.calls_unresolved.to_native());
     let total = (res + gue + unr).max(1) as f64;
     println!(
-        "calls: {res} resolved ({:.1}%), {gue} guessed ({:.1}%), {unr} unresolved ({:.1}%)",
+        "calls in your code: {res} resolved ({:.1}%), {gue} guessed ({:.1}%), {unr} unresolved ({:.1}%); {ext} library calls",
         res as f64 * 100.0 / total,
         gue as f64 * 100.0 / total,
         unr as f64 * 100.0 / total

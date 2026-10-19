@@ -75,6 +75,7 @@ pub fn index_project(dir: &Path, cfg: &ProjectConfig, progress: &dyn Fn(Progress
         lines: stats.lines,
         source_bytes: stats.bytes,
         calls_resolved: stats.resolved,
+        calls_external: stats.external,
         calls_guessed: stats.guessed,
         calls_unresolved: stats.unresolved,
         skipped_roots: d.skipped.iter().map(|s| (s.kind.clone(), s.rel.clone())).collect(),

@@ -4,4 +4,4 @@ func Log(s string) {
 	get().OnlyInSvc()
 }
 
-func get() int { return 0 }
+func get() handle { return nil }

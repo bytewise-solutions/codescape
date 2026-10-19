@@ -77,7 +77,8 @@ pub enum Receiver {
     Ident(String),
     Field(String),
     Qualified(String),
-    Chain,
+    New(String),
+    Chain(Box<Receiver>, String),
     Expr,
 }
 
@@ -525,8 +526,8 @@ impl<'s> Ctx<'s> {
         (strings, idents)
     }
 
-    fn invocation(&self, node: Node) -> JCall {
-        let receiver = match node.child_by_field_name("object") {
+    fn receiver(&self, object: Option<Node>) -> Receiver {
+        match object {
             None => Receiver::None,
             Some(o) => match o.kind() {
                 "this" => Receiver::This,
@@ -541,10 +542,22 @@ impl<'s> Ctx<'s> {
                     }
                 }
                 "scoped_identifier" => Receiver::Qualified(self.text(o).to_string()),
-                "method_invocation" => Receiver::Chain,
+                "object_creation_expression" => o.child_by_field_name("type").map_or(Receiver::Expr, |t| Receiver::New(self.type_name(t))),
+                "method_invocation" => {
+                    let mut head = o;
+                    while let Some(inner) = head.child_by_field_name("object").filter(|x| x.kind() == "method_invocation") {
+                        head = inner;
+                    }
+                    let name = head.child_by_field_name("name").map(|n| self.text(n).to_string()).unwrap_or_default();
+                    Receiver::Chain(Box::new(self.receiver(head.child_by_field_name("object"))), name)
+                }
                 _ => Receiver::Expr,
             },
-        };
+        }
+    }
+
+    fn invocation(&self, node: Node) -> JCall {
+        let receiver = self.receiver(node.child_by_field_name("object"));
         let (string_args, ident_args) = self.args(node.child_by_field_name("arguments"));
         let name = node.child_by_field_name("name").unwrap_or(node);
         let receiver_use = match (&receiver, node.child_by_field_name("object")) {

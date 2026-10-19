@@ -184,12 +184,12 @@ fn open_rejects_wrong_version_and_truncation() {
     write_graph(&b.finish(), &path).unwrap();
     let mut bytes = std::fs::read(&path).unwrap();
 
-    assert_eq!(FORMAT_VERSION, 17);
+    assert_eq!(FORMAT_VERSION, 18);
     let mut previous = bytes.clone();
-    previous[8..12].copy_from_slice(&16u32.to_le_bytes());
+    previous[8..12].copy_from_slice(&17u32.to_le_bytes());
     let p2 = dir.path().join("v.codescape");
     std::fs::write(&p2, &previous).unwrap();
-    assert!(matches!(IndexFile::open(&p2), Err(FormatError::Version { found: 16, expected: 17 })));
+    assert!(matches!(IndexFile::open(&p2), Err(FormatError::Version { found: 17, expected: 18 })));
 
     bytes.truncate(bytes.len() / 2);
     let p3 = dir.path().join("t.codescape");

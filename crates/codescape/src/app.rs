@@ -1626,7 +1626,7 @@ impl Project {
     fn status_bar(&mut self, ui: &mut egui::Ui) {
         let g = self.file.graph();
         let s = g.stats();
-        let (r, gu, u) = (s.calls_resolved.to_native(), s.calls_guessed.to_native(), s.calls_unresolved.to_native());
+        let (r, ext, gu, u) = (s.calls_resolved.to_native(), s.calls_external.to_native(), s.calls_guessed.to_native(), s.calls_unresolved.to_native());
         let total = (r + gu + u).max(1) as f32;
         let level = level_node(g, &self.scene, self.reading, self.view.center()).map(|n| format!("{:?}", g.kind(n))).unwrap_or_else(|| "Project".into());
         let up = self.cache.get(g.root()).map_or(0, |l| l.up_edges());
@@ -1669,7 +1669,8 @@ impl Project {
             ui.separator();
             ui.label(
                 egui::RichText::new(format!("calls {:.0}% resolved · {:.0}% guessed", r as f32 * 100.0 / total, gu as f32 * 100.0 / total)).color(style::MUTED),
-            );
+            )
+            .on_hover_text(format!("Calls in your code: {r} resolved, {gu} guessed, {u} unresolved\n{ext} library calls (not counted in the percentages)"));
             if up > 0 {
                 ui.separator();
                 ui.colored_label(style::EDGE_UP, format!("{up} upward module dependencies"));

@@ -307,3 +307,28 @@ fn nested_member_types_resolve_from_the_nested_scope() {
     assert!(refs.contains(&(inner, 7, 8, 5)));
     assert!(!refs.iter().any(|&(to, ..)| to == outer));
 }
+
+#[test]
+fn library_calls_are_counted_apart_from_project_calls() {
+    let tmp = tempfile::tempdir().unwrap();
+    let r = tmp.path();
+    std::fs::write(r.join("settings.gradle"), "include 'app'\n").unwrap();
+    let src = r.join("app/src/main/java/v");
+    std::fs::create_dir_all(&src).unwrap();
+    std::fs::write(
+        src.join("Svc.java"),
+        "package v;\nimport java.util.ArrayList;\nimport java.util.List;\nimport static org.assertj.core.api.Assertions.assertThat;\n\
+public class Svc {\n  private List<String> items;\n  void helper() {}\n  long count() { return 0; }\n  void run() {\n    helper();\n    items.add(\"a\");\n\
+    items.stream().count();\n    assertThat(1).isEqualTo(1);\n    new ArrayList<String>().size();\n  }\n}\n",
+    )
+    .unwrap();
+    let d = discover(r, &default_excludes()).unwrap();
+    let mut b = GraphBuilder::new("lib");
+    let module_nodes: Vec<NodeId> = d.modules.iter().map(|m| b.add_node(b.root(), NodeKind::Module, SubKind::None, &m.name, Lang::Java)).collect();
+    let mut facts = ProjectFacts::default();
+    let s = extract_java(&d, &module_nodes, &default_excludes(), &mut b, &mut facts);
+    assert_eq!((s.resolved, s.external, s.guessed, s.unresolved), (1, 6, 0, 0), "{s:?}");
+    let run = at(&b, &["app", "v", "Svc", "run"]);
+    let count = at(&b, &["app", "v", "Svc", "count"]);
+    assert!(has_edge(&b, run, count, EdgeKind::Calls).is_none(), "a chain from a library value is a library call");
+}

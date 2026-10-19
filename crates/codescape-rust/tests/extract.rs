@@ -509,8 +509,8 @@ fn unknown_receivers_guess_only_into_imported_crates() {
     let mut facts = ProjectFacts::default();
     let stats = extract_rust(&d, &module_nodes, &default_excludes(), &mut b, &mut facts);
     assert_eq!(
-        (stats.resolved, stats.guessed, stats.unresolved),
-        (4, 0, 1),
+        (stats.resolved, stats.external, stats.guessed, stats.unresolved),
+        (1, 3, 0, 1),
         "only the call on an unknown type is unresolved: nothing is resolved by elimination"
     );
     let target = at(&b, &["a", "(lib)", "Thing", "unique_name"]);
@@ -883,4 +883,23 @@ pub fn f() {
     let (l, c, n) = span(lib, "m::free()", "free");
     assert!(edge(&b, f, free, EdgeKind::Calls).is_some());
     assert!(refs_from(&b, f).contains(&(free, l, c, n)));
+}
+
+#[test]
+fn library_calls_are_counted_apart_from_project_calls() {
+    let tmp = tempfile::tempdir().unwrap();
+    let r = tmp.path();
+    write(r, "Cargo.toml", "[package]\nname = \"lib\"\n");
+    write(
+        r,
+        "src/lib.rs",
+        "pub struct Thing;\nimpl Thing { pub fn go(&self) {} }\n#[derive(Clone)]\npub struct C;\n\
+pub fn f(t: Thing, v: Vec<Thing>, c: C) {\n    t.go();\n    v.len();\n    c.clone();\n    String::new().len();\n}\n",
+    );
+    let d = discover(r, &default_excludes()).unwrap();
+    let mut b = GraphBuilder::new("lib");
+    let module_nodes: Vec<NodeId> = d.modules.iter().map(|m| b.add_node(b.root(), NodeKind::Module, SubKind::None, &m.name, m.lang)).collect();
+    let mut facts = ProjectFacts::default();
+    let s = extract_rust(&d, &module_nodes, &default_excludes(), &mut b, &mut facts);
+    assert_eq!((s.resolved, s.external, s.guessed, s.unresolved), (1, 4, 0, 0), "{s:?}");
 }

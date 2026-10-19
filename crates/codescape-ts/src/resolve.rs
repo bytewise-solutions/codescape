@@ -1201,7 +1201,7 @@ impl<'a> Resolver<'a> {
                     cf.target = Some(target);
                     self.stats.resolved += 1;
                 }
-                Some(Val::Inst(TypeRef::External(_))) => self.stats.resolved += 1,
+                Some(Val::Inst(TypeRef::External(_))) => self.stats.external += 1,
                 Some(Val::Static(_)) => {}
                 _ if GLOBAL_FUNCTIONS.contains(&call.method.as_str()) => {}
                 _ => self.stats.unresolved += 1,
@@ -1234,16 +1234,16 @@ impl<'a> Resolver<'a> {
                     None => match self.field_type(t, &call.method) {
                         Some(Val::Inst(TypeRef::External(s))) => {
                             cf.receiver_type = Some(s);
-                            self.stats.resolved += 1;
+                            self.stats.external += 1;
                         }
-                        _ if self.has_external_super(t) => self.stats.resolved += 1,
+                        _ if self.has_external_super(t) => self.stats.external += 1,
                         _ => self.stats.unresolved += 1,
                     },
                 }
             }
             Some(Val::Inst(TypeRef::External(s))) => {
                 cf.receiver_type = Some(s);
-                self.stats.resolved += 1;
+                self.stats.external += 1;
             }
             Some(Val::Ns(f)) => match self.symbol(f, &call.method, 0) {
                 Some(Sym::Func(f, n)) => {
@@ -1255,7 +1255,7 @@ impl<'a> Resolver<'a> {
                     cf.target = Some(target);
                     self.stats.resolved += 1;
                 }
-                Some(Sym::External(_)) => self.stats.resolved += 1,
+                Some(Sym::External(_)) => self.stats.external += 1,
                 _ => self.stats.unresolved += 1,
             },
             _ => self.stats.unresolved += 1,

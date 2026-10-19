@@ -737,36 +737,22 @@ impl<'a> Resolver<'a> {
             }
             return cf;
         }
-        let receiver_type: Option<TypeRef> = match &call.receiver {
-            Receiver::None => {
-                let own = self.lookup_in_enclosing(ti, &call.method);
-                match own {
-                    Some(t) => Some(TypeRef::Project(t)),
-                    None => self.static_import(fi, &call.method),
-                }
-            }
-            Receiver::This => Some(TypeRef::Project(ti)),
-            Receiver::Super => self.types[ti].supers.first().cloned(),
-            Receiver::Ident(name) => {
-                cf.receiver_var = Some(name.clone());
-                match self.var_type(fi, ti, m, name) {
-                    Some(t) => Some(t),
-                    None => {
-                        let t = self.resolve_type(name, fi, Some(ti));
-                        if let (Some(TypeRef::Project(p)), Some(u)) = (&t, &call.receiver_use) {
-                            self.b.add_ref(caller, self.types[*p].node, u.line, u.col, u.len);
-                        }
-                        t
-                    }
-                }
-            }
-            Receiver::Field(name) => {
-                cf.receiver_var = Some(name.clone());
-                self.field_type(ti, name)
-            }
-            Receiver::Qualified(text) => self.resolve_type(text, fi, Some(ti)),
-            Receiver::Chain | Receiver::Expr => None,
-        };
+        if let Receiver::Ident(name) | Receiver::Field(name) = &call.receiver {
+            cf.receiver_var = Some(name.clone());
+        }
+        if let (Receiver::Ident(name), Some(u)) = (&call.receiver, &call.receiver_use)
+            && self.var_type(fi, ti, m, name).is_none()
+            && let Some(TypeRef::Project(p)) = self.resolve_type(name, fi, Some(ti))
+        {
+            self.b.add_ref(caller, self.types[p].node, u.line, u.col, u.len);
+        }
+        if let Receiver::Chain(head, head_method) = &call.receiver
+            && self.returns_library_value(fi, ti, m, head, head_method)
+        {
+            self.stats.external += 1;
+            return cf;
+        }
+        let receiver_type = self.receiver_type(fi, ti, m, &call.receiver, &call.method);
         if let Some(r) = &receiver_type {
             cf.receiver_type = Some(self.ref_name(r));
         }
@@ -781,15 +767,38 @@ impl<'a> Resolver<'a> {
                     }
                     self.stats.resolved += 1;
                 } else if self.external_super(t).is_some() {
-                    self.stats.resolved += 1;
+                    self.stats.external += 1;
                 } else {
                     self.stats.unresolved += 1;
                 }
             }
-            Some(TypeRef::External(_)) => self.stats.resolved += 1,
+            Some(TypeRef::External(_)) => self.stats.external += 1,
             None => self.guess(fi, caller, scope, &call.method, &mut cf),
         }
         cf
+    }
+
+    fn receiver_type(&self, fi: usize, ti: usize, m: &JMethod, receiver: &Receiver, method: &str) -> Option<TypeRef> {
+        match receiver {
+            Receiver::None => match self.lookup_in_enclosing(ti, method) {
+                Some(t) => Some(TypeRef::Project(t)),
+                None => self.static_import(fi, method),
+            },
+            Receiver::This => Some(TypeRef::Project(ti)),
+            Receiver::Super => self.types[ti].supers.first().cloned(),
+            Receiver::Ident(name) => self.var_type(fi, ti, m, name).or_else(|| self.resolve_type(name, fi, Some(ti))),
+            Receiver::Field(name) => self.field_type(ti, name),
+            Receiver::Qualified(text) | Receiver::New(text) => self.resolve_type(text, fi, Some(ti)),
+            Receiver::Chain(..) | Receiver::Expr => None,
+        }
+    }
+
+    fn returns_library_value(&self, fi: usize, ti: usize, m: &JMethod, head: &Receiver, method: &str) -> bool {
+        match self.receiver_type(fi, ti, m, head, method) {
+            Some(TypeRef::External(_)) => true,
+            Some(TypeRef::Project(t)) => self.lookup_method(t, method).is_none() && self.external_super(t).is_some(),
+            None => false,
+        }
     }
 
     fn guess(&mut self, fi: usize, caller: NodeId, scope: Scope, name: &str, cf: &mut CallFacts) {

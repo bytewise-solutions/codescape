@@ -328,3 +328,32 @@ fn extra_test_globs_mark_files_as_test_code() {
     assert!(g.flags(node(g, "Smoke")).contains(NodeFlags::TEST));
     assert!(!g.flags(node(g, "Service")).contains(NodeFlags::TEST));
 }
+
+#[test]
+fn summary_counts_library_calls_apart_from_calls_into_your_code() {
+    let s = Summary {
+        project: "p".into(),
+        modules: Vec::new(),
+        groups: Vec::new(),
+        skipped: Vec::new(),
+        files: 1,
+        lines: 1,
+        resolved: 60,
+        external: 120,
+        guessed: 15,
+        unresolved: 25,
+        index_bytes: 0,
+        source_bytes: 0,
+        elapsed: Default::default(),
+    };
+    assert!(s.to_string().contains("\nCalls in your code: 60% resolved, 15% guessed, 25% unresolved; 120 library calls\n"), "{s}");
+}
+
+#[test]
+fn the_index_keeps_the_library_call_count() {
+    let tmp = tempfile::tempdir().unwrap();
+    let out = index_project(&fixture("java-resolve"), &cfg_with_index(tmp.path()), &|_| {}).unwrap();
+    assert!(out.summary.external > 0);
+    let file = IndexFile::open(&out.path).unwrap();
+    assert_eq!(file.graph().stats().calls_external.to_native(), out.summary.external);
+}

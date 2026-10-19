@@ -86,6 +86,7 @@ pub struct ExtractStats {
     pub lines: u64,
     pub bytes: u64,
     pub resolved: u64,
+    pub external: u64,
     pub guessed: u64,
     pub unresolved: u64,
 }
@@ -96,6 +97,7 @@ impl ExtractStats {
         self.lines += o.lines;
         self.bytes += o.bytes;
         self.resolved += o.resolved;
+        self.external += o.external;
         self.guessed += o.guessed;
         self.unresolved += o.unresolved;
     }

@@ -1339,11 +1339,11 @@ impl<'a> Resolver<'a> {
                     Some(item @ (Item::Type(_) | Item::Variant(_))) => self.instantiate(cx, Some(item), &mut cf),
                     Some(Item::Ext(s)) => {
                         cf.receiver_type = s.rsplit_once('.').map(|(q, _)| q.to_string());
-                        self.stats.resolved += 1;
+                        self.stats.external += 1;
                     }
                     Some(Item::Assoc(t)) if STD_METHODS.contains(&name.as_str()) => {
                         cf.receiver_type = Some(self.types[t].fqn.clone());
-                        self.stats.resolved += 1;
+                        self.stats.external += 1;
                     }
                     _ => self.stats.unresolved += 1,
                 }
@@ -1358,19 +1358,19 @@ impl<'a> Resolver<'a> {
                         cf.receiver_type = Some(self.types[t].fqn.clone());
                         match self.lookup_method(t, name) {
                             Some((_, fi)) => self.resolved_fn(cx, fi, &mut cf),
-                            None if STD_METHODS.contains(&name.as_str()) => self.stats.resolved += 1,
+                            None if STD_METHODS.contains(&name.as_str()) => self.stats.external += 1,
                             None => self.unknown_receiver(cx, name, false, &mut cf),
                         }
                     }
                     Some(TypeRef::Elements(t)) => {
                         cf.receiver_type = Some(format!("[{}]", self.types[t].fqn));
-                        self.stats.resolved += 1;
+                        self.stats.external += 1;
                     }
                     Some(TypeRef::External(s)) => {
                         cf.receiver_type = Some(s);
-                        self.stats.resolved += 1;
+                        self.stats.external += 1;
                     }
-                    Some(TypeRef::Opaque) => self.stats.resolved += 1,
+                    Some(TypeRef::Opaque) => self.stats.external += 1,
                     None => self.unknown_receiver(cx, name, true, &mut cf),
                 }
             }

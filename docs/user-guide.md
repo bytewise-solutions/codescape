@@ -19,6 +19,10 @@ Point it at the project folder. Every module under it is discovered and linked b
   module tree (`(lib)`, `a::b`, `bin/x`, `examples/x`), and methods from every `impl` block land on their type.
 - Other build roots found inside (`pom.xml`, `pyproject.toml`, …) are listed in the status bar as not indexed.
 
+The status bar's `calls X% resolved · Y% guessed` covers calls into your own code. Calls on library values (the JDK,
+Go's standard library, npm packages, Rust's `std`, and chains that start from one) are counted apart; point at the
+figure for the four counts.
+
 Nothing is written into the project. The index lives in the user cache folder
 (`~/.cache/codescape/<hash>.codescape` on Linux) and is rebuilt when sources, detection rules or index settings
 change.

@@ -385,3 +385,22 @@ fn shadowed_guessed_and_type_parameter_names_get_no_ref() {
     let ok = refs_from(&b, at(&b, &["u", "src", "ok"]));
     assert!(ok.contains(&(a, 2, 22, 1)) && ok.contains(&(a, 2, 31, 1)), "control: {ok:?}");
 }
+
+#[test]
+fn library_calls_are_counted_apart_from_project_calls() {
+    let tmp = tempfile::tempdir().unwrap();
+    let r = tmp.path();
+    std::fs::write(r.join("package.json"), "{ \"name\": \"lib\" }\n").unwrap();
+    std::fs::create_dir_all(r.join("src")).unwrap();
+    std::fs::write(
+        r.join("src/a.ts"),
+        "import express from 'express';\nclass Svc { go(): void {} }\nexport function run(s: Svc) {\n  s.go();\n  const app = express();\n  app.get('/');\n  console.log('x');\n}\n",
+    )
+    .unwrap();
+    let d = discover(r, &default_excludes()).unwrap();
+    let mut b = GraphBuilder::new("lib");
+    let module_nodes: Vec<NodeId> = d.modules.iter().map(|m| b.add_node(b.root(), NodeKind::Module, SubKind::None, &m.name, m.lang)).collect();
+    let mut facts = ProjectFacts::default();
+    let s = extract_ts(&d, &module_nodes, &default_excludes(), &mut b, &mut facts);
+    assert_eq!((s.resolved, s.external, s.guessed, s.unresolved), (1, 3, 0, 0), "{s:?}");
+}

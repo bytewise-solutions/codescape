@@ -80,7 +80,7 @@ class A extends Base implements Runnable, java.io.Closeable {
     assert_eq!(make.assigned_to.as_deref(), Some("q"));
     assert_eq!(make.string_args[0].as_deref(), Some("/x"));
     assert_eq!(make.ident_args[1].as_deref(), Some("handler"));
-    assert_eq!(by("map").receiver, Receiver::Chain);
+    assert_eq!(by("map").receiver, Receiver::Chain(Box::new(Receiver::Ident("list".into())), "stream".into()));
     assert_eq!(by("tick").receiver, Receiver::Ident("y".into()));
 }
 

@@ -364,3 +364,27 @@ fn calls_on_the_builtin_error_do_not_reach_a_project_error_method() {
         assert!(refs_from(&r.b, f).iter().all(|x| x.0 != failure_error), "{name} has no ref");
     }
 }
+
+fn single_file_stats(src: &str) -> (GraphBuilder, NodeId, ExtractStats) {
+    let tmp = tempfile::tempdir().unwrap();
+    std::fs::write(tmp.path().join("go.mod"), "module example.com/u\n\ngo 1.22\n").unwrap();
+    std::fs::write(tmp.path().join("u.go"), src).unwrap();
+    let d = discover(tmp.path(), &default_excludes()).unwrap();
+    let mut b = GraphBuilder::new("u");
+    let nodes: Vec<NodeId> = d.modules.iter().map(|m| b.add_node(b.root(), NodeKind::Module, SubKind::None, &m.name, Lang::Go)).collect();
+    let mut facts = ProjectFacts::default();
+    let stats = extract_go(&d, &nodes, &default_excludes(), &mut b, &mut facts);
+    let pkg = b.children(nodes[0])[0];
+    (b, pkg, stats)
+}
+
+#[test]
+fn library_calls_are_counted_apart_from_project_calls() {
+    let src = "package u\n\nimport (\n\t\"fmt\"\n\t\"os\"\n)\n\ntype Failure struct{}\n\nfunc (f *Failure) Error() string { return \"\" }\n\n\
+func helper() {}\n\nfunc Run(err error) string {\n\thelper()\n\tfmt.Println(\"x\")\n\tos.Stdout.WriteString(\"y\")\n\t_ = fmt.Errorf(\"z\").Error()\n\treturn err.Error()\n}\n";
+    let (b, pkg, stats) = single_file_stats(src);
+    assert_eq!((stats.resolved, stats.external, stats.guessed, stats.unresolved), (1, 5, 0, 0), "{stats:?}");
+    let run_fn = b.child(pkg, "Run").unwrap();
+    let failure_error = b.child(b.child(pkg, "Failure").unwrap(), "Error").unwrap();
+    assert!(edge(&b, run_fn, failure_error, EdgeKind::Calls).is_none(), "a chain from fmt.Errorf is a library call");
+}

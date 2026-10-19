@@ -31,6 +31,7 @@ pub struct Summary {
     pub files: u32,
     pub lines: u64,
     pub resolved: u64,
+    pub external: u64,
     pub guessed: u64,
     pub unresolved: u64,
     pub index_bytes: u64,
@@ -83,6 +84,7 @@ impl Summary {
             files: s.files.to_native(),
             lines: s.lines.to_native(),
             resolved: s.calls_resolved.to_native(),
+            external: s.calls_external.to_native(),
             guessed: s.calls_guessed.to_native(),
             unresolved: s.calls_unresolved.to_native(),
             index_bytes,
@@ -125,10 +127,11 @@ impl fmt::Display for Summary {
         let total = self.resolved + self.guessed + self.unresolved;
         writeln!(
             f,
-            "\nCalls: {:.0}% resolved, {:.0}% guessed, {:.0}% unresolved",
+            "\nCalls in your code: {:.0}% resolved, {:.0}% guessed, {:.0}% unresolved; {} library calls",
             pct(self.resolved, total),
             pct(self.guessed, total),
-            pct(self.unresolved, total)
+            pct(self.unresolved, total),
+            self.external
         )?;
         writeln!(f, "Index: {} KiB ({:.0}% of {} KiB of source)", self.index_bytes / 1024, pct(self.index_bytes, self.source_bytes), self.source_bytes / 1024)
     }

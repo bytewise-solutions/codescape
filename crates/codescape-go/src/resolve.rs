@@ -665,7 +665,10 @@ impl<'a> Resolver<'a> {
             return cf;
         };
         if recv == CHAIN {
-            self.guess(fi, caller, scope, &call.method, &mut cf);
+            match &call.chain_head {
+                Some((head_recv, head)) if self.returns_library_value(fi, func, head_recv.as_deref(), head) => self.stats.external += 1,
+                _ => self.guess(fi, caller, scope, &call.method, &mut cf),
+            }
             return cf;
         }
         let mut segs = recv.split('.');
@@ -694,8 +697,8 @@ impl<'a> Resolver<'a> {
                     }
                     return cf;
                 }
-                None if rest.is_empty() => {
-                    self.stats.resolved += 1;
+                None => {
+                    self.stats.external += 1;
                     return cf;
                 }
                 _ => {}
@@ -704,7 +707,7 @@ impl<'a> Resolver<'a> {
         for seg in &rest {
             current = match current {
                 Some(TypeRef::Project(t)) => self.field_type(t, seg),
-                _ => None,
+                ext => ext,
             };
         }
         match current {
@@ -730,11 +733,34 @@ impl<'a> Resolver<'a> {
             }
             Some(TypeRef::External(name)) => {
                 cf.receiver_type = Some(name);
-                self.stats.resolved += 1;
+                self.stats.external += 1;
             }
             None => self.guess(fi, caller, scope, &call.method, &mut cf),
         }
         cf
+    }
+
+    fn returns_library_value(&self, fi: usize, func: &GoFunc, recv: Option<&str>, name: &str) -> bool {
+        let Some(path) = recv else { return matches!(self.func_result(fi, name, func), Some(TypeRef::External(_))) };
+        let mut segs = path.split('.');
+        let head = segs.next().unwrap_or_default();
+        let rest: Vec<&str> = segs.collect();
+        let mut current = self.var_type(fi, func, head);
+        if current.is_none() {
+            let Some(imp) = self.import_for(fi, head) else { return false };
+            return match self.pkg_by_path.get(&imp.path) {
+                None => true,
+                Some(_) if rest.is_empty() => matches!(self.func_result(fi, &format!("{path}.{name}"), func), Some(TypeRef::External(_))),
+                Some(_) => false,
+            };
+        }
+        for seg in &rest {
+            current = match current {
+                Some(TypeRef::Project(t)) => self.field_type(t, seg),
+                ext => ext,
+            };
+        }
+        matches!(current, Some(TypeRef::External(_)))
     }
 
     fn guess(&mut self, fi: usize, caller: NodeId, scope: Scope, name: &str, cf: &mut CallFacts) {

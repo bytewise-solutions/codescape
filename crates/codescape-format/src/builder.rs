@@ -530,6 +530,7 @@ impl GraphBuilder {
             lines: s.lines,
             source_bytes: s.source_bytes,
             calls_resolved: s.calls_resolved,
+            calls_external: s.calls_external,
             calls_guessed: s.calls_guessed,
             calls_unresolved: s.calls_unresolved,
             skipped_kinds,

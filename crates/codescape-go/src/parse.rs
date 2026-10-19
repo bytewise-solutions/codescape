@@ -64,6 +64,7 @@ pub struct GoCall {
     pub ident_args: Vec<Option<String>>,
     pub assigned_to: Option<String>,
     pub composite: Option<String>,
+    pub chain_head: Option<(Option<String>, String)>,
     pub line: u32,
     pub col: u32,
     pub len: u32,
@@ -440,6 +441,35 @@ impl<'s> Ctx<'s> {
         if left.kind() == "expression_list" { nth_named(left, 0).map(|x| self.text(x).to_string()) } else { Some(self.text(left).to_string()) }
     }
 
+    fn is_path(&self, n: Node) -> bool {
+        matches!(n.kind(), "identifier" | "selector_expression") && self.text(n).chars().all(|c| c.is_alphanumeric() || c == '_' || c == '.')
+    }
+
+    fn chain_head(&self, mut n: Node) -> Option<(Option<String>, String)> {
+        loop {
+            match n.kind() {
+                "call_expression" => {
+                    let f = n.child_by_field_name("function")?;
+                    match f.kind() {
+                        "identifier" => return Some((None, self.text(f).to_string())),
+                        "selector_expression" => {
+                            let operand = f.child_by_field_name("operand")?;
+                            if self.is_path(operand) {
+                                let field = f.child_by_field_name("field")?;
+                                return Some((Some(self.text(operand).to_string()), self.text(field).to_string()));
+                            }
+                            n = operand;
+                        }
+                        _ => return None,
+                    }
+                }
+                "selector_expression" => n = n.child_by_field_name("operand")?,
+                "parenthesized_expression" => n = nth_named(n, 0)?,
+                _ => return None,
+            }
+        }
+    }
+
     fn call(&self, n: Node) -> GoCall {
         let func = n.child_by_field_name("function");
         let name_node = match func {
@@ -447,16 +477,17 @@ impl<'s> Ctx<'s> {
             Some(f) if f.kind() == "identifier" => Some(f),
             _ => None,
         };
+        let mut chain_head = None;
         let (receiver, method) = match func {
             Some(f) if f.kind() == "selector_expression" => {
                 let operand = f.child_by_field_name("operand");
                 let method = f.child_by_field_name("field").map(|x| self.text(x).to_string()).unwrap_or_default();
-                let recv = match operand.map(|o| o.kind()) {
-                    Some("identifier") | Some("selector_expression") => {
-                        let t = self.text(operand.unwrap());
-                        if t.chars().all(|c| c.is_alphanumeric() || c == '_' || c == '.') { t.to_string() } else { CHAIN.to_string() }
+                let recv = match operand {
+                    Some(o) if self.is_path(o) => self.text(o).to_string(),
+                    _ => {
+                        chain_head = operand.and_then(|o| self.chain_head(o));
+                        CHAIN.to_string()
                     }
-                    _ => CHAIN.to_string(),
                 };
                 (Some(recv), method)
             }
@@ -480,6 +511,7 @@ impl<'s> Ctx<'s> {
             ident_args,
             assigned_to: self.assigned_to(n),
             composite: None,
+            chain_head,
             line: name_node.map_or_else(|| line(n), line),
             col: name_node.map_or(0, col),
             len: name_node.map_or(0, len),
