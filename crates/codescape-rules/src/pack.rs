@@ -8,6 +8,7 @@ use std::path::{Path, PathBuf};
 const BUILTINS: &[(&str, &str)] = &[
     ("java-core", include_str!("../../../rules/java-core/pack.toml")),
     ("libgdx", include_str!("../../../rules/libgdx/pack.toml")),
+    ("android", include_str!("../../../rules/android/pack.toml")),
     ("spring-boot", include_str!("../../../rules/spring-boot/pack.toml")),
     ("dagger", include_str!("../../../rules/dagger/pack.toml")),
     ("go-core", include_str!("../../../rules/go-core/pack.toml")),
@@ -50,6 +51,7 @@ pub enum Rule {
     Supertype {
         types: Vec<String>,
         callbacks: Vec<Callback>,
+        launcher: Option<String>,
     },
     Annotation {
         names: Vec<String>,
@@ -373,6 +375,8 @@ fn unknown() -> String {
 struct SupertypeFile {
     types: Vec<String>,
     callbacks: Vec<CallbackFile>,
+    #[serde(default)]
+    launcher: Option<String>,
 }
 
 #[derive(Deserialize)]
@@ -594,7 +598,7 @@ impl RuleFile {
                     Ok(Callback { method: c.method, lifecycle, order: c.order })
                 })
                 .collect::<Result<_>>()?;
-            return Ok(Rule::Supertype { types: s.types, callbacks });
+            return Ok(Rule::Supertype { types: s.types, callbacks, launcher: s.launcher });
         }
         if let Some(a) = self.annotation {
             return Ok(Rule::Annotation { names: a.names, handoff: a.handoff });

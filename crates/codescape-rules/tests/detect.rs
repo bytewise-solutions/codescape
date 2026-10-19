@@ -810,3 +810,26 @@ fn classes_other_classes_extend_are_components() {
     assert!(!detail(base), "a base class with no methods of its own is still part of the design");
     assert!(detail(lone), "an unshared class nobody extends stays a detail");
 }
+
+#[test]
+fn android_components_are_entry_points() {
+    let mut fx = Fx::new();
+    let f = fx.file("android", "android/src/a/AndroidClient.java", Lang::Java, false, &[]);
+    let app = fx.ty(f, "a.AndroidClient", &["com.badlogic.gdx.backends.android.AndroidApplication"], &[]);
+    fx.func(f, Some(app), "onCreate", false, Some("com.badlogic.gdx.backends.android.AndroidApplication"), &[]);
+    fx.func(f, Some(app), "helper", false, None, &[]);
+    let g = fx.file("android", "android/src/a/SyncService.java", Lang::Java, false, &[]);
+    let svc = fx.ty(g, "a.SyncService", &["android.app.Service"], &[]);
+    fx.func(g, Some(svc), "onStartCommand", false, Some("android.app.Service"), &[]);
+    fx.run(&builtins());
+    let create = fx.entry("AndroidClient.onCreate()");
+    assert_eq!(create.rule, "android.activity");
+    assert_eq!(create.lifecycle, Lifecycle::Once);
+    assert_eq!(create.category, Category::Application);
+    assert_eq!(fx.entry("SyncService.onStartCommand()").rule, "android.service");
+    let root = fx.entry_index("AndroidClient");
+    assert_eq!(fx.entry("AndroidClient").handoff.as_deref(), Some("Android"));
+    assert_eq!(fx.entry("AndroidClient").kind, "framework-launch");
+    assert_eq!(create.parent, Some(root));
+    assert!(fx.b.entries().iter().all(|e| e.label != "AndroidClient.helper()"));
+}

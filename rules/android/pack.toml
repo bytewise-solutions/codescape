@@ -1,0 +1,59 @@
+name = "android"
+version = "0.1.0"
+languages = ["java"]
+
+[[rule]]
+id = "android.activity"
+supertype = { types = [
+    "android.app.Activity",
+    "android.app.NativeActivity",
+    "androidx.activity.ComponentActivity",
+    "androidx.core.app.ComponentActivity",
+    "androidx.fragment.app.FragmentActivity",
+    "androidx.appcompat.app.AppCompatActivity",
+    "com.badlogic.gdx.backends.android.AndroidApplication",
+], launcher = "Android", callbacks = [
+    { method = "onCreate", lifecycle = "once", order = 1 },
+    { method = "onStart", lifecycle = "later", order = 2 },
+    { method = "onResume", lifecycle = "later", order = 3 },
+    { method = "onPause", lifecycle = "later", order = 4 },
+    { method = "onStop", lifecycle = "later", order = 5 },
+    { method = "onDestroy", lifecycle = "later", order = 6 },
+    { method = "onNewIntent", lifecycle = "on-event", order = 7 },
+    { method = "onActivityResult", lifecycle = "on-event", order = 8 },
+] }
+
+[[rule]]
+id = "android.application"
+supertype = { types = ["android.app.Application"], launcher = "Android", callbacks = [
+    { method = "onCreate", lifecycle = "once", order = 1 },
+    { method = "onTerminate", lifecycle = "later", order = 2 },
+] }
+
+[[rule]]
+id = "android.service"
+supertype = { types = ["android.app.Service", "android.app.IntentService", "androidx.core.app.JobIntentService"], launcher = "Android", callbacks = [
+    { method = "onCreate", lifecycle = "once", order = 1 },
+    { method = "onStartCommand", lifecycle = "on-event", order = 2 },
+    { method = "onBind", lifecycle = "on-event", order = 3 },
+    { method = "onHandleIntent", lifecycle = "on-event", order = 4 },
+    { method = "onHandleWork", lifecycle = "on-event", order = 5 },
+    { method = "onDestroy", lifecycle = "later", order = 6 },
+] }
+
+[[rule]]
+id = "android.receiver"
+supertype = { types = ["android.content.BroadcastReceiver"], launcher = "Android", callbacks = [
+    { method = "onReceive", lifecycle = "on-event", order = 1 },
+] }
+
+[[rule]]
+id = "android.provider"
+supertype = { types = ["android.content.ContentProvider"], launcher = "Android", callbacks = [
+    { method = "onCreate", lifecycle = "once", order = 1 },
+    { method = "query", lifecycle = "on-event", order = 2 },
+    { method = "insert", lifecycle = "on-event", order = 3 },
+    { method = "update", lifecycle = "on-event", order = 4 },
+    { method = "delete", lifecycle = "on-event", order = 5 },
+    { method = "getType", lifecycle = "on-event", order = 6 },
+] }

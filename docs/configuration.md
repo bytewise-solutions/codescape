@@ -70,7 +70,7 @@ writes nothing into the project unless you press that last button.
 
 Framework knowledge (which methods a framework calls back, what registers an HTTP route, how things are coloured)
 lives in **rule packs**, not in Codescape's code. The built-in packs in `rules/` use exactly the format you would
-write yourself: `java-core`, `libgdx`, `spring-boot`, `dagger`, `go-core`, `fiber`, `rabbitmq-amqp091`,
+write yourself: `java-core`, `libgdx`, `android`, `spring-boot`, `dagger`, `go-core`, `fiber`, `rabbitmq-amqp091`,
 `google-wire`, `ts-core`, `angular`, `express`, `rust-core`, `layers`, `significance`, `default-visuals`.
 
 Packs load in this order, later ones overriding earlier rules with the same `id`:
@@ -106,6 +106,7 @@ Each rule has exactly one matcher:
 | `object_route = { var_types, calls, path_key, target_keys, children_key, kind, label }` | routes declared as object literals (e.g. Angular `Routes`), nested `children` joining their paths |
 | `path = { glob, category }` | the category of mains under matching paths |
 | `supertype = { types, callbacks = [{ method, lifecycle, order }] }` | framework callbacks on subclasses, nested under the main that reaches them |
+| `supertype = { types, launcher, callbacks = […] }` | the same, for classes a platform starts itself (no `main`): each subclass becomes an entry point that hands off to `launcher` (e.g. `"Android"` for activities and services), its callbacks nested under it |
 | `annotation = { names, handoff }` | marks a main as handing off to a framework (e.g. Spring Boot) |
 | `annotation_route = { names, method, prefix_from_type }` | HTTP routes from annotated methods |
 | `call_route = { methods, group_methods, receiver_types, file_imports, path_arg, handler_arg, label }` | HTTP routes from registration calls, joining group prefixes across functions |

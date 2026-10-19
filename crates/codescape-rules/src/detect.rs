@@ -59,6 +59,7 @@ pub fn apply_detection(packs: &Packs, facts: &ProjectFacts, sources: &dyn Fn(&st
     cx.name_tags(b);
     cx.dispatch(b);
     cx.mains(b);
+    cx.launched(b);
     cx.compute_reach(b);
     cx.handoffs(b);
     cx.callbacks(b);
@@ -618,6 +619,36 @@ impl<'a> Ctx<'a> {
         }
     }
 
+    fn launched(&mut self, b: &mut GraphBuilder) {
+        let mut found: Vec<(String, String, &'a FileFacts, NodeId)> = Vec::new();
+        for (id, rule) in self.packs.rules() {
+            let Rule::Supertype { types, launcher: Some(launcher), .. } = rule else { continue };
+            for file in files_sorted(self.facts) {
+                for t in file.types.iter().filter(|t| !file.is_test && types.iter().any(|target| self.extends(&t.fqn, target))) {
+                    found.push((id.to_string(), launcher.clone(), file, t.node));
+                }
+            }
+        }
+        for (id, launcher, file, node) in found {
+            if self.mains.iter().any(|m| m.node == node) {
+                continue;
+            }
+            let category = self.category_for(file, Category::Application);
+            let entry = b.add_entry(EntryPointSpec {
+                node,
+                kind: "framework-launch".into(),
+                category,
+                label: b.name(node).to_string(),
+                parent: None,
+                lifecycle: Lifecycle::Once,
+                order: 0,
+                rule: id,
+                handoff: Some(launcher),
+            });
+            self.mains.push(MainEntry { entry, node, module: file.module, category });
+        }
+    }
+
     fn call_mains(&mut self, file: &'a FileFacts, b: &mut GraphBuilder) {
         let rules: Vec<(String, Rule)> =
             self.packs.rules_for(file.lang).filter(|(_, r)| matches!(r, Rule::MainCall { .. })).map(|(id, r)| (id.to_string(), r.clone())).collect();
@@ -779,7 +810,7 @@ impl<'a> Ctx<'a> {
 
     fn callbacks(&mut self, b: &mut GraphBuilder) {
         for (id, rule) in self.packs.rules() {
-            let Rule::Supertype { types, callbacks } = rule else { continue };
+            let Rule::Supertype { types, callbacks, .. } = rule else { continue };
             for file in files_sorted(self.facts) {
                 for t in &file.types {
                     if !types.iter().any(|target| self.extends(&t.fqn, target)) {

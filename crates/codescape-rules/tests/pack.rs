@@ -96,6 +96,7 @@ fn builtin_packs_parse() {
         [
             "java-core",
             "libgdx",
+            "android",
             "spring-boot",
             "dagger",
             "go-core",
