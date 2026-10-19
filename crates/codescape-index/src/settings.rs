@@ -39,6 +39,7 @@ pub enum View {
     TestDeps,
     Details,
     Errors,
+    Logging,
     Wiring,
     Complexity,
     Unused,
@@ -55,11 +56,12 @@ pub enum View {
 }
 
 impl View {
-    pub const ALL: [View; 17] = [
+    pub const ALL: [View; 18] = [
         View::Tests,
         View::TestDeps,
         View::Details,
         View::Errors,
+        View::Logging,
         View::Wiring,
         View::Complexity,
         View::Unused,
@@ -76,7 +78,7 @@ impl View {
     ];
 
     pub fn default_value(self) -> bool {
-        !matches!(self, View::Tests | View::TestDeps | View::Details | View::Errors | View::Wiring | View::Unused | View::Generated)
+        !matches!(self, View::Tests | View::TestDeps | View::Details | View::Errors | View::Logging | View::Wiring | View::Unused | View::Generated)
     }
 
     pub fn label(self) -> &'static str {
@@ -85,6 +87,7 @@ impl View {
             View::TestDeps => "Test dependencies",
             View::Details => "Details",
             View::Errors => "Errors",
+            View::Logging => "Logging",
             View::Wiring => "Wiring",
             View::Complexity => "Complexity hints",
             View::Unused => "Unused code",
@@ -222,6 +225,8 @@ struct ViewFile {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     errors: Option<bool>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    logging: Option<bool>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     wiring: Option<bool>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     complexity: Option<bool>,
@@ -320,6 +325,7 @@ impl ViewFile {
             View::TestDeps => &mut self.test_deps,
             View::Details => &mut self.details,
             View::Errors => &mut self.errors,
+            View::Logging => &mut self.logging,
             View::Wiring => &mut self.wiring,
             View::Complexity => &mut self.complexity,
             View::Unused => &mut self.unused,

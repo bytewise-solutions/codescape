@@ -6,7 +6,7 @@ Everything here is optional: Codescape works on a project without any file of it
 
 Settings come from four layers; a later one overrides an earlier one:
 
-1. built-in defaults (tests, test deps, details, errors and wiring hidden; build output, `vendor`, dot folders left out),
+1. built-in defaults (tests, test deps, details, errors, logging and wiring hidden; build output, `vendor`, dot folders left out),
 2. your defaults for every project: `~/.config/codescape/settings.toml`,
 3. the project's `codescape.toml` (or `--config FILE`), shared with the team,
 4. your settings for this project: `~/.config/codescape/projects/<hash>.toml`, written by the viewer.
@@ -36,7 +36,7 @@ names = ["Migration$"]         # regexes on type and function names
 shown = false                  # default for View ▸ migrations
 
 [view]
-details = true                 # tests, test_deps, details, errors, wiring, generated, legend, ...
+details = true                 # tests, test_deps, details, errors, logging, wiring, generated, legend, ...
 private_members = false        # cards: private_members, fields, accessors, constructors
 guessed_calls = false          # arrows: guessed_calls, implements_arrows, import_arrows, quiet_arrows
 complexity_hint = 12           # also complexity_high, many_callers, keep_versions_days
@@ -116,6 +116,7 @@ Each rule has exactly one matcher:
 | `query = { language, file, capture, kind, label }` | entry points from a tree-sitter query |
 | `wiring = { file_markers, file_imports, calls, annotations, type_prefixes, requires_imports, caller_prefixes }` | marks dependency-injection code as wiring |
 | `test_code = { file_imports, dir_names, paths }` | marks test helpers as test code |
+| `logging = { type_names, name_suffixes }` | flags logger types (and subtypes); hidden unless View ▸ Logging is on |
 
 Lifecycles: `once`, `repeating`, `on-event`, `later`, `unknown`. Visual rules (`tag_style`, `frame` with
 `auto_prefix` or `pattern`, `hide_tags`, `entry_group`) apply without re-indexing; detection rules

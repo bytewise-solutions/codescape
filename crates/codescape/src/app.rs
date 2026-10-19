@@ -28,7 +28,7 @@ use codescape_index::review::{
 use codescape_index::{
     Key as SettingKey, Progress, ProjectConfig, SettingsPaths, SettingsStore, Threshold, View, index_path, index_project, needs_reindex, project_packs,
 };
-use codescape_layout::{Direction, LayoutCache, Rect};
+use codescape_layout::{Direction, LayoutCache, Rect, is_logging_type};
 use codescape_rules::{PackSelection, VisualRules, load_packs, user_rules_dir};
 use egui::{Align2, Color32, FontId, Key, Pos2, Sense, Shape, Stroke, StrokeKind};
 use keys_ui::{load_keys, shown as key_text, take_pressed};
@@ -2054,7 +2054,8 @@ impl Project {
                     }
                 }
             }
-            let fields: Vec<_> = g.fields(n).collect();
+            let opts = self.cache.options().clone();
+            let fields: Vec<_> = g.fields(n).filter(|f| opts.show_logging || !is_logging_type(f.ty, &opts.logging_types)).collect();
             if !fields.is_empty() {
                 ui.add_space(10.0);
                 ui.label(egui::RichText::new(format!("FIELDS ({})", fields.len())).small().strong().color(style::MUTED));
@@ -2069,7 +2070,6 @@ impl Project {
                         }
                     });
             }
-            let opts = self.cache.options().clone();
             let (summary, kids) = inspector::inside(g, n, &|c| opts.hides(g, c));
             if !kids.is_empty() && g.kind(n) != NodeKind::Member {
                 ui.add_space(10.0);

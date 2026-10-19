@@ -6,8 +6,8 @@ mod size;
 pub use fold::{display_children, display_path, folded_into};
 pub use layered::{count_crossings, layout_container};
 pub use size::{
-    CARD_FIELD_GAP, CARD_MAX_FIELDS, CARD_MAX_ROWS, CARD_ROW, CARD_TOP, box_size, card_field_rows, card_members, card_methods_top, card_rows_bottom,
-    is_constructor,
+    CARD_FIELD_GAP, CARD_MAX_FIELDS, CARD_MAX_ROWS, CARD_ROW, CARD_TOP, box_size, card_field_rows, card_fields, card_members, card_methods_top,
+    card_rows_bottom, is_constructor, is_logging_type,
 };
 
 use codescape_format::{ArchivedGraph, NodeFlags, NodeId};
@@ -92,6 +92,8 @@ pub struct LayoutOptions {
     pub show_tests: bool,
     pub show_wiring: bool,
     pub show_noise: bool,
+    pub show_logging: bool,
+    pub logging_types: Vec<String>,
     pub show_details: bool,
     pub show_generated: bool,
     pub details_in: Vec<NodeId>,
@@ -107,11 +109,20 @@ impl Default for LayoutOptions {
     fn default() -> Self {
         LayoutOptions {
             include_test_edges: false,
-            hidden: NodeFlags::EXTERNAL | NodeFlags::MOCK | NodeFlags::TEST | NodeFlags::WIRING | NodeFlags::NOISE | NodeFlags::DETAIL | NodeFlags::GENERATED,
+            hidden: NodeFlags::EXTERNAL
+                | NodeFlags::MOCK
+                | NodeFlags::TEST
+                | NodeFlags::WIRING
+                | NodeFlags::NOISE
+                | NodeFlags::LOGGING
+                | NodeFlags::DETAIL
+                | NodeFlags::GENERATED,
             hidden_tags: Vec::new(),
             show_tests: false,
             show_wiring: false,
             show_noise: false,
+            show_logging: false,
+            logging_types: Vec::new(),
             show_details: false,
             show_generated: false,
             details_in: Vec::new(),
@@ -136,6 +147,9 @@ impl LayoutOptions {
         }
         if self.show_noise {
             keep |= NodeFlags::NOISE.0;
+        }
+        if self.show_logging {
+            keep |= NodeFlags::LOGGING.0;
         }
         if self.show_details {
             keep |= NodeFlags::DETAIL.0;

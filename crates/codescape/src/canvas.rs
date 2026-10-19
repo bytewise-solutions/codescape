@@ -2,7 +2,7 @@ use crate::camera::{Camera, WRect};
 use crate::focus::{Mark, Marks};
 use codescape_format::{ArchivedGraph, NodeFlags, NodeId, NodeKind, SubKind};
 use codescape_layout::{
-    CARD_MAX_ROWS, CARD_ROW, CARD_TOP, ContainerLayout, Direction, LayoutCache, Rect, box_size, card_field_rows, card_members, card_methods_top,
+    CARD_MAX_ROWS, CARD_ROW, CARD_TOP, ContainerLayout, Direction, LayoutCache, Rect, box_size, card_field_rows, card_fields, card_members, card_methods_top,
     display_children, display_path,
 };
 use codescape_rules::VisualRules;
@@ -276,9 +276,7 @@ impl Builder<'_> {
         let opts = &opts;
         let row_rect = |top: f64, i: usize| WRect::new(ox + 8.0 * s, oy + (top + i as f64 * CARD_ROW as f64) * s, (w - 16.0 * s).max(0.0), CARD_ROW as f64 * s);
         let (field_count, more_fields) = card_field_rows(g, node, opts);
-        let field_rows: Vec<FieldRow> = g
-            .fields(node)
-            .filter(|f| opts.card.private || f.visibility != codescape_format::Visibility::Private)
+        let field_rows: Vec<FieldRow> = card_fields(g, node, opts)
             .take(field_count)
             .enumerate()
             .map(|(i, f)| FieldRow {

@@ -91,9 +91,11 @@ pub fn visible_links(g: &ArchivedGraph, list: &[NodeId], opts: &LayoutOptions) -
     let mut tests = 0;
     let mut shown = Vec::with_capacity(list.len());
     for &n in list {
-        if g.flags(n).intersects(NodeFlags::TEST | NodeFlags::MOCK) && opts.hides(g, n) {
+        let flags = g.flags(n);
+        let hidden = opts.hides(g, n);
+        if flags.intersects(NodeFlags::TEST | NodeFlags::MOCK) && hidden {
             tests += 1;
-        } else {
+        } else if !(flags.contains(NodeFlags::LOGGING) && hidden) {
             shown.push(n);
         }
     }
@@ -168,6 +170,7 @@ pub fn chips(g: &ArchivedGraph, n: NodeId, entry_owner: bool) -> Vec<Chip> {
         (NodeFlags::WIRING, "wiring", "dependency-injection code, hidden unless View > Wiring is on"),
         (NodeFlags::DETAIL, "detail", "a data type or helper, hidden unless View > Details is on"),
         (NodeFlags::NOISE, "error type", "an error or exception type, hidden unless View > Errors is on"),
+        (NodeFlags::LOGGING, "logging", "a logger type, hidden unless View > Logging is on"),
         (NodeFlags::TEST, "test code", "test code, hidden unless View > Tests is on"),
         (NodeFlags::MOCK, "mock", "a generated or hand-written mock"),
         (NodeFlags::GENERATED, "generated", "generated code"),

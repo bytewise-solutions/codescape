@@ -145,3 +145,21 @@ fn used_by_leaves_out_tests_while_tests_are_hidden() {
     let (shown, dropped) = visible_links(g, &callers, &opts);
     assert_eq!((shown, dropped), (callers.to_vec(), 0));
 }
+
+#[test]
+fn used_by_leaves_out_loggers_without_counting_them_as_tests() {
+    let mut b = GraphBuilder::new("p");
+    let m = b.add_node(b.root(), NodeKind::Module, SubKind::None, "m", Lang::Go);
+    let t = b.add_node(m, NodeKind::Type, SubKind::Struct, "T", Lang::Go);
+    b.add_node(t, NodeKind::Member, SubKind::Method, "plain", Lang::Go);
+    let log = b.add_node(t, NodeKind::Member, SubKind::Method, "logCall", Lang::Go);
+    b.add_flags(log, NodeFlags::LOGGING);
+    let dir = tempfile::tempdir().unwrap();
+    write_graph(&b.finish(), &dir.path().join("g")).unwrap();
+    let file = IndexFile::open(&dir.path().join("g")).unwrap();
+    let g = file.graph();
+    let both = [named(g, "plain"), named(g, "logCall")];
+    assert_eq!(visible_links(g, &both, &codescape_layout::LayoutOptions::default()), (vec![both[0]], 0));
+    let opts = codescape_layout::LayoutOptions { show_logging: true, ..Default::default() };
+    assert_eq!(visible_links(g, &both, &opts), (both.to_vec(), 0));
+}

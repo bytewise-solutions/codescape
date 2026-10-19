@@ -602,6 +602,26 @@ fn error_types_are_noise() {
 }
 
 #[test]
+fn loggers_are_flagged() {
+    let mut fx = Fx::new();
+    let j = fx.file("core", "core/src/main/java/c/Audit.java", Lang::Java, false, &[]);
+    let audit = fx.ty(j, "c.AuditLogger", &[], &[]);
+    let logger = fx.ty(j, "c.Logger", &[], &[]);
+    let child = fx.ty(j, "c.Sink", &["c.Logger"], &[]);
+    let service = fx.ty(j, "c.Service", &[], &[]);
+    let blogger = fx.ty(j, "c.Blogger", &[], &[]);
+    fx.run(&builtins());
+    for n in [audit, logger, child] {
+        assert!(fx.b.flags(n).contains(NodeFlags::LOGGING), "{} should be logging", fx.b.name(n));
+    }
+    for n in [service, blogger] {
+        assert!(!fx.b.flags(n).contains(NodeFlags::LOGGING), "{} is real", fx.b.name(n));
+    }
+    assert!(fx.b.has_tag(audit, "why:logging:name ends with Logger"));
+    assert!(fx.b.has_tag(child, "why:logging:extends a logger"));
+}
+
+#[test]
 fn architectural_roles_are_tagged() {
     let mut fx = Fx::new();
     let f = fx.file("api", "api/internal/billing/billing.go", Lang::Go, false, &["github.com/gofiber/fiber/v2"]);

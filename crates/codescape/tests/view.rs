@@ -1,4 +1,5 @@
 use codescape::view::{ViewItem, layout_options, view_items};
+use codescape_format::{GraphBuilder, IndexFile, write_graph};
 use codescape_index::{Key, SettingsPaths, SettingsStore, View};
 use codescape_layout::LayoutOptions;
 use codescape_rules::VisualRules;
@@ -34,6 +35,23 @@ fn display_settings_map_onto_layout_options() {
 }
 
 #[test]
+fn logging_is_off_by_default_and_its_types_come_from_the_packs() {
+    let (_t, s) = store("");
+    let g = IndexFile::open(&{
+        let dir = tempfile::tempdir().unwrap().keep();
+        write_graph(&GraphBuilder::new("p").finish(), &dir.join("g")).unwrap();
+        dir.join("g")
+    })
+    .unwrap();
+    let visual = codescape_rules::load_packs(None, None, &Default::default()).unwrap().visual();
+    let o = codescape::view::map_options(g.graph(), s.settings(), &visual);
+    assert!(!o.show_logging);
+    assert!(o.logging_types.iter().any(|t| t == "Logger"));
+    let (_t, s) = store("[view]\nlogging = true\n");
+    assert!(layout_options(s.settings(), &VisualRules::default()).show_logging);
+}
+
+#[test]
 fn a_shown_filter_hides_nothing() {
     let (_t, s) = store(&format!("[view]\nfilters = {{ migrations = true }}\n\n{FILTERS}"));
     assert!(layout_options(s.settings(), &VisualRules::default()).hidden_tags.is_empty());
@@ -46,14 +64,27 @@ fn view_menu_lists_built_in_toggles_then_filters_then_arrows_and_legend() {
     let labels: Vec<&str> = items.iter().map(|i| i.label.as_str()).collect();
     assert_eq!(
         labels,
-        ["Tests", "Test dependencies", "Details", "Errors", "Wiring", "Complexity hints", "Unused code", "migrations", "generated", "Quiet arrows", "Legend"]
+        [
+            "Tests",
+            "Test dependencies",
+            "Details",
+            "Errors",
+            "Logging",
+            "Wiring",
+            "Complexity hints",
+            "Unused code",
+            "migrations",
+            "generated",
+            "Quiet arrows",
+            "Legend"
+        ]
     );
-    assert_eq!(items[5], ViewItem { key: Key::View(View::Complexity), label: "Complexity hints".into(), checked: true });
-    assert_eq!(items[6], ViewItem { key: Key::View(View::Unused), label: "Unused code".into(), checked: false });
-    assert_eq!(items[7], ViewItem { key: Key::FilterShown("migrations".into()), label: "migrations".into(), checked: false });
-    assert!(items[8].checked);
-    assert_eq!(items[9], ViewItem { key: Key::View(View::QuietArrows), label: "Quiet arrows".into(), checked: true });
-    assert_eq!(items[10], ViewItem { key: Key::View(View::Legend), label: "Legend".into(), checked: true });
+    assert_eq!(items[6], ViewItem { key: Key::View(View::Complexity), label: "Complexity hints".into(), checked: true });
+    assert_eq!(items[7], ViewItem { key: Key::View(View::Unused), label: "Unused code".into(), checked: false });
+    assert_eq!(items[8], ViewItem { key: Key::FilterShown("migrations".into()), label: "migrations".into(), checked: false });
+    assert!(items[9].checked);
+    assert_eq!(items[10], ViewItem { key: Key::View(View::QuietArrows), label: "Quiet arrows".into(), checked: true });
+    assert_eq!(items[11], ViewItem { key: Key::View(View::Legend), label: "Legend".into(), checked: true });
 }
 
 #[test]

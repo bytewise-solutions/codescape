@@ -218,6 +218,7 @@ impl<'a> Ctx<'a> {
             b.add_tag(n, "why:wiring:dependency-injection setup");
         }
         self.mark_noise(b);
+        self.mark_logging(b);
         let mut importers: HashMap<(NodeId, NodeId), (bool, bool)> = HashMap::new();
         for file in &facts.files {
             let Some(p) = file.package else { continue };
@@ -282,6 +283,49 @@ impl<'a> Ctx<'a> {
                 }
             }
         }
+    }
+
+    fn mark_logging(&self, b: &mut GraphBuilder) {
+        for file in &self.facts.files {
+            for (_, rule) in self.packs.rules_for(file.lang) {
+                let Rule::Logging { type_names, name_suffixes } = rule else { continue };
+                let is_logger = |fqn: &str| {
+                    let simple = fqn.rsplit('.').next().unwrap_or(fqn);
+                    type_names.iter().any(|n| n == simple) || name_suffixes.iter().any(|s| simple.ends_with(s.as_str()) && simple.len() > s.len())
+                };
+                for t in &file.types {
+                    let simple = t.fqn.rsplit('.').next().unwrap_or(&t.fqn);
+                    let why = if let Some(s) = name_suffixes.iter().find(|s| simple.ends_with(s.as_str()) && simple.len() > s.len()) {
+                        format!("why:logging:name ends with {s}")
+                    } else if type_names.iter().any(|n| n == simple) {
+                        "why:logging:a logger type".to_string()
+                    } else if self.supertype_matches(&t.fqn, &is_logger) {
+                        "why:logging:extends a logger".to_string()
+                    } else {
+                        continue;
+                    };
+                    b.add_flags(t.node, NodeFlags::LOGGING);
+                    b.add_tag(t.node, &why);
+                }
+            }
+        }
+    }
+
+    fn supertype_matches(&self, fqn: &str, test: &dyn Fn(&str) -> bool) -> bool {
+        let mut seen = HashSet::new();
+        let mut q: VecDeque<String> = self.types.get(fqn).map(|t| t.supertypes.iter().cloned().collect()).unwrap_or_default();
+        while let Some(cur) = q.pop_front() {
+            if test(&cur) {
+                return true;
+            }
+            if !seen.insert(cur.clone()) {
+                continue;
+            }
+            if let Some(t) = self.types.get(cur.as_str()) {
+                q.extend(t.supertypes.iter().cloned());
+            }
+        }
+        false
     }
 
     fn significance(&mut self, b: &mut GraphBuilder) {

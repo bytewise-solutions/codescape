@@ -1,5 +1,5 @@
 use crate::LayoutOptions;
-use codescape_format::{ArchivedGraph, NodeFlags, NodeId, NodeKind, SubKind, Visibility};
+use codescape_format::{ArchivedGraph, FieldView, NodeFlags, NodeId, NodeKind, SubKind, Visibility};
 
 pub const CARD_TOP: f32 = 34.0;
 pub const CARD_ROW: f32 = 13.0;
@@ -7,12 +7,21 @@ pub const CARD_MAX_ROWS: usize = 14;
 pub const CARD_MAX_FIELDS: usize = 8;
 pub const CARD_FIELD_GAP: f32 = 6.0;
 
+pub fn card_fields<'a>(g: &'a ArchivedGraph, node: NodeId, opts: &'a LayoutOptions) -> impl Iterator<Item = FieldView<'a>> {
+    let listed = g.kind(node) == NodeKind::Type && opts.card.fields;
+    g.fields(node)
+        .filter(move |f| listed && (opts.card.private || f.visibility != Visibility::Private))
+        .filter(move |f| opts.show_logging || !is_logging_type(f.ty, &opts.logging_types))
+}
+
+pub fn is_logging_type(ty: &str, names: &[String]) -> bool {
+    let simple = ty.split('<').next().unwrap_or(ty).trim_start_matches(['*', '&', '[', ']', ' ']);
+    let simple = simple.rsplit(['.', ':']).next().unwrap_or(simple);
+    names.iter().any(|n| n == simple)
+}
+
 pub fn card_field_rows(g: &ArchivedGraph, node: NodeId, opts: &LayoutOptions) -> (usize, usize) {
-    let n = if g.kind(node) == NodeKind::Type && opts.card.fields {
-        g.fields(node).filter(|f| opts.card.private || f.visibility != Visibility::Private).count()
-    } else {
-        0
-    };
+    let n = card_fields(g, node, opts).count();
     let shown = n.min(CARD_MAX_FIELDS);
     (shown, n - shown)
 }

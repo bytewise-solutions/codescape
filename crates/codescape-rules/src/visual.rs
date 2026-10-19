@@ -34,6 +34,7 @@ pub struct VisualRules {
     pub frames: Vec<FrameRule>,
     pub hide_tags: Vec<String>,
     pub entry_groups: Vec<EntryGroup>,
+    pub logging_types: Vec<String>,
 }
 
 impl VisualRules {

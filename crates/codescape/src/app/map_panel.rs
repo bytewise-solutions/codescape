@@ -19,6 +19,7 @@ pub(super) struct FlagCounts {
     tests: usize,
     generated: usize,
     errors: usize,
+    logging: usize,
     wiring: usize,
     details: usize,
 }
@@ -85,6 +86,7 @@ impl Project {
             c.tests += usize::from(f.intersects(NodeFlags::TEST | NodeFlags::MOCK));
             c.generated += usize::from(f.contains(NodeFlags::GENERATED));
             c.errors += usize::from(f.contains(NodeFlags::NOISE));
+            c.logging += usize::from(f.contains(NodeFlags::LOGGING));
             c.wiring += usize::from(f.contains(NodeFlags::WIRING));
             c.details += usize::from(f.contains(NodeFlags::DETAIL));
         }
@@ -152,6 +154,7 @@ impl Project {
                     switch(ui, View::TestDeps, None);
                     switch(ui, View::Generated, Some(counts.generated));
                     switch(ui, View::Errors, Some(counts.errors));
+                    switch(ui, View::Logging, Some(counts.logging));
                     switch(ui, View::Wiring, Some(counts.wiring));
                     switch(ui, View::Details, Some(counts.details));
                     heading(ui, "CARDS");

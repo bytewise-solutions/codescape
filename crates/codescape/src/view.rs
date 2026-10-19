@@ -25,6 +25,7 @@ pub fn layout_options(s: &Settings, visual: &VisualRules) -> LayoutOptions {
         show_tests: on(View::Tests),
         show_wiring: on(View::Wiring),
         show_noise: on(View::Errors),
+        show_logging: on(View::Logging),
         show_details: on(View::Details),
         show_generated: on(View::Generated),
         card: CardOptions { private: on(View::PrivateMembers), fields: on(View::Fields), accessors: on(View::Accessors), constructors: on(View::Constructors) },
@@ -38,6 +39,13 @@ pub fn layout_options(s: &Settings, visual: &VisualRules) -> LayoutOptions {
 pub fn map_options(g: &ArchivedGraph, s: &Settings, visual: &VisualRules) -> LayoutOptions {
     let mut opts = layout_options(s, visual);
     (opts.hidden_nodes, opts.always_shown) = resolve_hidden(g, s);
+    opts.logging_types = visual.logging_types.clone();
+    for n in (0..g.node_count() as NodeId).filter(|&n| g.kind(n) == NodeKind::Type && g.flags(n).contains(NodeFlags::LOGGING)) {
+        let name = g.name(n).to_string();
+        if !opts.logging_types.contains(&name) {
+            opts.logging_types.push(name);
+        }
+    }
     opts
 }
 
@@ -94,7 +102,7 @@ pub fn resolve_hidden(g: &ArchivedGraph, s: &Settings) -> (HashSet<NodeId>, Hash
 
 pub fn view_items(s: &Settings) -> Vec<ViewItem> {
     let item = |v: View| ViewItem { key: Key::View(v), label: v.label().into(), checked: s.view(v).value };
-    let in_menu = [View::Tests, View::TestDeps, View::Details, View::Errors, View::Wiring, View::Complexity, View::Unused];
+    let in_menu = [View::Tests, View::TestDeps, View::Details, View::Errors, View::Logging, View::Wiring, View::Complexity, View::Unused];
     let mut out: Vec<ViewItem> = in_menu.into_iter().map(item).collect();
     for f in &s.filters {
         let name = &f.value.name;

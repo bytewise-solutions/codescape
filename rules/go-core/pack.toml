@@ -17,3 +17,7 @@ test_code = { file_imports = ["testing", "github.com/stretchr/testify", "go.uber
 [[rule]]
 id = "go-core.errors"
 noise = { name_suffixes = ["Error"], methods = ["Error"] }
+
+[[rule]]
+id = "go-core.logging"
+logging = { type_names = ["Logger", "SugaredLogger", "Entry"], name_suffixes = ["Logger"] }

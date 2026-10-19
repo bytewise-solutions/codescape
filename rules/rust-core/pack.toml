@@ -25,3 +25,7 @@ test_code = { file_imports = ["mockall", "proptest", "quickcheck", "rstest"], di
 [[rule]]
 id = "rust-core.errors"
 noise = { name_suffixes = ["Error"], supertype_suffixes = ["error.Error"] }
+
+[[rule]]
+id = "rust-core.logging"
+logging = { type_names = ["Logger"], name_suffixes = ["Logger"] }

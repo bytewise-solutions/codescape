@@ -17,3 +17,7 @@ test_code = { file_imports = ["@angular/core/testing", "@testing-library", "@pla
 [[rule]]
 id = "ts-core.errors"
 noise = { name_suffixes = ["Error"], supertype_suffixes = ["Error"] }
+
+[[rule]]
+id = "ts-core.logging"
+logging = { type_names = ["Logger"], name_suffixes = ["Logger"] }

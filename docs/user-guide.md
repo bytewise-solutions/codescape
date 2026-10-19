@@ -150,6 +150,9 @@ enough to read.
   structs or classes that implement it.
 - **Error and exception types are set aside** (Java `*Exception` and subclasses of Exception/Throwable/Error, Go
   types with an `Error()` method or named `*Error`); tick **View ▸ Errors** to show them in their own row.
+- **Loggers are set aside:** types named `*Logger`/`*Logging` (or `Logger`, `Log`, `LoggerFactory`, `LogManager`, Go
+  `SugaredLogger`/`Entry`) and types extending them, plus fields of those types on cards and in the inspector, and their
+  entries in USES / USED BY lists. Tick **View ▸ Logging** to show them.
 - **Test code is out:** test sources, test helpers (files importing `testing`/testify or JUnit/Mockito, folders such
   as `testutil`/`testdata`, globs under `[test] paths`) and test mains are not drawn or listed. Tick **View ▸ Tests**
   to draw them and **View ▸ Test dependencies** to see test-only dependencies.
@@ -158,7 +161,7 @@ enough to read.
 
 **View ▸ What's on the map…** gathers every choice in one panel, each with how many blocks it concerns:
 
-- **Code:** tests, test dependencies, generated code, errors and exceptions, dependency-injection wiring, details.
+- **Code:** tests, test dependencies, generated code, errors and exceptions, loggers, dependency-injection wiring, details.
 - **Cards:** private members, fields, getters and setters, constructors.
 - **Arrows:** quiet arrows, guessed calls (arrows made only of calls guessed by name, drawn dotted), implements /
   extends, imports without calls. Hiding an arrow kind never moves a box.

@@ -129,6 +129,10 @@ pub enum Rule {
         supertype_suffixes: Vec<String>,
         methods: Vec<String>,
     },
+    Logging {
+        type_names: Vec<String>,
+        name_suffixes: Vec<String>,
+    },
     AnnotationTag {
         names: Vec<String>,
         tag: String,
@@ -203,6 +207,7 @@ struct RuleFile {
     wiring: Option<WiringFile>,
     test_code: Option<TestCodeFile>,
     noise: Option<NoiseFile>,
+    logging: Option<LoggingFile>,
     annotation_tag: Option<AnnotationTagFile>,
     entry_owner_tag: Option<EntryOwnerTagFile>,
     significance: Option<SignificanceFile>,
@@ -250,6 +255,15 @@ struct NoiseFile {
     supertype_suffixes: Vec<String>,
     #[serde(default)]
     methods: Vec<String>,
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct LoggingFile {
+    #[serde(default)]
+    type_names: Vec<String>,
+    #[serde(default)]
+    name_suffixes: Vec<String>,
 }
 
 #[derive(Deserialize)]
@@ -533,6 +547,7 @@ impl RuleFile {
             self.wiring.is_some(),
             self.test_code.is_some(),
             self.noise.is_some(),
+            self.logging.is_some(),
             self.annotation_tag.is_some(),
             self.entry_owner_tag.is_some(),
             self.significance.is_some(),
@@ -643,6 +658,9 @@ impl RuleFile {
         if let Some(n) = self.noise {
             return Ok(Rule::Noise { name_suffixes: n.name_suffixes, supertype_suffixes: n.supertype_suffixes, methods: n.methods });
         }
+        if let Some(l) = self.logging {
+            return Ok(Rule::Logging { type_names: l.type_names, name_suffixes: l.name_suffixes });
+        }
         if let Some(t) = self.test_code {
             for g in &t.paths {
                 globset::Glob::new(g).with_context(|| format!("bad glob in rule `{}`", self.id))?;
@@ -698,6 +716,7 @@ impl Pack {
             frames,
             hide_tags: v.hide_tags,
             entry_groups,
+            ..Default::default()
         };
         Ok(Pack { name: file.name, version: file.version, languages, rules, visual, hash: blake3::hash(src.as_bytes()).to_hex()[..16].to_string(), dir })
     }
@@ -763,6 +782,15 @@ impl Packs {
             }
             if !p.visual.entry_groups.is_empty() {
                 v.entry_groups = p.visual.entry_groups.clone();
+            }
+        }
+        for (_, rule) in self.rules() {
+            if let Rule::Logging { type_names, .. } = rule {
+                for n in type_names {
+                    if !v.logging_types.contains(n) {
+                        v.logging_types.push(n.clone());
+                    }
+                }
             }
         }
         v
