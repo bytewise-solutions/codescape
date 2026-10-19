@@ -40,7 +40,7 @@ fn packages_are_directories() {
     assert_eq!(r.b.node_kind(at(&r.b, &["svc-a", "internal/handler", "H", "Serve"])), NodeKind::Member);
     assert_eq!(r.b.node_kind(at(&r.b, &["svc-a", "internal/handler", "H", "New"])), NodeKind::Member);
     assert_eq!(r.b.node_kind(at(&r.b, &["shared", "(root)"])), NodeKind::Package);
-    assert_eq!(r.stats.files, 8);
+    assert_eq!(r.stats.files, 9);
 }
 
 #[test]
@@ -352,4 +352,15 @@ func H() {\n\tx := A{}\n\tx.M()\n\t{\n\t\tx := B{}\n\t\tx.M()\n\t}\n}\n\nfunc K(
     assert!(refs_from(&b, k).iter().all(|r| r.0 != a), "local type named like a type");
     let m_calls: Vec<_> = refs_from(&b, h).into_iter().filter(|r| r.1 == 15 || r.1 == 18).collect();
     assert!(m_calls.is_empty(), "variable declared twice: {m_calls:?}");
+}
+
+#[test]
+fn calls_on_the_builtin_error_do_not_reach_a_project_error_method() {
+    let r = run();
+    let failure_error = at(&r.b, &["svc-a", "internal/handler", "Failure", "Error"]);
+    for name in ["Report", "Reload"] {
+        let f = at(&r.b, &["svc-a", "internal/handler", name]);
+        assert!(edge(&r.b, f, failure_error, EdgeKind::Calls).is_none(), "{name} calls error.Error");
+        assert!(refs_from(&r.b, f).iter().all(|x| x.0 != failure_error), "{name} has no ref");
+    }
 }

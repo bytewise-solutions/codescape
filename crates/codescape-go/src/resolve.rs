@@ -14,6 +14,31 @@ const BUILTINS: &[&str] = &[
     "string", "int", "int64", "int32", "uint", "uint64", "byte", "rune", "float64", "float32", "bool", "error", "any",
 ];
 
+const PREDECLARED_TYPES: &[&str] = &[
+    "error",
+    "string",
+    "bool",
+    "byte",
+    "rune",
+    "any",
+    "comparable",
+    "uintptr",
+    "int",
+    "int8",
+    "int16",
+    "int32",
+    "int64",
+    "uint",
+    "uint8",
+    "uint16",
+    "uint32",
+    "uint64",
+    "float32",
+    "float64",
+    "complex64",
+    "complex128",
+];
+
 struct ParsedFile {
     module: usize,
     rel: String,
@@ -421,7 +446,11 @@ impl<'a> Resolver<'a> {
                     None => Some(TypeRef::External(raw.to_string())),
                 }
             }
-            None => self.pkgs[self.file_pkg[fi]].types.get(raw).map(|&t| TypeRef::Project(t)),
+            None => match self.pkgs[self.file_pkg[fi]].types.get(raw) {
+                Some(&t) => Some(TypeRef::Project(t)),
+                None if PREDECLARED_TYPES.contains(&raw) => Some(TypeRef::External(raw.to_string())),
+                None => None,
+            },
         }
     }
 
