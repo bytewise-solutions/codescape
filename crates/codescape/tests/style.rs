@@ -133,3 +133,11 @@ fn complexity_hints_use_the_given_levels() {
     assert_eq!(complexity_hint(20, 10, 20), Some(EDGE_UP));
     assert_eq!(complexity_hint(12, 15, 30), None);
 }
+
+#[test]
+fn no_interface_text_is_smaller_than_eleven_px() {
+    use codescape::style::text_styles;
+    let styles = text_styles();
+    assert!(styles.values().all(|f| f.size >= 11.0), "{styles:?}");
+    assert!(styles[&egui::TextStyle::Small].size < styles[&egui::TextStyle::Body].size);
+}

@@ -85,6 +85,7 @@ fn save_recent(list: &[PathBuf]) {
 impl CodescapeApp {
     pub fn new(cc: &eframe::CreationContext<'_>, dir: Option<PathBuf>, config: Option<PathBuf>, shot: Option<ShotPlan>) -> CodescapeApp {
         cc.egui_ctx.set_visuals(style::visuals());
+        cc.egui_ctx.global_style_mut(|s| s.text_styles = style::text_styles());
         let mut app = CodescapeApp { state: State::Start { error: None }, config, recent: load_recent(), shot: shot.map(Shot::new), keys: load_keys() };
         if let Some(d) = dir {
             app.open(d);
@@ -1470,12 +1471,15 @@ impl Project {
                 .resizable(false)
                 .anchor(Align2::CENTER_TOP, [0.0, 60.0])
                 .show(ui.ctx(), |ui| {
+                    let columns = CHEATSHEET.chunks(2).count().max(1) as f32;
+                    let column_width = (ui.ctx().content_rect().width() - 60.0) / columns - 18.0;
                     ui.horizontal_top(|ui| {
                         for column in CHEATSHEET.chunks(2) {
                             ui.vertical(|ui| {
+                                ui.set_max_width(column_width);
                                 for (section, rows) in column {
                                     ui.label(egui::RichText::new(*section).strong().color(style::TEXT));
-                                    egui::Grid::new(*section).num_columns(2).spacing([14.0, 4.0]).show(ui, |ui| {
+                                    egui::Grid::new(*section).num_columns(2).max_col_width((column_width - 14.0) / 2.0).spacing([14.0, 4.0]).show(ui, |ui| {
                                         for (keys, what) in rows.iter() {
                                             let bound = KeyAction::ALL.into_iter().find(|a| crate::keys::format(&a.default_key()) == *keys);
                                             let keys = bound

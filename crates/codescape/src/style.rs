@@ -25,6 +25,21 @@ pub fn depth_fill(depth: u32, open: bool) -> Color32 {
     Color32::from_rgb(base.r().saturating_add(lift), base.g().saturating_add(lift), base.b().saturating_add(lift))
 }
 
+pub fn text_styles() -> std::collections::BTreeMap<egui::TextStyle, egui::FontId> {
+    use egui::{
+        FontFamily::{Monospace, Proportional},
+        FontId, TextStyle,
+    };
+    [
+        (TextStyle::Small, FontId::new(11.5, Proportional)),
+        (TextStyle::Body, FontId::new(14.0, Proportional)),
+        (TextStyle::Button, FontId::new(14.0, Proportional)),
+        (TextStyle::Monospace, FontId::new(13.0, Monospace)),
+        (TextStyle::Heading, FontId::new(18.0, Proportional)),
+    ]
+    .into()
+}
+
 pub fn visuals() -> egui::Visuals {
     let mut v = egui::Visuals::dark();
     v.panel_fill = PANEL;
