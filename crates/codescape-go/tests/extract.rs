@@ -40,7 +40,7 @@ fn packages_are_directories() {
     assert_eq!(r.b.node_kind(at(&r.b, &["svc-a", "internal/handler", "H", "Serve"])), NodeKind::Member);
     assert_eq!(r.b.node_kind(at(&r.b, &["svc-a", "internal/handler", "H", "New"])), NodeKind::Member);
     assert_eq!(r.b.node_kind(at(&r.b, &["shared", "(root)"])), NodeKind::Package);
-    assert_eq!(r.stats.files, 7);
+    assert_eq!(r.stats.files, 8);
 }
 
 #[test]
@@ -279,4 +279,77 @@ fn functions_carry_their_cyclomatic_complexity() {
     let pkg = b.children(nodes[0])[0];
     assert_eq!(b.complexity(b.child(pkg, "Easy").unwrap()), 1);
     assert_eq!(b.complexity(b.child(pkg, "Hard").unwrap()), 8, "if && for if || case case");
+}
+
+fn refs_from(b: &GraphBuilder, from: NodeId) -> Vec<(NodeId, u32, u32, u32)> {
+    b.refs().iter().filter(|r| r.from == from).map(|r| (r.to, r.line, r.col as u32, r.len as u32)).collect()
+}
+
+fn single_file(src: &str) -> (GraphBuilder, NodeId) {
+    let tmp = tempfile::tempdir().unwrap();
+    std::fs::write(tmp.path().join("go.mod"), "module example.com/u\n\ngo 1.22\n").unwrap();
+    std::fs::write(tmp.path().join("u.go"), src).unwrap();
+    let d = discover(tmp.path(), &default_excludes()).unwrap();
+    let mut b = GraphBuilder::new("u");
+    let nodes: Vec<NodeId> = d.modules.iter().map(|m| b.add_node(b.root(), NodeKind::Module, SubKind::None, &m.name, Lang::Go)).collect();
+    let mut facts = ProjectFacts::default();
+    extract_go(&d, &nodes, &default_excludes(), &mut b, &mut facts);
+    let pkg = b.children(nodes[0])[0];
+    (b, pkg)
+}
+
+#[test]
+fn call_and_type_use_positions_are_recorded() {
+    let r = run();
+    let handler = ["svc-a", "internal/handler"];
+    let run_fn = at(&r.b, &[handler[0], handler[1], "Run"]);
+    let service = at(&r.b, &[handler[0], handler[1], "Service"]);
+    let checkout = at(&r.b, &[handler[0], handler[1], "Service", "Checkout"]);
+    assert!(refs_from(&r.b, run_fn).contains(&(service, 5, 12, 7)));
+    assert!(refs_from(&r.b, run_fn).contains(&(checkout, 6, 3, 8)));
+    let main = at(&r.b, &["svc-a", "cmd/svc-a", "main"]);
+    let log = at(&r.b, &["shared", "(root)", "Log"]);
+    assert!(refs_from(&r.b, main).contains(&(log, 10, 8, 3)));
+    let h = at(&r.b, &[handler[0], handler[1], "H"]);
+    let new = at(&r.b, &[handler[0], handler[1], "H", "New"]);
+    assert!(refs_from(&r.b, new).contains(&(h, 22, 9, 1)), "{:?}", refs_from(&r.b, new));
+    assert!(refs_from(&r.b, new).contains(&(service, 22, 17, 7)));
+    let repo = at(&r.b, &["svc-a", "internal/repo", "Repo"]);
+    assert!(refs_from(&r.b, new).contains(&(repo, 21, 16, 4)));
+    let fx = r.facts.files.iter().find(|f| f.rel_path.ends_with("checkout.go")).unwrap();
+    assert!(fx.type_uses.iter().any(|u| u.name == "Service" && u.line == 5 && u.col == 12 && u.len == 7));
+    assert!(fx.calls.iter().any(|c| c.method == "Checkout" && c.line == 6 && c.col == 3 && c.len == 8));
+}
+
+#[test]
+fn field_types_are_referenced_from_the_owning_type() {
+    let (b, pkg) = single_file("package u\n\ntype A struct{}\n\ntype B struct {\n\ta  *A\n\tbs []A\n\tm  map[string]A\n\tA\n}\n");
+    let (a, bb) = (b.child(pkg, "A").unwrap(), b.child(pkg, "B").unwrap());
+    let refs = refs_from(&b, bb);
+    for (line, col) in [(6, 5), (7, 6), (8, 15), (9, 1)] {
+        assert!(refs.contains(&(a, line, col, 1)), "{line}:{col} in {refs:?}");
+    }
+}
+
+#[test]
+fn composite_literals_and_conversions_are_referenced() {
+    let (b, pkg) = single_file("package u\n\ntype A struct{}\n\ntype N int\n\nfunc F(x int) {\n\t_ = A{}\n\t_ = &A{}\n\t_ = N(x)\n\t_ = []A{}\n}\n");
+    let (a, n, f) = (b.child(pkg, "A").unwrap(), b.child(pkg, "N").unwrap(), b.child(pkg, "F").unwrap());
+    let refs = refs_from(&b, f);
+    for (to, line, col) in [(a, 8, 5), (a, 9, 6), (n, 10, 5), (a, 11, 7)] {
+        assert!(refs.contains(&(to, line, col, 1)), "{line}:{col} in {refs:?}");
+    }
+}
+
+#[test]
+fn shadowed_and_ambiguous_names_get_no_ref() {
+    let src = "package u\n\ntype A struct{}\n\nfunc (a *A) M() {}\n\ntype B struct{}\n\nfunc (b *B) M() {}\n\nfunc G[A any](x A) {}\n\n\
+func H() {\n\tx := A{}\n\tx.M()\n\t{\n\t\tx := B{}\n\t\tx.M()\n\t}\n}\n\nfunc K() {\n\ttype A int\n\tvar y A\n\t_ = y\n}\n";
+    let (b, pkg) = single_file(src);
+    let a = b.child(pkg, "A").unwrap();
+    let (g, h, k) = (b.child(pkg, "G").unwrap(), b.child(pkg, "H").unwrap(), b.child(pkg, "K").unwrap());
+    assert!(refs_from(&b, g).iter().all(|r| r.0 != a), "type parameter named like a type");
+    assert!(refs_from(&b, k).iter().all(|r| r.0 != a), "local type named like a type");
+    let m_calls: Vec<_> = refs_from(&b, h).into_iter().filter(|r| r.1 == 15 || r.1 == 18).collect();
+    assert!(m_calls.is_empty(), "variable declared twice: {m_calls:?}");
 }

@@ -19,6 +19,14 @@ pub struct GoFile {
     pub generated_mock: bool,
 }
 
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct GoUse {
+    pub name: String,
+    pub line: u32,
+    pub col: u32,
+    pub len: u32,
+}
+
 #[derive(Clone, Debug, PartialEq)]
 pub struct GoType {
     pub name: String,
@@ -28,6 +36,7 @@ pub struct GoType {
     pub methods: Vec<String>,
     pub arity: Vec<usize>,
     pub embeds: Vec<String>,
+    pub type_uses: Vec<GoUse>,
     pub start_line: u32,
     pub end_line: u32,
 }
@@ -41,6 +50,8 @@ pub struct GoFunc {
     pub results: Vec<String>,
     pub locals: Vec<(String, String)>,
     pub calls: Vec<GoCall>,
+    pub type_uses: Vec<GoUse>,
+    pub declared: Vec<String>,
     pub start_line: u32,
     pub end_line: u32,
 }
@@ -54,6 +65,8 @@ pub struct GoCall {
     pub assigned_to: Option<String>,
     pub composite: Option<String>,
     pub line: u32,
+    pub col: u32,
+    pub len: u32,
 }
 
 pub const CHAIN: &str = "<chain>";
@@ -94,6 +107,14 @@ fn first_named_of<'t>(node: Node<'t>, kinds: &[&str]) -> Option<Node<'t>> {
 
 fn line(n: Node) -> u32 {
     n.start_position().row as u32 + 1
+}
+
+fn col(n: Node) -> u32 {
+    n.start_position().column as u32
+}
+
+fn len(n: Node) -> u32 {
+    (n.end_byte() - n.start_byte()) as u32
 }
 
 fn end_line(n: Node) -> u32 {
@@ -156,6 +177,7 @@ impl<'s> Ctx<'s> {
                 methods: Vec::new(),
                 arity: Vec::new(),
                 embeds: Vec::new(),
+                type_uses: Vec::new(),
                 start_line: line(spec),
                 end_line: end_line(spec),
             };
@@ -207,7 +229,82 @@ impl<'s> Ctx<'s> {
                 }
                 _ => {}
             }
+            let mut skip = Vec::new();
+            self.type_param_names(spec, &mut skip);
+            self.type_uses(spec, &skip, &mut t.type_uses);
             out.push(t);
+        }
+    }
+
+    fn type_param_names(&self, root: Node, out: &mut Vec<String>) {
+        let mut stack = vec![root];
+        while let Some(n) = stack.pop() {
+            match n.kind() {
+                "type_parameter_declaration" => {
+                    let mut c = n.walk();
+                    out.extend(n.children_by_field_name("name", &mut c).map(|x| self.text(x).to_string()));
+                }
+                "type_spec" | "type_alias" => {
+                    if n != root
+                        && let Some(name) = n.child_by_field_name("name")
+                    {
+                        out.push(self.text(name).to_string());
+                    }
+                }
+                _ => {}
+            }
+            let mut c = n.walk();
+            stack.extend(n.named_children(&mut c));
+        }
+    }
+
+    fn type_uses(&self, root: Node, skip: &[String], out: &mut Vec<GoUse>) {
+        let mut stack = vec![root];
+        while let Some(n) = stack.pop() {
+            match n.kind() {
+                "type_identifier" => {
+                    let declares = n.parent().and_then(|p| p.child_by_field_name("name")) == Some(n);
+                    let name = self.text(n);
+                    if !declares && !skip.iter().any(|s| s == name) {
+                        out.push(GoUse { name: name.to_string(), line: line(n), col: col(n), len: len(n) });
+                    }
+                }
+                "qualified_type" => {
+                    if let (Some(pkg), Some(name)) = (n.child_by_field_name("package"), n.child_by_field_name("name")) {
+                        out.push(GoUse { name: format!("{}.{}", self.text(pkg), self.text(name)), line: line(name), col: col(name), len: len(name) });
+                    }
+                }
+                _ => {
+                    let mut c = n.walk();
+                    stack.extend(n.named_children(&mut c));
+                }
+            }
+        }
+    }
+
+    fn declared_names(&self, root: Node, out: &mut Vec<String>) {
+        let mut stack = vec![root];
+        while let Some(n) = stack.pop() {
+            let mut names: Vec<Node> = Vec::new();
+            let mut c = n.walk();
+            match n.kind() {
+                "parameter_declaration" | "variadic_parameter_declaration" | "var_spec" | "const_spec" => {
+                    names.extend(n.children_by_field_name("name", &mut c))
+                }
+                "short_var_declaration" | "range_clause" => {
+                    if let Some(left) = n.child_by_field_name("left") {
+                        names.extend(if left.kind() == "expression_list" { left.named_children(&mut left.walk()).collect() } else { vec![left] });
+                    }
+                }
+                "type_switch_statement" => {
+                    if let Some(alias) = n.child_by_field_name("alias") {
+                        names.extend(alias.named_children(&mut alias.walk()));
+                    }
+                }
+                _ => {}
+            }
+            out.extend(names.into_iter().filter(|x| x.kind() == "identifier").map(|x| self.text(x).to_string()));
+            stack.extend(n.named_children(&mut c));
         }
     }
 
@@ -261,6 +358,10 @@ impl<'s> Ctx<'s> {
         if let Some(body) = n.child_by_field_name("body") {
             self.body(body, &mut f);
         }
+        let mut skip = Vec::new();
+        self.type_param_names(n, &mut skip);
+        self.type_uses(n, &skip, &mut f.type_uses);
+        self.declared_names(n, &mut f.declared);
         f.calls.sort_by_key(|c| c.line);
         f
     }
@@ -341,6 +442,11 @@ impl<'s> Ctx<'s> {
 
     fn call(&self, n: Node) -> GoCall {
         let func = n.child_by_field_name("function");
+        let name_node = match func {
+            Some(f) if f.kind() == "selector_expression" => f.child_by_field_name("field"),
+            Some(f) if f.kind() == "identifier" => Some(f),
+            _ => None,
+        };
         let (receiver, method) = match func {
             Some(f) if f.kind() == "selector_expression" => {
                 let operand = f.child_by_field_name("operand");
@@ -367,7 +473,17 @@ impl<'s> Ctx<'s> {
                 ident_args.push(matches!(a.kind(), "identifier" | "selector_expression").then(|| self.text(a).to_string()));
             }
         }
-        GoCall { receiver, method, string_args, ident_args, assigned_to: self.assigned_to(n), composite: None, line: line(n) }
+        GoCall {
+            receiver,
+            method,
+            string_args,
+            ident_args,
+            assigned_to: self.assigned_to(n),
+            composite: None,
+            line: name_node.map_or_else(|| line(n), line),
+            col: name_node.map_or(0, col),
+            len: name_node.map_or(0, len),
+        }
     }
 }
 

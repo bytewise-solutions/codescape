@@ -1,6 +1,6 @@
-use crate::parse::{CHAIN, GoCall, GoFile, GoFunc, parse_go};
+use crate::parse::{CHAIN, GoCall, GoFile, GoFunc, GoUse, parse_go};
 use codescape_build::{Discovery, rel_path, walk_files_under};
-use codescape_facts::{CallFacts, ExtractStats, FileFacts, FnFacts, Import, ProjectFacts, TypeFacts};
+use codescape_facts::{CallFacts, ExtractStats, FileFacts, FnFacts, Import, ProjectFacts, TypeFacts, TypeUse};
 use codescape_format::*;
 use globset::GlobSet;
 use rayon::prelude::*;
@@ -43,6 +43,10 @@ struct TypeInfo {
     arity: HashMap<String, usize>,
     file: usize,
     excluded: bool,
+}
+
+fn declared_times(func: &GoFunc, name: &str) -> usize {
+    func.declared.iter().filter(|d| *d == name).count()
 }
 
 fn covers(ty: &TypeInfo, iface: &TypeInfo) -> bool {
@@ -551,6 +555,7 @@ impl<'a> Resolver<'a> {
                     supertypes: t.embeds.clone(),
                     annotations: Vec::new(),
                 });
+                self.record_uses(fi, self.types[ti].node, &t.type_uses, &mut ff.type_uses);
             }
             for func in &f.gf.funcs {
                 let owner = func.receiver.as_ref().and_then(|r| self.pkgs[pi].types.get(r).copied());
@@ -568,6 +573,7 @@ impl<'a> Resolver<'a> {
                     is_main: func.name == "main" && func.receiver.is_none() && f.gf.package == "main",
                     overrides_external: None,
                 });
+                self.record_uses(fi, node, &func.type_uses, &mut ff.type_uses);
                 let scope = if f.is_test { Scope::Test } else { Scope::Main };
                 for call in &func.calls {
                     let cf = self.resolve_call(fi, func, node, scope, call);
@@ -575,6 +581,15 @@ impl<'a> Resolver<'a> {
                 }
             }
             facts.files.push(ff);
+        }
+    }
+
+    fn record_uses(&mut self, fi: usize, from: NodeId, uses: &[GoUse], out: &mut Vec<TypeUse>) {
+        for u in uses {
+            out.push(TypeUse { owner: from, name: u.name.clone(), line: u.line, col: u.col, len: u.len });
+            if let Some(TypeRef::Project(t)) = self.resolve_type(fi, &u.name) {
+                self.b.add_ref(from, self.types[t].node, u.line, u.col, u.len);
+            }
         }
     }
 
@@ -586,6 +601,8 @@ impl<'a> Resolver<'a> {
             ident_args: call.ident_args.clone(),
             assigned_to: call.assigned_to.clone(),
             line: call.line,
+            col: call.col,
+            len: call.len,
             ..Default::default()
         };
         cf.arg_targets = call.ident_args.iter().map(|a| a.as_deref().and_then(|a| self.func_value(fi, func, a))).collect();
@@ -603,9 +620,16 @@ impl<'a> Resolver<'a> {
             let pi = self.file_pkg[fi];
             if let Some(&(target, _, _)) = self.pkgs[pi].funcs.get(&call.method) {
                 self.b.add_edge_at(caller, target, EdgeKind::Calls, scope, Confidence::Resolved, EdgeFlags::NONE, call.line);
+                if declared_times(func, &call.method) == 0 {
+                    self.b.add_ref(caller, target, call.line, call.col, call.len);
+                }
                 cf.target = Some(target);
                 self.stats.resolved += 1;
-            } else if self.pkgs[pi].types.contains_key(&call.method) || BUILTINS.contains(&call.method.as_str()) {
+            } else if let Some(&t) = self.pkgs[pi].types.get(&call.method) {
+                if declared_times(func, &call.method) == 0 {
+                    self.b.add_ref(caller, self.types[t].node, call.line, call.col, call.len);
+                }
+            } else if BUILTINS.contains(&call.method.as_str()) {
             } else {
                 self.stats.unresolved += 1;
             }
@@ -627,9 +651,16 @@ impl<'a> Resolver<'a> {
                 Some(p) if rest.is_empty() => {
                     if let Some(&(target, _, _)) = self.pkgs[p].funcs.get(&call.method) {
                         self.b.add_edge_at(caller, target, EdgeKind::Calls, scope, Confidence::Resolved, EdgeFlags::NONE, call.line);
+                        if declared_times(func, head) == 0 {
+                            self.b.add_ref(caller, target, call.line, call.col, call.len);
+                        }
                         cf.target = Some(target);
                         self.stats.resolved += 1;
-                    } else if !self.pkgs[p].types.contains_key(&call.method) {
+                    } else if let Some(&t) = self.pkgs[p].types.get(&call.method) {
+                        if declared_times(func, head) == 0 {
+                            self.b.add_ref(caller, self.types[t].node, call.line, call.col, call.len);
+                        }
+                    } else {
                         self.stats.unresolved += 1;
                     }
                     return cf;
@@ -653,6 +684,9 @@ impl<'a> Resolver<'a> {
                 match self.lookup_method(t, &call.method) {
                     Some((owner, target)) => {
                         self.b.add_edge_at(caller, target, EdgeKind::Calls, scope, Confidence::Resolved, EdgeFlags::NONE, call.line);
+                        if declared_times(func, head) <= 1 {
+                            self.b.add_ref(caller, target, call.line, call.col, call.len);
+                        }
                         cf.target = Some(target);
                         if self.types[owner].kind == SubKind::Interface
                             && let Some(imp) = self.single_impl(owner, self.files[fi].module)
