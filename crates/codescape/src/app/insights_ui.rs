@@ -1,7 +1,7 @@
 use super::Project;
-use crate::insights::{FlagKind, Insights, InsightsKey, Row, compute, flags};
+use crate::insights::{Flag, FlagKind, Insights, InsightsKey, Row, compute, flags};
 use crate::style;
-use codescape_format::{NodeId, NodeKind};
+use codescape_format::{ArchivedGraph, NodeId, NodeKind};
 use codescape_index::churn::file_changes;
 use codescape_index::review::is_git;
 use egui::{CollapsingHeader, RichText};
@@ -36,6 +36,40 @@ const SECTIONS: [Section; 7] = [
     Section { title: "Untested public code", kinds: &[FlagKind::Untested], rows: |i| &i.untested },
     Section { title: "Duplicates", kinds: &[FlagKind::Duplicate], rows: |i| &i.duplicates },
 ];
+
+fn flag_color(kind: FlagKind) -> egui::Color32 {
+    match kind {
+        FlagKind::Complex | FlagKind::Upward | FlagKind::Unused | FlagKind::NoCaller => style::EDGE_UP,
+        FlagKind::Hotspot | FlagKind::OnlyTests | FlagKind::Untested | FlagKind::Duplicate => style::ACCENT,
+    }
+}
+
+pub(super) fn flags_ui(ui: &mut egui::Ui, g: &ArchivedGraph, flags: &[Flag]) -> Option<NodeId> {
+    let mut go = None;
+    if flags.is_empty() {
+        return go;
+    }
+    ui.add_space(8.0);
+    ui.label(RichText::new("FLAGS").small().strong().color(style::MUTED));
+    for f in flags {
+        ui.label(RichText::new(&f.short).color(flag_color(f.kind)));
+        ui.label(RichText::new(&f.explanation).small().color(style::MUTED));
+        for &l in &f.links {
+            let name = match g.parent(l).filter(|&p| g.kind(l) == NodeKind::Member && g.kind(p) == NodeKind::Type) {
+                Some(t) => format!("{}.{}", g.name(t), g.name(l)),
+                None => g.name(l).to_string(),
+            };
+            let name = match g.path(l).get(1) {
+                Some(&module) if module != l => format!("{name}  ({})", g.name(module)),
+                _ => name,
+            };
+            if ui.selectable_label(false, name).on_hover_text(super::full_path(g, l)).clicked() {
+                go = Some(l);
+            }
+        }
+    }
+    go
+}
 
 pub(super) struct Picked {
     pub node: Option<NodeId>,
@@ -87,6 +121,20 @@ impl Project {
         let (g, limits, scope) = (self.file.graph(), key.limits, key.scope);
         let opts = key.opts.clone();
         self.insights.get(key, || compute(g, &analysis, churn.as_deref().unwrap_or(&HashMap::new()), &opts, &limits, scope));
+    }
+
+    pub(super) fn refresh_flags(&mut self) {
+        let (Some(analysis), Some(n)) = (self.analysis.clone(), self.selected) else { return };
+        let churn = self.churn.data.clone().flatten();
+        let key = InsightsKey {
+            analysis: Arc::as_ptr(&analysis) as usize,
+            churn: churn.as_ref().map_or(0, |c| Arc::as_ptr(c) as usize),
+            opts: self.cache.options().clone(),
+            limits: self.limits(),
+            scope: Some(n),
+        };
+        let (g, limits, opts) = (self.file.graph(), key.limits, key.opts.clone());
+        self.flags.get(key, || flags(g, &analysis, churn.as_deref().unwrap_or(&HashMap::new()), &opts, &limits, n));
     }
 
     pub(super) fn insights_ui(&self, ui: &mut egui::Ui) -> Picked {

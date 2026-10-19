@@ -243,3 +243,26 @@ fn insights_are_recomputed_only_when_an_input_changes() {
     get(&mut cache, InsightsKey { churn: 7, scope: Some(3), limits: Limits { many_callers: 9, ..Limits::default() }, opts, ..key() });
     assert_eq!(runs.get(), 5, "layout options changed");
 }
+
+#[test]
+fn a_blocks_flags_are_recomputed_only_when_the_block_or_an_input_changes() {
+    let key = |scope| InsightsKey { analysis: 1, churn: 0, opts: LayoutOptions::default(), limits: Limits::default(), scope };
+    let mut cache = FlagsCache::default();
+    let runs = std::cell::Cell::new(0);
+    let mut get = |k: InsightsKey| {
+        let flag = Flag { kind: FlagKind::Untested, short: "s".into(), explanation: "e".into(), links: Vec::new() };
+        cache
+            .get(k, || {
+                runs.set(runs.get() + 1);
+                vec![flag]
+            })
+            .len()
+    };
+    assert_eq!(get(key(Some(1))), 1);
+    get(key(Some(1)));
+    assert_eq!(runs.get(), 1);
+    get(key(Some(2)));
+    assert_eq!(runs.get(), 2, "another block");
+    get(InsightsKey { churn: 5, ..key(Some(2)) });
+    assert_eq!(runs.get(), 3, "churn arrived");
+}

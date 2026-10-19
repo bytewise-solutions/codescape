@@ -262,3 +262,21 @@ impl InsightsCache {
         self.held.as_ref().map(|h| &h.1)
     }
 }
+
+#[derive(Default)]
+pub struct FlagsCache {
+    held: Option<(InsightsKey, Vec<Flag>)>,
+}
+
+impl FlagsCache {
+    pub fn get(&mut self, key: InsightsKey, make: impl FnOnce() -> Vec<Flag>) -> &[Flag] {
+        if self.held.as_ref().is_none_or(|(k, _)| *k != key) {
+            self.held = Some((key, make()));
+        }
+        self.current()
+    }
+
+    pub fn current(&self) -> &[Flag] {
+        self.held.as_ref().map_or(&[], |h| &h.1)
+    }
+}

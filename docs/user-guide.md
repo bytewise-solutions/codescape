@@ -149,6 +149,10 @@ enough to read.
   in at least 3 commits within the hotspot period; `needs git` outside a repository), most depended on, upward
   dependencies, dead code, untested public code and duplicates. **Whole project / Selection** limits them to the
   selected block. Thresholds are in the map panel's HINTS section.
+- **Flags in the inspector.** A selected block with flags gets a FLAGS section at the top of the right panel: each
+  flag's short name coloured by kind, its full explanation below (complexity breakdown, the commits behind a
+  hotspot, unused wording, duplicate places, an upward arrow's target), and the other duplicate places or the upward
+  target as rows that fly there.
 - **Constructors live inside their type.** A Go `func NewX(...) *X` is a row of `X`'s card, not a box of its own.
 - **Dependency injection is set aside.** Code recognised as wiring (Google Wire's generated injectors and provider
   sets, Dagger components/modules) is hidden with its arrows, so it never changes the layering. Tick **View ▸ Wiring**

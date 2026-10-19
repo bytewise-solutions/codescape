@@ -450,6 +450,7 @@ struct Project {
     pending_back: bool,
     pending_clear: bool,
     pending_go: Option<NodeId>,
+    pending_flag_go: Option<NodeId>,
     groups: Vec<EntryGroupView>,
     search: SearchIndex,
     search_text: String,
@@ -496,6 +497,7 @@ struct Project {
     analysis_job: Option<Receiver<Analysis>>,
     churn: insights_ui::ChurnState,
     insights: crate::insights::InsightsCache,
+    flags: crate::insights::FlagsCache,
     insights_selection: bool,
     unused_rows: Option<(usize, Vec<(Usage, String, NodeId)>)>,
     sequence: Option<sequence_ui::SequenceView>,
@@ -673,6 +675,7 @@ impl Project {
             pending_back: false,
             pending_clear: false,
             pending_go: None,
+            pending_flag_go: None,
             groups,
             search,
             search_text: String::new(),
@@ -715,6 +718,7 @@ impl Project {
             analysis_job: None,
             churn: insights_ui::ChurnState::new(),
             insights: Default::default(),
+            flags: Default::default(),
             insights_selection: false,
             unused_rows: None,
             sequence: None,
@@ -1927,7 +1931,7 @@ impl Project {
     }
 
     fn inspector(&mut self, ui: &mut egui::Ui) {
-        let unused_label = self.selected.and_then(|n| self.unused(n)).and_then(Usage::label);
+        self.refresh_flags();
         let g = self.file.graph();
         let shown_state = self.selected.map(|n| {
             let opts = self.cache.options();
@@ -2016,10 +2020,8 @@ impl Project {
                     }
                 });
             }
-            if let Some(label) = unused_label {
-                ui.label(egui::RichText::new(label).small().color(style::EDGE_UP)).on_hover_text(
-                    "Nothing in main code calls, creates or names it outside its own lines. Code reached by reflection or a framework can show up here.",
-                );
+            if let Some(l) = insights_ui::flags_ui(ui, g, self.flags.current()) {
+                self.pending_flag_go = Some(l);
             }
             if matches!(g.kind(n), NodeKind::Member | NodeKind::Type) && ui.small_button("Sequence diagram (S)").clicked() {
                 self.pending_sequence = Some(n);
@@ -2039,13 +2041,6 @@ impl Project {
                 let up = l.up_edges();
                 if up > 0 {
                     ui.colored_label(style::EDGE_UP, format!("{up} upward dependencies inside"));
-                }
-            }
-            if let Some(p) = g.parent(n)
-                && let Some(l) = self.cache.get(p)
-            {
-                for e in l.edges.iter().filter(|e| e.dir == Direction::Up && (e.a == n || e.b == n)) {
-                    ui.colored_label(style::EDGE_UP, format!("Upward: {} -> {}", g.name(e.a), g.name(e.b)));
                 }
             }
             if let Some(f) = self.focus.as_ref().filter(|f| f.node == n) {
@@ -2144,6 +2139,9 @@ impl Project {
         }
         if let Some(m) = self.pending_go.take() {
             self.set_focus(m, None, true, true);
+        }
+        if let Some(m) = self.pending_flag_go.take() {
+            self.go_to_insight(m);
         }
     }
 
