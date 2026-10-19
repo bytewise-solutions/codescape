@@ -153,6 +153,10 @@ enough to read.
   flag's short name coloured by kind, its full explanation below (complexity breakdown, the commits behind a
   hotspot, unused wording, duplicate places, an upward arrow's target), and the other duplicate places or the upward
   target as rows that fly there.
+- **Flags in the code.** In an open file, every flagged method or type gets small letter icons in the gutter on its
+  first line, one per kind and coloured like the inspector (`C` complex, `H` hotspot, `U` unused, `N` no caller, `T`
+  only tests, `?` untested, `D` duplicate, `^` points up). Hover them for each flag's reason; this works in the
+  reading view and in the files open on the map.
 - **Constructors live inside their type.** A Go `func NewX(...) *X` is a row of `X`'s card, not a box of its own.
 - **Dependency injection is set aside.** Code recognised as wiring (Google Wire's generated injectors and provider
   sets, Dagger components/modules) is hidden with its arrows, so it never changes the layering. Tick **View ▸ Wiring**

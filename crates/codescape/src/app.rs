@@ -485,6 +485,9 @@ struct Project {
     file_refs: std::cell::RefCell<HashMap<NodeId, std::rc::Rc<FileRefs>>>,
     link_hover: Option<(NodeId, usize, usize, usize)>,
     show_links: bool,
+    file_marks: crate::insights::FileMarks,
+    flag_tip: std::cell::RefCell<Option<(Pos2, Vec<crate::insights::Flag>)>>,
+    force_flag_tip: bool,
     scripted: bool,
     scroll_drag: Option<NodeId>,
     review: Option<ReviewState>,
@@ -516,6 +519,16 @@ struct Project {
     details_in: Vec<NodeId>,
     pointer: Option<Pos2>,
 }
+
+fn gutter_width(size: f32, total: usize) -> f32 {
+    total.to_string().len() as f32 * advance(size) + 2.0 * advance(size) + MARK_SLOTS as f32 * mark_pitch(size)
+}
+
+fn mark_pitch(size: f32) -> f32 {
+    size * 0.95
+}
+
+const MARK_SLOTS: usize = 3;
 
 fn chevron(painter: &egui::Painter, center: Pos2, up: bool) {
     let dy = if up { -2.0 } else { 2.0 };
@@ -710,6 +723,9 @@ impl Project {
             file_refs: Default::default(),
             link_hover: None,
             show_links: false,
+            file_marks: Default::default(),
+            flag_tip: Default::default(),
+            force_flag_tip: false,
             scripted: false,
             scroll_drag: None,
             review: None,
@@ -796,6 +812,7 @@ impl Project {
         self.shortcuts_open |= plan.shortcuts;
         self.keys_open |= plan.keys;
         self.show_links |= plan.links;
+        self.force_flag_tip |= plan.flag_hover;
         let reviewing = plan.review.is_some() || plan.review_target.is_some() || plan.review_by_commit;
         if reviewing {
             self.deferred_plan = Some(plan.clone());
@@ -2355,6 +2372,7 @@ impl Project {
         self.file_scroll.retain(|n, _| shown.iter().any(|(s, _, _)| s == n));
         self.file_hscroll.retain(|n, _| shown.iter().any(|(s, _, _)| s == n));
         self.file_refs.borrow_mut().retain(|n, _| shown.iter().any(|(s, _, _)| s == n));
+        self.file_marks.retain(|n| shown.iter().any(|(s, _, _)| *s == n));
         for (n, y, line_h) in shown {
             let start = g.span(n).0;
             let view_y = self.view.y;
@@ -2377,6 +2395,7 @@ impl Project {
             ui.ctx().set_cursor_icon(egui::CursorIcon::PointingHand);
         }
         self.paint(&painter);
+        self.show_flag_tip(ui);
         let root = self.cache.shared(g, g.root());
         if self.reading.is_none() {
             minimap::draw(&painter, &root, &self.cam, self.view);
@@ -2814,7 +2833,7 @@ impl Project {
         }
         let line_h = size * LINE_SPACING;
         let top = self.file_page(b).top() + 6.0 - self.file_scroll.get(&node).copied().unwrap_or(0.0) * line_h;
-        let gutter = total.to_string().len() as f32 * advance(size) + 2.0 * advance(size);
+        let gutter = gutter_width(size, total);
         let x = p.x - (b.rect.x + gutter + advance(size)) + self.file_hscroll.get(&node).copied().unwrap_or(0.0);
         let (line, col) = (((p.y - top) / line_h).floor(), (x / advance(size)).floor());
         if line < 0.0 || col < 0.0 {
@@ -2842,7 +2861,7 @@ impl Project {
 
     fn file_text_area(&self, b: &crate::canvas::SceneBox, size: f32, total: usize) -> egui::Rect {
         let page = self.file_page(b);
-        let gutter = total.to_string().len() as f32 * advance(size) + 2.0 * advance(size);
+        let gutter = gutter_width(size, total);
         egui::Rect::from_min_max(
             Pos2::new(b.rect.x + gutter + advance(size) * 0.5, page.top()),
             Pos2::new(self.scrollbar_track(page).left() - 4.0, page.bottom()),
@@ -2896,7 +2915,7 @@ impl Project {
             return;
         }
         let mono = FontId::monospace(size);
-        let gutter = lines.len().to_string().len() as f32 * advance(size) + 2.0 * advance(size);
+        let gutter = gutter_width(size, lines.len());
         let diff = self.review.as_ref().and_then(|rv| rv.review.file(path));
         let full = |y: f32, h: f32| egui::Rect::from_min_size(Pos2::new(b.rect.x + 2.0, y), egui::vec2(b.rect.w - 4.0, h));
         if let Some(d) = diff {
@@ -2933,6 +2952,7 @@ impl Project {
             }
             text_clip.galley(Pos2::new(b.rect.x + gutter + advance(size) - hscroll, y), text_clip.layout_job(job), style::TEXT);
         }
+        self.paint_marks(&clip, b, (size, line_h, top), (first, last));
         let mut links: Vec<(usize, usize, usize)> = self.link_hover.filter(|h| h.0 == b.node).map(|(_, l, c, n)| (l, c, n)).into_iter().collect();
         if self.show_links
             && let Some(refs) = self.file_refs(b.node)
@@ -2980,6 +3000,43 @@ impl Project {
                 );
             }
         }
+    }
+
+    fn paint_marks(&self, clip: &egui::Painter, b: &crate::canvas::SceneBox, (size, line_h, top): (f32, f32, f32), (first, last): (usize, usize)) {
+        let pitch = mark_pitch(size);
+        let mut forced = self.force_flag_tip;
+        for m in self.file_marks(b.node).iter().filter(|m| (first + 1..=last).contains(&(m.line as usize))) {
+            let y = top + (m.line - 1) as f32 * line_h;
+            let mut hit = None;
+            for (k, kind) in m.kinds().into_iter().enumerate() {
+                let r = egui::Rect::from_min_size(Pos2::new(b.rect.x + 4.0 + k as f32 * pitch, y + line_h * 0.05), egui::vec2(size * 0.85, line_h * 0.9));
+                let color = insights_ui::flag_color(kind);
+                clip.rect_filled(r, 3.0, color.gamma_multiply(0.25));
+                clip.rect_stroke(r, 3.0, Stroke::new(1.0, color), StrokeKind::Inside);
+                clip.text(r.center(), Align2::CENTER_CENTER, insights_ui::flag_letter(kind), FontId::monospace(size * 0.7), color);
+                if self.pointer.is_some_and(|p| r.contains(p) && clip.clip_rect().contains(p)) || forced {
+                    hit = Some(r);
+                }
+            }
+            if let Some(r) = hit {
+                forced = false;
+                *self.flag_tip.borrow_mut() = Some((r.left_bottom(), m.flags.clone()));
+            }
+        }
+    }
+
+    fn show_flag_tip(&self, ui: &egui::Ui) {
+        let Some((at, flags)) = self.flag_tip.take() else { return };
+        egui::Tooltip::always_open(ui.ctx().clone(), ui.layer_id(), ui.scope_id().with("flag-tip"), egui::PopupAnchor::Position(at)).show(|ui| {
+            ui.set_max_width(420.0);
+            for (i, f) in flags.iter().enumerate() {
+                if i > 0 {
+                    ui.separator();
+                }
+                ui.label(egui::RichText::new(&f.short).strong().color(insights_ui::flag_color(f.kind)));
+                ui.label(egui::RichText::new(&f.explanation).small());
+            }
+        });
     }
 
     fn pointer_in(&self, r: egui::Rect) -> bool {

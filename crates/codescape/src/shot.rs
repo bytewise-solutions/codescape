@@ -24,6 +24,7 @@ pub struct ShotPlan {
     pub structure: bool,
     pub keys: bool,
     pub links: bool,
+    pub flag_hover: bool,
 }
 
 pub struct Shot {

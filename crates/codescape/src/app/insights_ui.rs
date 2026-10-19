@@ -37,7 +37,20 @@ const SECTIONS: [Section; 7] = [
     Section { title: "Duplicates", kinds: &[FlagKind::Duplicate], rows: |i| &i.duplicates },
 ];
 
-fn flag_color(kind: FlagKind) -> egui::Color32 {
+pub(super) fn flag_letter(kind: FlagKind) -> &'static str {
+    match kind {
+        FlagKind::Complex => "C",
+        FlagKind::Hotspot => "H",
+        FlagKind::Unused => "U",
+        FlagKind::OnlyTests => "T",
+        FlagKind::NoCaller => "N",
+        FlagKind::Untested => "?",
+        FlagKind::Duplicate => "D",
+        FlagKind::Upward => "^",
+    }
+}
+
+pub(super) fn flag_color(kind: FlagKind) -> egui::Color32 {
     match kind {
         FlagKind::Complex | FlagKind::Upward | FlagKind::Unused | FlagKind::NoCaller => style::EDGE_UP,
         FlagKind::Hotspot | FlagKind::OnlyTests | FlagKind::Untested | FlagKind::Duplicate => style::ACCENT,
@@ -121,6 +134,22 @@ impl Project {
         let (g, limits, scope) = (self.file.graph(), key.limits, key.scope);
         let opts = key.opts.clone();
         self.insights.get(key, || compute(g, &analysis, churn.as_deref().unwrap_or(&HashMap::new()), &opts, &limits, scope));
+    }
+
+    pub(super) fn file_marks(&self, node: NodeId) -> std::rc::Rc<Vec<crate::insights::Mark>> {
+        let Some(analysis) = self.analysis.clone() else { return Default::default() };
+        let churn = self.churn.data.clone().flatten();
+        let key = crate::insights::InsightsKey {
+            analysis: Arc::as_ptr(&analysis) as usize,
+            churn: churn.as_ref().map_or(0, |c| Arc::as_ptr(c) as usize),
+            opts: self.cache.options().clone(),
+            limits: self.limits(),
+            scope: None,
+        };
+        self.file_marks.get(node, &key, || {
+            let none = HashMap::new();
+            crate::insights::file_marks(self.file.graph(), &analysis, churn.as_deref().unwrap_or(&none), &key.opts, &key.limits, node)
+        })
     }
 
     pub(super) fn refresh_flags(&mut self) {

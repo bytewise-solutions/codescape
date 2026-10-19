@@ -8,7 +8,7 @@ use std::collections::HashMap;
 const CAP: usize = 50;
 pub const HOTSPOT_MIN_COMMITS: u32 = 3;
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub enum FlagKind {
     Complex,
     Hotspot,
@@ -278,5 +278,69 @@ impl FlagsCache {
 
     pub fn current(&self) -> &[Flag] {
         self.held.as_ref().map_or(&[], |h| &h.1)
+    }
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct Mark {
+    pub line: u32,
+    pub flags: Vec<Flag>,
+}
+
+impl Mark {
+    pub fn kinds(&self) -> Vec<FlagKind> {
+        let mut kinds: Vec<FlagKind> = self.flags.iter().map(|f| f.kind).collect();
+        kinds.dedup();
+        kinds
+    }
+}
+
+pub fn gutter_marks(items: impl IntoIterator<Item = (u32, Vec<Flag>)>) -> Vec<Mark> {
+    let mut by_line: std::collections::BTreeMap<u32, Vec<Flag>> = Default::default();
+    for (line, flags) in items.into_iter().filter(|(_, f)| !f.is_empty()) {
+        by_line.entry(line).or_default().extend(flags);
+    }
+    by_line
+        .into_iter()
+        .map(|(line, mut flags)| {
+            flags.sort_by_key(|f| f.kind);
+            Mark { line, flags }
+        })
+        .collect()
+}
+
+pub fn file_marks(g: &ArchivedGraph, analysis: &Analysis, churn: &HashMap<String, u32>, opts: &LayoutOptions, limits: &Limits, file: NodeId) -> Vec<Mark> {
+    let Some(path) = g.file(file) else { return Vec::new() };
+    let mut nodes = vec![file];
+    let mut stack: Vec<NodeId> = g.children(file).collect();
+    while let Some(n) = stack.pop() {
+        if g.file(n) == Some(path) {
+            nodes.push(n);
+        }
+        stack.extend(g.children(n));
+    }
+    let blocks = nodes.into_iter().filter(|&n| matches!(g.kind(n), NodeKind::Member | NodeKind::Type));
+    gutter_marks(blocks.map(|n| (g.span(n).0, flags(g, analysis, churn, opts, limits, n))))
+}
+
+#[derive(Default)]
+pub struct FileMarks {
+    held: std::cell::RefCell<HashMap<NodeId, (InsightsKey, std::rc::Rc<Vec<Mark>>)>>,
+}
+
+impl FileMarks {
+    pub fn get(&self, file: NodeId, key: &InsightsKey, make: impl FnOnce() -> Vec<Mark>) -> std::rc::Rc<Vec<Mark>> {
+        if let Some((k, marks)) = self.held.borrow().get(&file)
+            && k == key
+        {
+            return marks.clone();
+        }
+        let marks = std::rc::Rc::new(make());
+        self.held.borrow_mut().insert(file, (key.clone(), marks.clone()));
+        marks
+    }
+
+    pub fn retain(&self, keep: impl Fn(NodeId) -> bool) {
+        self.held.borrow_mut().retain(|n, _| keep(*n));
     }
 }

@@ -91,6 +91,7 @@ pub const CHEATSHEET: &[(&str, &[(&str, &str)])] = &[
             ("Wheel / Shift + wheel / drag", "scroll the file down / sideways"),
             ("Page Up Page Down Home End", "scroll the file"),
             ("Drag the scrollbar", "move through the file"),
+            ("Hover a gutter icon", "why the method or type is flagged (complex, unused, duplicate...)"),
             ("Ctrl+F", "find in the open file"),
             ("Ctrl+Shift+O", "the file's methods; type to filter"),
             ("F3", "next match of the find bar"),

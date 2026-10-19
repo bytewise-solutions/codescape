@@ -266,3 +266,34 @@ fn a_blocks_flags_are_recomputed_only_when_the_block_or_an_input_changes() {
     get(InsightsKey { churn: 5, ..key(Some(2)) });
     assert_eq!(runs.get(), 3, "churn arrived");
 }
+
+fn marks_of(g: &ArchivedGraph, path: &str) -> Vec<(u32, Vec<FlagKind>)> {
+    let a = analysis(g);
+    file_marks(g, &a, &churn(), &LayoutOptions::default(), &Limits::default(), node(g, path)).iter().map(|m| (m.line, m.kinds())).collect()
+}
+
+#[test]
+fn flagged_members_mark_their_first_line_with_one_icon_per_kind_in_kind_order() {
+    let fx = fixture();
+    let g = fx.file.graph();
+    let marks = marks_of(g, "shop.Svc");
+    let lines: Vec<u32> = marks.iter().map(|m| m.0).collect();
+    assert_eq!(lines, [10, 60, 70], "total, simple and helper; the unflagged type itself has no mark");
+    assert_eq!(marks[0].1, [FlagKind::Complex, FlagKind::Hotspot, FlagKind::Untested, FlagKind::Duplicate]);
+    assert_eq!(marks[1].1, [FlagKind::OnlyTests]);
+    assert_eq!(marks[2].1, [FlagKind::Complex, FlagKind::Hotspot, FlagKind::Unused]);
+}
+
+#[test]
+fn marks_on_one_line_merge_and_keep_every_flag_for_the_tooltip() {
+    let flag = |kind, short: &str| Flag { kind, short: short.into(), explanation: format!("why {short}"), links: Vec::new() };
+    let marks = gutter_marks([
+        (7, vec![flag(FlagKind::Unused, "a"), flag(FlagKind::Complex, "b")]),
+        (3, vec![]),
+        (7, vec![flag(FlagKind::Complex, "c")]),
+        (2, vec![flag(FlagKind::Upward, "d")]),
+    ]);
+    assert_eq!(marks.iter().map(|m| m.line).collect::<Vec<_>>(), [2, 7]);
+    assert_eq!(marks[1].kinds(), [FlagKind::Complex, FlagKind::Unused]);
+    assert_eq!(marks[1].flags.iter().map(|f| f.short.as_str()).collect::<Vec<_>>(), ["b", "c", "a"]);
+}

@@ -46,6 +46,8 @@ struct Args {
     keys: bool,
     #[arg(long, help = "With --screenshot: underline every name in the open file that Ctrl+click follows")]
     links: bool,
+    #[arg(long, help = "With --screenshot: hover the first flag icon in the open file's gutter")]
+    flag_hover: bool,
 }
 
 fn main() -> eframe::Result {
@@ -78,6 +80,7 @@ fn main() -> eframe::Result {
         structure: args.structure,
         keys: args.keys,
         links: args.links,
+        flag_hover: args.flag_hover,
     });
     eframe::run_native("Codescape", options, Box::new(move |cc| Ok(Box::new(codescape::app::CodescapeApp::new(cc, args.dir, args.config, shot)))))
 }
