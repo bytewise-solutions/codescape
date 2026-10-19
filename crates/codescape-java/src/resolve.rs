@@ -645,7 +645,8 @@ impl<'a> Resolver<'a> {
                 });
                 let own = self.types[ti].node;
                 let enclosing = self.types[ti].outer.or(Some(ti));
-                self.record_uses(fi, own, enclosing, &jt.type_uses, &mut ff.type_uses);
+                self.record_uses(fi, own, enclosing, &jt.header_uses, &mut ff.type_uses);
+                self.record_uses(fi, own, Some(ti), &jt.type_uses, &mut ff.type_uses);
                 let external = self.external_super(ti);
                 for m in &jt.methods {
                     let node = self.types[ti].methods[&m.name];

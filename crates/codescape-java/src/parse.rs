@@ -46,6 +46,7 @@ pub struct JType {
     pub fields: Vec<(String, String)>,
     pub methods: Vec<JMethod>,
     pub nested: Vec<JType>,
+    pub header_uses: Vec<JUse>,
     pub type_uses: Vec<JUse>,
     pub start_line: u32,
     pub end_line: u32,
@@ -300,6 +301,7 @@ impl<'s> Ctx<'s> {
             fields: Vec::new(),
             methods: Vec::new(),
             nested: Vec::new(),
+            header_uses: Vec::new(),
             type_uses: Vec::new(),
             start_line: line(n),
             end_line: end_line(n),
@@ -309,19 +311,20 @@ impl<'s> Ctx<'s> {
             match ch.kind() {
                 "superclass" | "extends_interfaces" => {
                     t.extends.extend(self.type_list(ch));
-                    self.type_uses(ch, &mut t.type_uses);
+                    self.type_uses(ch, &mut t.header_uses);
                 }
                 "super_interfaces" => {
                     t.implements.extend(self.type_list(ch));
-                    self.type_uses(ch, &mut t.type_uses);
+                    self.type_uses(ch, &mut t.header_uses);
                 }
                 _ => {}
             }
         }
-        for key in ["type_parameters", "parameters"] {
-            if let Some(p) = n.child_by_field_name(key) {
-                self.type_uses(p, &mut t.type_uses);
-            }
+        if let Some(p) = n.child_by_field_name("type_parameters") {
+            self.type_uses(p, &mut t.header_uses);
+        }
+        if let Some(p) = n.child_by_field_name("parameters") {
+            self.type_uses(p, &mut t.type_uses);
         }
         if let Some(body) = n.child_by_field_name("body") {
             self.type_body(body, &mut t);

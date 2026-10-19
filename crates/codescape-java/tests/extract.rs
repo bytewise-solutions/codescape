@@ -40,7 +40,7 @@ fn packages_types_members_nested_under_modules() {
     assert_eq!(r.b.file(main), Some("app/src/main/java/com/example/app/Main.java"));
     let fx = r.facts.files.iter().find(|f| f.rel_path.ends_with("Main.java")).unwrap();
     assert!(fx.functions.iter().any(|f| f.name == "main" && f.is_main && f.node == main));
-    assert_eq!(r.stats.files, 15);
+    assert_eq!(r.stats.files, 16);
 }
 
 #[test]
@@ -286,4 +286,15 @@ fn call_and_type_use_positions_are_recorded() {
     assert!(refs_from(&r.b, go).contains(&(mq, 14, 29, 12)));
     assert!(refs_from(&r.b, go).contains(&(strings, 18, 8, 7)));
     assert!(r.facts.files.iter().any(|f| f.type_uses.iter().any(|u| u.name == "ViewManager" && u.line == 8 && u.col == 12 && u.len == 11)));
+}
+
+#[test]
+fn nested_member_types_resolve_from_the_nested_scope() {
+    let r = run();
+    let holder = at(&r.b, &["app", "com.example.app", "Nest", "Holder"]);
+    let inner = at(&r.b, &["app", "com.example.app", "Nest", "Holder", "Entry"]);
+    let outer = at(&r.b, &["app", "com.example.app", "Nest", "Entry"]);
+    let refs = refs_from(&r.b, holder);
+    assert!(refs.contains(&(inner, 7, 8, 5)));
+    assert!(!refs.iter().any(|&(to, ..)| to == outer));
 }
