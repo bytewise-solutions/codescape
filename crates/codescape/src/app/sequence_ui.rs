@@ -15,6 +15,7 @@ const MARGIN: f32 = 24.0;
 pub(super) struct SequenceView {
     query: Query,
     diagram: Diagram,
+    whole: bool,
 }
 
 enum Act {
@@ -24,6 +25,7 @@ enum Act {
     Chain(usize, NodeId),
     Code(NodeId, Option<u32>),
     Map(NodeId),
+    Whole,
     Close,
 }
 
@@ -46,9 +48,11 @@ impl Project {
             },
             _ => return,
         };
-        let query = Query::new(focus, calls.default_chain(self.file.graph(), focus));
-        let diagram = diagram(self.file.graph(), &calls, &query);
-        self.sequence = Some(SequenceView { query, diagram });
+        let whole = self.sequence.as_ref().is_some_and(|s| s.whole);
+        let chain = if whole { calls.default_chain(g, focus) } else { calls.one_level(g, focus) };
+        let query = Query::new(focus, chain);
+        let diagram = diagram(g, &calls, &query);
+        self.sequence = Some(SequenceView { query, diagram, whole });
     }
 
     fn rebuild_sequence(&mut self) {
@@ -104,6 +108,10 @@ impl Project {
                     ui.label(egui::RichText::new(format!("({} callers, no entry point found)", calls.callers(q.focus).len())).small().color(style::MUTED));
                 }
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                    let label = if view.whole { "One level" } else { "Whole chain" };
+                    if ui.button(label).clicked() {
+                        act = Some(Act::Whole);
+                    }
                     if ui.button("Back to map").on_hover_text("Esc").clicked() {
                         act = Some(Act::Close);
                     }
@@ -268,8 +276,9 @@ impl Project {
             }
             Some(Act::Recentre(n)) => self.open_sequence(n),
             Some(Act::Chain(i, c)) => {
-                let mut chain = calls.default_chain(self.file.graph(), c);
+                let g = self.file.graph();
                 if let Some(s) = &mut self.sequence {
+                    let mut chain = if s.whole { calls.default_chain(g, c) } else { vec![c] };
                     chain.extend_from_slice(&s.query.chain[i + 1..]);
                     s.query.chain = chain;
                 }
@@ -282,6 +291,15 @@ impl Project {
             Some(Act::Map(n)) => {
                 self.sequence = None;
                 self.set_focus(n, None, true, true);
+            }
+            Some(Act::Whole) => {
+                if let Some(s) = &mut self.sequence {
+                    s.whole = !s.whole;
+                    let focus = s.query.focus;
+                    let g = self.file.graph();
+                    s.query.chain = if s.whole { calls.default_chain(g, focus) } else { calls.one_level(g, focus) };
+                }
+                self.rebuild_sequence();
             }
             Some(Act::Close) => self.sequence = None,
             None => {}

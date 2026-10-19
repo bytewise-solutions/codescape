@@ -86,3 +86,13 @@ fn a_type_is_told_from_the_method_its_outside_callers_use() {
     let store = (0..g.node_count() as NodeId).find(|&n| g.name(n) == "Store" && g.kind(n) == NodeKind::Type).unwrap();
     assert_eq!(calls.lead_method(g, store), Some(named_in(g, "Store", "Save")));
 }
+
+#[test]
+fn one_level_keeps_only_the_caller_on_the_way_to_an_entry_point() {
+    let (_t, file) = project();
+    let g = file.graph();
+    let calls = CallIndex::new(g);
+    let (main, checkout, total) = (named(g, "main"), named(g, "Checkout"), named(g, "total"));
+    assert_eq!(calls.one_level(g, total), [checkout, total]);
+    assert_eq!(calls.one_level(g, main), [main]);
+}

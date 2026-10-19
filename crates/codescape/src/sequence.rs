@@ -101,6 +101,11 @@ impl CallIndex {
         chain
     }
 
+    pub fn one_level(&self, g: &ArchivedGraph, n: NodeId) -> Vec<NodeId> {
+        let chain = self.default_chain(g, n);
+        chain[chain.len().saturating_sub(2)..].to_vec()
+    }
+
     pub fn methods(&self, g: &ArchivedGraph, owner: NodeId) -> Vec<NodeId> {
         let mut found: Vec<NodeId> = g
             .children(owner)

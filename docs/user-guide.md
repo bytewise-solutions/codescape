@@ -120,8 +120,8 @@ enough to read.
   Zoom into a changed file to see its added lines in green and red marks where lines were removed; hover a mark to
   read them. Renamed or moved blocks show as removed plus new.
 - **Sequence diagrams.** Right-click a method (or select it and press `S`, or use the button in the right panel) to
-  read it as a UML sequence diagram: one lifeline per class (or file for free functions), the chain of callers from
-  the nearest entry point down to it, then its calls in the order they are written, two levels deep. `+ open`
+  read it as a UML sequence diagram: one lifeline per class (or file for free functions), the caller one level up
+  (**Whole chain** in the header climbs to the nearest entry point, **One level** goes back), then its calls in the order they are written, two levels deep. `+ open`
   shows one level more; a method already on the stack is marked `recursive`. A call through an interface follows its
   only implementation, or offers the implementations to pick from; a caller in the chain with alternatives is a menu
   to pick another. Click an arrow to open the code at that call, double-click it to tell the called method instead,
