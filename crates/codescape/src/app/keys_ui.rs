@@ -62,39 +62,45 @@ impl Project {
         }
         let mut open = true;
         let mut changed = false;
-        egui::Window::new("Keyboard shortcuts").open(&mut open).collapsible(false).resizable(false).anchor(Align2::CENTER_TOP, [0.0, 60.0]).show(ctx, |ui| {
-            ui.label(egui::RichText::new("Click a shortcut, then press the new keys (Esc cancels). Saved for every project.").small().color(style::MUTED));
-            ui.add_space(6.0);
-            egui::Grid::new("keys").num_columns(3).spacing([14.0, 6.0]).show(ui, |ui| {
-                for a in Action::ALL {
-                    ui.label(a.label());
-                    let text = if self.capturing == Some(a) {
-                        "press keys…".to_string()
-                    } else {
-                        Some(shown(&self.keys, a)).filter(|s| !s.is_empty()).unwrap_or_else(|| "none".to_string())
-                    };
-                    if ui.add(egui::Button::new(egui::RichText::new(text).monospace().color(style::ACCENT)).min_size(egui::vec2(130.0, 0.0))).clicked() {
-                        self.capturing = Some(a);
-                        self.keys_note = None;
+        egui::Window::new("Keyboard shortcuts")
+            .id(super::windows::Win::Keys.id())
+            .open(&mut open)
+            .collapsible(false)
+            .resizable(false)
+            .anchor(Align2::CENTER_TOP, [0.0, 60.0])
+            .show(ctx, |ui| {
+                ui.label(egui::RichText::new("Click a shortcut, then press the new keys (Esc cancels). Saved for every project.").small().color(style::MUTED));
+                ui.add_space(6.0);
+                egui::Grid::new("keys").num_columns(3).spacing([14.0, 6.0]).show(ui, |ui| {
+                    for a in Action::ALL {
+                        ui.label(a.label());
+                        let text = if self.capturing == Some(a) {
+                            "press keys…".to_string()
+                        } else {
+                            Some(shown(&self.keys, a)).filter(|s| !s.is_empty()).unwrap_or_else(|| "none".to_string())
+                        };
+                        if ui.add(egui::Button::new(egui::RichText::new(text).monospace().color(style::ACCENT)).min_size(egui::vec2(130.0, 0.0))).clicked() {
+                            self.capturing = Some(a);
+                            self.keys_note = None;
+                        }
+                        ui.horizontal(|ui| {
+                            if !self.keys.is_default(a) && ui.small_button("reset").on_hover_text(format(&a.default_key())).clicked() {
+                                self.keys.reset(a);
+                                changed = true;
+                            }
+                            if self.keys.get(a).is_some() && ui.small_button("remove").clicked() {
+                                self.keys.unbind(a);
+                                changed = true;
+                            }
+                        });
+                        ui.end_row();
                     }
-                    ui.horizontal(|ui| {
-                        if !self.keys.is_default(a) && ui.small_button("reset").on_hover_text(format(&a.default_key())).clicked() {
-                            self.keys.reset(a);
-                            changed = true;
-                        }
-                        if self.keys.get(a).is_some() && ui.small_button("remove").clicked() {
-                            self.keys.unbind(a);
-                            changed = true;
-                        }
-                    });
-                    ui.end_row();
+                });
+                if let Some(note) = &self.keys_note {
+                    ui.add_space(4.0);
+                    ui.label(egui::RichText::new(note).small().color(style::ACCENT));
                 }
             });
-            if let Some(note) = &self.keys_note {
-                ui.add_space(4.0);
-                ui.label(egui::RichText::new(note).small().color(style::ACCENT));
-            }
-        });
         if changed && let Err(e) = save_keys(&self.keys) {
             self.keys_note = Some(e);
         }

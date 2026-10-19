@@ -2,7 +2,7 @@ mod code_find;
 mod keys_ui;
 mod map_panel;
 mod sequence_ui;
-mod windows;
+pub(crate) mod windows;
 
 use crate::camera::Camera;
 use crate::canvas::{Scene, build_scene_at, fit_label, root_world, world_rect};
@@ -18,6 +18,7 @@ use crate::settings_window::{self, SettingsForm};
 use crate::shot::{Shot, ShotPlan, ShotStep};
 use crate::source::{LINE_SPACING, SourceCache, Token, advance, file_font, highlight, hscroll_by, initial_scroll, merge_spans, scroll_at, scroll_by, thumb};
 use crate::view::{block_path, map_options, toggle, view_items};
+use crate::window_stack::WindowStack;
 use crate::{minimap, style};
 use codescape_format::*;
 use codescape_index::analysis::{Analysis, Usage, analyse};
@@ -457,7 +458,7 @@ struct Project {
     shortcuts_open: bool,
     keys: Keymap,
     keys_open: bool,
-    windows: Vec<windows::Win>,
+    windows: WindowStack<windows::Win>,
     capturing: Option<KeyAction>,
     keys_note: Option<String>,
     settings: SettingsStore,
@@ -672,7 +673,7 @@ impl Project {
             shortcuts_open: false,
             keys: load_keys(),
             keys_open: false,
-            windows: Vec::new(),
+            windows: WindowStack::default(),
             capturing: None,
             keys_note: None,
             settings,
@@ -1462,9 +1463,13 @@ impl Project {
             self.keyboard(ui);
         }
         if self.shortcuts_open {
-            egui::Window::new("Shortcuts").open(&mut self.shortcuts_open).collapsible(false).resizable(false).anchor(Align2::CENTER_TOP, [0.0, 60.0]).show(
-                ui.ctx(),
-                |ui| {
+            egui::Window::new("Shortcuts")
+                .id(windows::Win::Shortcuts.id())
+                .open(&mut self.shortcuts_open)
+                .collapsible(false)
+                .resizable(false)
+                .anchor(Align2::CENTER_TOP, [0.0, 60.0])
+                .show(ui.ctx(), |ui| {
                     ui.horizontal_top(|ui| {
                         for column in CHEATSHEET.chunks(2) {
                             ui.vertical(|ui| {
@@ -1486,8 +1491,7 @@ impl Project {
                             ui.add_space(18.0);
                         }
                     });
-                },
-            );
+                });
         }
         if self.review_bar.is_some() {
             egui::Panel::top("review_bar")
@@ -2094,35 +2098,41 @@ impl Project {
     fn search_window(&mut self, ctx: &egui::Context) {
         let mut open = true;
         let mut fly = None;
-        egui::Window::new("Jump to").open(&mut open).collapsible(false).resizable(false).anchor(Align2::CENTER_TOP, [0.0, 60.0]).show(ctx, |ui| {
-            let (down, up) = ui.input_mut(|i| (i.consume_key(egui::Modifiers::NONE, Key::ArrowDown), i.consume_key(egui::Modifiers::NONE, Key::ArrowUp)));
-            let moved = down || up;
-            if moved {
-                self.search_cursor = search::step_selection(self.search_cursor, self.search_hits.len(), down);
-            }
-            let edit = ui.add(egui::TextEdit::singleline(&mut self.search_text).hint_text("type, package or module name").desired_width(380.0));
-            edit.request_focus();
-            if edit.changed() {
-                self.search_hits = self.search.query(self.file.graph(), &self.search_text, 30);
-                self.search_cursor = 0;
-            }
-            let g = self.file.graph();
-            if ui.input(|i| i.key_pressed(Key::Enter)) {
-                fly = self.search_hits.get(self.search_cursor).copied();
-            }
-            egui::ScrollArea::vertical().max_height(360.0).show(ui, |ui| {
-                for (i, &h) in self.search_hits.iter().enumerate() {
-                    let path: Vec<&str> = g.path(h).iter().skip(1).map(|&p| g.name(p)).collect();
-                    let row = ui.selectable_label(i == self.search_cursor, format!("{}   {}", g.name(h), path[..path.len().saturating_sub(1)].join(" / ")));
-                    if moved && i == self.search_cursor {
-                        row.scroll_to_me(None);
-                    }
-                    if row.clicked() {
-                        fly = Some(h);
-                    }
+        egui::Window::new("Jump to")
+            .id(windows::Win::Jump.id())
+            .open(&mut open)
+            .collapsible(false)
+            .resizable(false)
+            .anchor(Align2::CENTER_TOP, [0.0, 60.0])
+            .show(ctx, |ui| {
+                let (down, up) = ui.input_mut(|i| (i.consume_key(egui::Modifiers::NONE, Key::ArrowDown), i.consume_key(egui::Modifiers::NONE, Key::ArrowUp)));
+                let moved = down || up;
+                if moved {
+                    self.search_cursor = search::step_selection(self.search_cursor, self.search_hits.len(), down);
                 }
+                let edit = ui.add(egui::TextEdit::singleline(&mut self.search_text).hint_text("type, package or module name").desired_width(380.0));
+                edit.request_focus();
+                if edit.changed() {
+                    self.search_hits = self.search.query(self.file.graph(), &self.search_text, 30);
+                    self.search_cursor = 0;
+                }
+                let g = self.file.graph();
+                if ui.input(|i| i.key_pressed(Key::Enter)) {
+                    fly = self.search_hits.get(self.search_cursor).copied();
+                }
+                egui::ScrollArea::vertical().max_height(360.0).show(ui, |ui| {
+                    for (i, &h) in self.search_hits.iter().enumerate() {
+                        let path: Vec<&str> = g.path(h).iter().skip(1).map(|&p| g.name(p)).collect();
+                        let row = ui.selectable_label(i == self.search_cursor, format!("{}   {}", g.name(h), path[..path.len().saturating_sub(1)].join(" / ")));
+                        if moved && i == self.search_cursor {
+                            row.scroll_to_me(None);
+                        }
+                        if row.clicked() {
+                            fly = Some(h);
+                        }
+                    }
+                });
             });
-        });
         if let Some(n) = fly {
             self.set_focus(n, None, true, true);
             self.search_open = false;

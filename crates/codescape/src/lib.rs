@@ -18,3 +18,4 @@ pub mod shot;
 pub mod source;
 pub mod style;
 pub mod view;
+pub mod window_stack;

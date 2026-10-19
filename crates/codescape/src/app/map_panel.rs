@@ -125,108 +125,113 @@ impl Project {
         let mut levels: Vec<(Threshold, u32)> = Vec::new();
         let mut request: Option<HideRequest> = None;
         let mut pattern = std::mem::take(&mut self.hide_pattern);
-        egui::Window::new("What's on the map").open(&mut open).auto_sized().anchor(egui::Align2::RIGHT_TOP, [-20.0, 70.0]).show(ctx, |ui| {
-            let s = self.settings.settings();
-            let mut switch = |ui: &mut egui::Ui, v: View, count: Option<usize>| {
-                let mut on = s.view(v).value;
-                let label = match count {
-                    Some(n) => format!("{}  ·  {n}", v.label()),
-                    None => v.label().to_string(),
+        egui::Window::new("What's on the map")
+            .id(super::windows::Win::MapPanel.id())
+            .open(&mut open)
+            .auto_sized()
+            .anchor(egui::Align2::RIGHT_TOP, [-20.0, 70.0])
+            .show(ctx, |ui| {
+                let s = self.settings.settings();
+                let mut switch = |ui: &mut egui::Ui, v: View, count: Option<usize>| {
+                    let mut on = s.view(v).value;
+                    let label = match count {
+                        Some(n) => format!("{}  ·  {n}", v.label()),
+                        None => v.label().to_string(),
+                    };
+                    if ui.checkbox(&mut on, label).changed() {
+                        switches.push((SettingKey::View(v), on));
+                    }
                 };
-                if ui.checkbox(&mut on, label).changed() {
-                    switches.push((SettingKey::View(v), on));
-                }
-            };
-            let heading = |ui: &mut egui::Ui, text: &str| {
-                ui.add_space(6.0);
-                ui.label(egui::RichText::new(text).small().strong().color(style::MUTED));
-            };
-            egui::ScrollArea::vertical().max_height(ctx.content_rect().height() - 140.0).show(ui, |ui| {
-                heading(ui, "CODE");
-                switch(ui, View::Tests, Some(counts.tests));
-                switch(ui, View::TestDeps, None);
-                switch(ui, View::Generated, Some(counts.generated));
-                switch(ui, View::Errors, Some(counts.errors));
-                switch(ui, View::Wiring, Some(counts.wiring));
-                switch(ui, View::Details, Some(counts.details));
-                heading(ui, "CARDS");
-                for v in [View::PrivateMembers, View::Fields, View::Accessors, View::Constructors] {
-                    switch(ui, v, None);
-                }
-                heading(ui, "ARROWS");
-                for v in [View::QuietArrows, View::GuessedCalls, View::ImplementsArrows, View::ImportArrows] {
-                    switch(ui, v, None);
-                }
-                heading(ui, "HINTS");
-                switch(ui, View::Complexity, None);
-                switch(ui, View::Unused, None);
-                for t in Threshold::ALL {
-                    ui.horizontal(|ui| {
-                        let mut value = s.threshold(t).value;
-                        ui.label(t.label());
-                        if ui.add(egui::DragValue::new(&mut value).range(1..=999)).changed() {
-                            levels.push((t, value));
-                        }
-                    });
-                }
-                if !s.filters.is_empty() {
-                    heading(ui, "FILTERS");
-                    for f in &s.filters {
-                        let mut on = s.filter_shown(&f.value.name).is_some_and(|x| x.value);
-                        if ui.checkbox(&mut on, &f.value.name).changed() {
-                            filter_switches.push((SettingKey::FilterShown(f.value.name.clone()), on));
-                        }
+                let heading = |ui: &mut egui::Ui, text: &str| {
+                    ui.add_space(6.0);
+                    ui.label(egui::RichText::new(text).small().strong().color(style::MUTED));
+                };
+                egui::ScrollArea::vertical().max_height(ctx.content_rect().height() - 140.0).show(ui, |ui| {
+                    heading(ui, "CODE");
+                    switch(ui, View::Tests, Some(counts.tests));
+                    switch(ui, View::TestDeps, None);
+                    switch(ui, View::Generated, Some(counts.generated));
+                    switch(ui, View::Errors, Some(counts.errors));
+                    switch(ui, View::Wiring, Some(counts.wiring));
+                    switch(ui, View::Details, Some(counts.details));
+                    heading(ui, "CARDS");
+                    for v in [View::PrivateMembers, View::Fields, View::Accessors, View::Constructors] {
+                        switch(ui, v, None);
                     }
-                }
-                heading(ui, "HIDDEN BY YOU");
-                let hidden = s
-                    .hidden
-                    .iter()
-                    .map(|h| (h.value.clone(), h.layer, None))
-                    .chain(s.hidden_names.iter().map(|h| (h.value.clone(), h.layer, Some("names matching"))))
-                    .chain(s.hidden_supertypes.iter().map(|h| (h.value.clone(), h.layer, Some("types extending"))));
-                let mut any = false;
-                for (entry, layer, kind) in hidden {
-                    any = true;
-                    ui.horizontal(|ui| {
-                        let text = match kind {
-                            Some(k) => format!("{k} {entry}"),
-                            None => short_path(&entry),
-                        };
-                        ui.label(egui::RichText::new(text).monospace()).on_hover_text(&entry);
-                        ui.label(egui::RichText::new(layer_name(layer)).small().color(style::MUTED));
-                        if ui.small_button("show again").clicked() {
-                            request = Some(HideRequest::ShowAgain(entry.clone()));
-                        }
-                    });
-                }
-                if !any {
-                    ui.label(egui::RichText::new("Nothing yet: right-click a box, then Hide this").small().color(style::MUTED));
-                }
-                ui.horizontal(|ui| {
-                    ui.add(egui::TextEdit::singleline(&mut pattern).hint_text("Exception$, ^Mock, Dto$…").desired_width(180.0));
-                    if ui.button("Hide names").on_hover_text("Every block whose name matches").clicked() && !pattern.trim().is_empty() {
-                        request = Some(HideRequest::Names(pattern.trim().to_string()));
+                    heading(ui, "ARROWS");
+                    for v in [View::QuietArrows, View::GuessedCalls, View::ImplementsArrows, View::ImportArrows] {
+                        switch(ui, v, None);
                     }
-                    if ui.button("Hide types extending").on_hover_text("Every type with a known supertype whose name matches").clicked()
-                        && !pattern.trim().is_empty()
-                    {
-                        request = Some(HideRequest::Supertypes(pattern.trim().to_string()));
-                    }
-                });
-                if !s.always_shown.is_empty() {
-                    heading(ui, "ALWAYS SHOWN");
-                    for a in &s.always_shown {
+                    heading(ui, "HINTS");
+                    switch(ui, View::Complexity, None);
+                    switch(ui, View::Unused, None);
+                    for t in Threshold::ALL {
                         ui.horizontal(|ui| {
-                            ui.label(egui::RichText::new(short_path(&a.value)).monospace()).on_hover_text(&a.value);
-                            if ui.small_button("stop").clicked() {
-                                request = Some(HideRequest::StopAlwaysShowing(a.value.clone()));
+                            let mut value = s.threshold(t).value;
+                            ui.label(t.label());
+                            if ui.add(egui::DragValue::new(&mut value).range(1..=999)).changed() {
+                                levels.push((t, value));
                             }
                         });
                     }
-                }
+                    if !s.filters.is_empty() {
+                        heading(ui, "FILTERS");
+                        for f in &s.filters {
+                            let mut on = s.filter_shown(&f.value.name).is_some_and(|x| x.value);
+                            if ui.checkbox(&mut on, &f.value.name).changed() {
+                                filter_switches.push((SettingKey::FilterShown(f.value.name.clone()), on));
+                            }
+                        }
+                    }
+                    heading(ui, "HIDDEN BY YOU");
+                    let hidden = s
+                        .hidden
+                        .iter()
+                        .map(|h| (h.value.clone(), h.layer, None))
+                        .chain(s.hidden_names.iter().map(|h| (h.value.clone(), h.layer, Some("names matching"))))
+                        .chain(s.hidden_supertypes.iter().map(|h| (h.value.clone(), h.layer, Some("types extending"))));
+                    let mut any = false;
+                    for (entry, layer, kind) in hidden {
+                        any = true;
+                        ui.horizontal(|ui| {
+                            let text = match kind {
+                                Some(k) => format!("{k} {entry}"),
+                                None => short_path(&entry),
+                            };
+                            ui.label(egui::RichText::new(text).monospace()).on_hover_text(&entry);
+                            ui.label(egui::RichText::new(layer_name(layer)).small().color(style::MUTED));
+                            if ui.small_button("show again").clicked() {
+                                request = Some(HideRequest::ShowAgain(entry.clone()));
+                            }
+                        });
+                    }
+                    if !any {
+                        ui.label(egui::RichText::new("Nothing yet: right-click a box, then Hide this").small().color(style::MUTED));
+                    }
+                    ui.horizontal(|ui| {
+                        ui.add(egui::TextEdit::singleline(&mut pattern).hint_text("Exception$, ^Mock, Dto$…").desired_width(180.0));
+                        if ui.button("Hide names").on_hover_text("Every block whose name matches").clicked() && !pattern.trim().is_empty() {
+                            request = Some(HideRequest::Names(pattern.trim().to_string()));
+                        }
+                        if ui.button("Hide types extending").on_hover_text("Every type with a known supertype whose name matches").clicked()
+                            && !pattern.trim().is_empty()
+                        {
+                            request = Some(HideRequest::Supertypes(pattern.trim().to_string()));
+                        }
+                    });
+                    if !s.always_shown.is_empty() {
+                        heading(ui, "ALWAYS SHOWN");
+                        for a in &s.always_shown {
+                            ui.horizontal(|ui| {
+                                ui.label(egui::RichText::new(short_path(&a.value)).monospace()).on_hover_text(&a.value);
+                                if ui.small_button("stop").clicked() {
+                                    request = Some(HideRequest::StopAlwaysShowing(a.value.clone()));
+                                }
+                            });
+                        }
+                    }
+                });
             });
-        });
         self.hide_pattern = if matches!(request, Some(HideRequest::Names(_) | HideRequest::Supertypes(_))) { String::new() } else { pattern };
         self.map_panel_open = open;
         for (key, on) in switches.into_iter().chain(filter_switches) {

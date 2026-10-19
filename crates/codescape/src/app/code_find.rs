@@ -108,32 +108,38 @@ impl Project {
         }
         let Some(bar) = self.find.as_mut() else { return };
         let (mut open, mut changed, mut step) = (true, false, None);
-        egui::Window::new("Find in file").open(&mut open).collapsible(false).resizable(false).anchor(Align2::RIGHT_TOP, [-20.0, 70.0]).show(ctx, |ui| {
-            ui.horizontal(|ui| {
-                let edit = ui.add(egui::TextEdit::singleline(&mut bar.text).hint_text("text to find").desired_width(220.0));
-                if std::mem::take(&mut bar.focus) {
-                    edit.request_focus();
-                }
-                changed = edit.changed();
-                if edit.lost_focus() && ui.input(|i| i.key_pressed(Key::Enter)) {
-                    step = Some(!ui.input(|i| i.modifiers.shift));
-                    edit.request_focus();
-                }
-                let count = match (bar.node, bar.current) {
-                    (None, _) => "no file open".to_string(),
-                    (_, Some(c)) => format!("{}/{}", c + 1, bar.hits.len()),
-                    _ if bar.text.is_empty() => String::new(),
-                    _ => "no match".to_string(),
-                };
-                ui.label(egui::RichText::new(count).small().color(style::MUTED));
-                if ui.small_button("Prev").on_hover_text("Shift+Enter").clicked() {
-                    step = Some(false);
-                }
-                if ui.small_button("Next").on_hover_text("Enter").clicked() {
-                    step = Some(true);
-                }
+        egui::Window::new("Find in file")
+            .id(super::windows::Win::Find.id())
+            .open(&mut open)
+            .collapsible(false)
+            .resizable(false)
+            .anchor(Align2::RIGHT_TOP, [-20.0, 70.0])
+            .show(ctx, |ui| {
+                ui.horizontal(|ui| {
+                    let edit = ui.add(egui::TextEdit::singleline(&mut bar.text).hint_text("text to find").desired_width(220.0));
+                    if std::mem::take(&mut bar.focus) {
+                        edit.request_focus();
+                    }
+                    changed = edit.changed();
+                    if edit.lost_focus() && ui.input(|i| i.key_pressed(Key::Enter)) {
+                        step = Some(!ui.input(|i| i.modifiers.shift));
+                        edit.request_focus();
+                    }
+                    let count = match (bar.node, bar.current) {
+                        (None, _) => "no file open".to_string(),
+                        (_, Some(c)) => format!("{}/{}", c + 1, bar.hits.len()),
+                        _ if bar.text.is_empty() => String::new(),
+                        _ => "no match".to_string(),
+                    };
+                    ui.label(egui::RichText::new(count).small().color(style::MUTED));
+                    if ui.small_button("Prev").on_hover_text("Shift+Enter").clicked() {
+                        step = Some(false);
+                    }
+                    if ui.small_button("Next").on_hover_text("Enter").clicked() {
+                        step = Some(true);
+                    }
+                });
             });
-        });
         if let Some(forward) = step {
             self.step_find(forward);
         }

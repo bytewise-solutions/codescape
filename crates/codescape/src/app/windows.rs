@@ -1,7 +1,7 @@
 use super::Project;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(super) enum Win {
+pub(crate) enum Win {
     Jump,
     Shortcuts,
     Settings,
@@ -14,7 +14,7 @@ pub(super) enum Win {
 impl Win {
     const ALL: [Win; 7] = [Win::Jump, Win::Shortcuts, Win::Settings, Win::Find, Win::Structure, Win::Keys, Win::MapPanel];
 
-    pub(super) fn id(self) -> egui::Id {
+    pub(crate) fn id(self) -> egui::Id {
         egui::Id::unique(match self {
             Win::Jump => "Jump to",
             Win::Shortcuts => "Shortcuts",
@@ -57,17 +57,9 @@ impl Project {
 
     pub(super) fn track_windows(&mut self, ctx: &egui::Context) {
         let open: Vec<Win> = Win::ALL.into_iter().filter(|&w| self.is_open(w)).collect();
-        self.windows.retain(|w| open.contains(w));
-        for w in open {
-            if !self.windows.contains(&w) {
-                self.windows.push(w);
-            }
-        }
-        let top = ctx.memory(|m| m.areas().top_layer_id(egui::Order::Middle)).map(|l| l.id);
-        if let Some(i) = self.windows.iter().position(|w| Some(w.id()) == top) {
-            let w = self.windows.remove(i);
-            self.windows.push(w);
-        }
+        let top_id = ctx.memory(|m| m.areas().top_layer_id(egui::Order::Middle)).map(|l| l.id);
+        let top = Win::ALL.into_iter().find(|w| Some(w.id()) == top_id);
+        self.windows.sync(&open, top);
     }
 
     pub(super) fn close_top_window(&mut self) -> bool {
