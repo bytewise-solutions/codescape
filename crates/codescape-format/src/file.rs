@@ -6,7 +6,7 @@ use std::ops::Range;
 use std::path::Path;
 
 pub const MAGIC: &[u8; 8] = b"CODESCP1";
-pub const FORMAT_VERSION: u32 = 16;
+pub const FORMAT_VERSION: u32 = 17;
 const HEADER: usize = 48;
 
 #[derive(Debug, thiserror::Error)]
@@ -207,6 +207,13 @@ impl ArchivedGraph {
         let s = self.edge_index[id as usize].to_native() as usize;
         let e = self.edge_index[id as usize + 1].to_native() as usize;
         &self.edges[s..e]
+    }
+
+    pub fn refs_from(&self, n: NodeId) -> &[ArchivedRef] {
+        let all = &self.refs;
+        let start = all.partition_point(|r| r.from.to_native() < n);
+        let end = start + all[start..].partition_point(|r| r.from.to_native() == n);
+        &all[start..end]
     }
 
     pub fn call_line(&self, from: NodeId, e: &ArchivedEdge) -> Option<u32> {

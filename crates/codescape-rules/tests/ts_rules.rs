@@ -32,6 +32,7 @@ impl Fx {
             types: Vec::new(),
             functions: Vec::new(),
             calls: Vec::new(),
+            type_uses: Vec::new(),
         });
         self.facts.files.len() - 1
     }

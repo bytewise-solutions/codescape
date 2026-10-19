@@ -1394,6 +1394,7 @@ impl<'a> Resolver<'a> {
                 types: Vec::new(),
                 functions: Vec::new(),
                 calls: Vec::new(),
+                type_uses: Vec::new(),
             };
             for &(pi, body, i) in &self.type_occs[fi] {
                 let t = &f.rf.bodies[body].types[i];

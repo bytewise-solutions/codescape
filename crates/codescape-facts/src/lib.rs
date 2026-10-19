@@ -46,6 +46,17 @@ pub struct CallFacts {
     pub target: Option<NodeId>,
     pub instantiates: Option<String>,
     pub line: u32,
+    pub col: u32,
+    pub len: u32,
+}
+
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct TypeUse {
+    pub owner: NodeId,
+    pub name: String,
+    pub line: u32,
+    pub col: u32,
+    pub len: u32,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -61,6 +72,7 @@ pub struct FileFacts {
     pub types: Vec<TypeFacts>,
     pub functions: Vec<FnFacts>,
     pub calls: Vec<CallFacts>,
+    pub type_uses: Vec<TypeUse>,
 }
 
 #[derive(Clone, Debug, Default)]

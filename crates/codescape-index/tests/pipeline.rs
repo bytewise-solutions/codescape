@@ -59,6 +59,20 @@ fn reindex_when_index_corrupt() {
 }
 
 #[test]
+fn reindex_when_index_has_previous_format() {
+    let tmp = tempfile::tempdir().unwrap();
+    let cfg = cfg_with_index(tmp.path());
+    let dir = fixture("go-resolve");
+    let out = index_project(&dir, &cfg, &|_| {}).unwrap();
+    let packs = project_packs(&dir, &cfg).unwrap();
+    assert!(!needs_reindex(&dir, &out.path, &cfg, &packs));
+    let mut bytes = std::fs::read(&out.path).unwrap();
+    bytes[8..12].copy_from_slice(&(FORMAT_VERSION - 1).to_le_bytes());
+    std::fs::write(&out.path, &bytes).unwrap();
+    assert!(needs_reindex(&dir, &out.path, &cfg, &packs));
+}
+
+#[test]
 fn reindex_when_detection_rules_change() {
     let tmp = tempfile::tempdir().unwrap();
     let dir = fixture("go-resolve");

@@ -184,11 +184,12 @@ fn open_rejects_wrong_version_and_truncation() {
     write_graph(&b.finish(), &path).unwrap();
     let mut bytes = std::fs::read(&path).unwrap();
 
-    let mut bumped = bytes.clone();
-    bumped[8] = bumped[8].wrapping_add(1);
+    assert_eq!(FORMAT_VERSION, 17);
+    let mut previous = bytes.clone();
+    previous[8..12].copy_from_slice(&16u32.to_le_bytes());
     let p2 = dir.path().join("v.codescape");
-    std::fs::write(&p2, &bumped).unwrap();
-    assert!(matches!(IndexFile::open(&p2), Err(FormatError::Version { .. })));
+    std::fs::write(&p2, &previous).unwrap();
+    assert!(matches!(IndexFile::open(&p2), Err(FormatError::Version { found: 16, expected: 17 })));
 
     bytes.truncate(bytes.len() / 2);
     let p3 = dir.path().join("t.codescape");
@@ -205,6 +206,7 @@ fn records_are_compact() {
     assert!(std::mem::size_of::<ArchivedNode>() <= 32, "node is {} bytes", std::mem::size_of::<ArchivedNode>());
     assert!(std::mem::size_of::<ArchivedEdge>() <= 12, "edge is {} bytes", std::mem::size_of::<ArchivedEdge>());
     assert!(std::mem::size_of::<ArchivedAgg>() <= 20, "aggregate is {} bytes", std::mem::size_of::<ArchivedAgg>());
+    assert!(std::mem::size_of::<ArchivedRef>() <= 16, "reference is {} bytes", std::mem::size_of::<ArchivedRef>());
 }
 
 #[test]
@@ -501,4 +503,28 @@ fn a_call_edge_keeps_the_line_of_its_first_call() {
     assert_eq!(gr.call_line(f, edge(g)), Some(7));
     assert_eq!(edge(g).count.to_native(), 2);
     assert_eq!(gr.call_line(f, edge(h)), None, "no line recorded");
+}
+
+#[test]
+fn references_round_trip_sorted_by_line_and_column() {
+    let (mut b, [_, _, _, f, g, h]) = two_module_graph();
+    b.add_ref(f, h, 10, 20, 3);
+    b.add_ref(f, g, 10, 8, 4);
+    b.add_ref(f, g, 11, 70_000, 4);
+    b.add_ref(g, h, 3, 1, 2);
+    let (_d, file) = roundtrip(b);
+    let gr = file.graph();
+    let t = find(gr, find(gr, find(gr, gr.root(), "m1"), "p1"), "T");
+    let f = find(gr, t, "f");
+    let g = find(gr, find(gr, find(gr, gr.root(), "m2"), "p3"), "U");
+    let g = find(gr, g, "g");
+    let h = find(gr, find(gr, find(gr, gr.root(), "m1"), "p2"), "V");
+    let h = find(gr, h, "h");
+    let refs: Vec<(u32, u32, u16, u16)> =
+        gr.refs_from(f).iter().map(|r| (r.to.to_native(), r.line.to_native(), r.col.to_native(), r.len.to_native())).collect();
+    assert_eq!(refs, [(g, 10, 8, 4), (h, 10, 20, 3)]);
+    assert!(gr.refs_from(f).iter().all(|r| r.from.to_native() == f));
+    assert_eq!(gr.refs_from(g).len(), 1);
+    assert!(gr.refs_from(h).is_empty());
+    assert!(gr.refs_from(gr.root()).is_empty());
 }

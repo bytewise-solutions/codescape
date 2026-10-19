@@ -541,6 +541,7 @@ impl<'a> Resolver<'a> {
                 types: Vec::new(),
                 functions: Vec::new(),
                 calls: Vec::new(),
+                type_uses: Vec::new(),
             };
             for t in &f.gf.types {
                 let ti = self.pkgs[pi].types[&t.name];

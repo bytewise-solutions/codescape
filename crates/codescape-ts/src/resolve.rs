@@ -1050,6 +1050,7 @@ impl<'a> Resolver<'a> {
                 types: Vec::new(),
                 functions: Vec::new(),
                 calls: Vec::new(),
+                type_uses: Vec::new(),
             };
             for t in &f.tf.types {
                 let ti = self.file_types[fi][&t.name];

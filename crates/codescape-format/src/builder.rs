@@ -53,6 +53,7 @@ pub struct GraphBuilder {
     children: Vec<Vec<NodeId>>,
     child_index: HashMap<(NodeId, u32), NodeId>,
     edges: Vec<RawEdge>,
+    refs: Vec<Ref>,
     entries: Vec<EntryPointSpec>,
     stats: Stats,
     provenance: Vec<(String, String, String)>,
@@ -66,6 +67,7 @@ impl GraphBuilder {
             children: Vec::new(),
             child_index: HashMap::new(),
             edges: Vec::new(),
+            refs: Vec::new(),
             entries: Vec::new(),
             stats: Stats::default(),
             provenance: Vec::new(),
@@ -191,6 +193,11 @@ impl GraphBuilder {
     #[allow(clippy::too_many_arguments)]
     pub fn add_edge_at(&mut self, from: NodeId, to: NodeId, kind: EdgeKind, scope: Scope, confidence: Confidence, flags: EdgeFlags, line: u32) {
         self.edges.push(RawEdge { from, to, kind, scope, confidence, flags, line });
+    }
+
+    pub fn add_ref(&mut self, from: NodeId, to: NodeId, line: u32, col: u32, len: u32) {
+        let Ok(col) = u16::try_from(col) else { return };
+        self.refs.push(Ref { from, to, line, col, len: u16::try_from(len).unwrap_or(u16::MAX) });
     }
 
     pub fn edges(&self) -> &[RawEdge] {
@@ -441,6 +448,13 @@ impl GraphBuilder {
             agg_offsets[i + 1] += agg_offsets[i];
         }
         let edges: Vec<Edge> = sorted.into_iter().map(|(_, e)| e).collect();
+        let mut refs: Vec<Ref> = std::mem::take(&mut self.refs)
+            .into_iter()
+            .map(|r| Ref { from: new_id[r.from as usize], to: new_id[r.to as usize], ..r })
+            .filter(|r| r.from != NONE && r.to != NONE)
+            .collect();
+        refs.sort_by_key(|r| (r.from, r.line, r.col, r.to, r.len));
+        refs.dedup();
 
         let mut subtree = vec![0u64; n];
         for new in (0..n).rev() {
@@ -542,6 +556,7 @@ impl GraphBuilder {
             provenance,
             fields,
             complexity,
+            refs,
         }
     }
 }

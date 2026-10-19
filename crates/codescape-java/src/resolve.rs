@@ -633,6 +633,7 @@ impl<'a> Resolver<'a> {
                 types: Vec::new(),
                 functions: Vec::new(),
                 calls: Vec::new(),
+                type_uses: Vec::new(),
             };
             for ti in self.file_types[fi].clone() {
                 let jt = self.jtype(ti);
