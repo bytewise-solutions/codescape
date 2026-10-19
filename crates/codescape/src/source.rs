@@ -6,6 +6,7 @@ use std::sync::Arc;
 pub const FILE_MIN_PT: f32 = 7.0;
 const FILE_COLUMNS: f32 = 100.0;
 const MONO_ADVANCE: f32 = 0.62;
+pub const FILE_MIN_WIDTH: f32 = FILE_MIN_PT * FILE_COLUMNS * MONO_ADVANCE;
 pub const LINE_SPACING: f32 = 1.25;
 const TAB: &str = "    ";
 

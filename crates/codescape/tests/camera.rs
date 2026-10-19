@@ -85,3 +85,12 @@ fn reading_a_tall_card_zooms_until_its_file_opens_with_its_top_in_view() {
     let wide = Rect::new(0.0, 0.0, 1000.0, 300.0);
     assert_eq!(Camera::reading(wide, VIEW).zoom, Camera::fit(wide, VIEW).zoom, "a wide box just fits");
 }
+
+#[test]
+fn reading_in_a_narrow_view_still_opens_the_file() {
+    let narrow = Rect::new(0.0, 0.0, 500.0, 800.0);
+    let card = Rect::new(0.0, 0.0, 100.0, 1000.0);
+    let r = Camera::reading(card, narrow).world_to_screen_rect(card.into(), narrow);
+    assert!(r.w >= codescape::canvas::FILE_OPEN_PX, "{} px wide", r.w);
+    assert!(codescape::source::file_font(r.w).is_some(), "{} px is too narrow for a file", r.w);
+}
