@@ -88,7 +88,7 @@ enough to read.
   drag), and so do `Page Up`/`Page Down`/`Home`/`End`. It opens at the type's first line. The type's own lines and
   its methods sit on a light band. Hold `Ctrl` and point at a name: the name the index resolved is underlined and
   `Ctrl`+click opens its definition (a field leads to its class). Names it could not resolve stay plain, and so do
-  names defined in code the map hides (tests, errors, loggers, wiring, details or boxes you hid) until you show that
+  names defined in code the map hides (tests, errors, loggers, wiring or boxes you hid) until you show that
   code. Types that hold other boxes (an interface with its implementations) stay boxes. Lines are read from disk.
 - **Quiet arrows.** Every dependency is drawn, but faint, slightly stronger for the heaviest ones in a container. Hover
   or select a box and its own arrows light up at full strength, as thick as the number of classes they link. Turn

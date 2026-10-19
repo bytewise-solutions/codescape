@@ -121,3 +121,19 @@ fn only_a_target_the_map_shows_can_be_followed() {
     user.hidden_nodes.insert(a);
     assert!(!followable(g, &user, a), "hidden by the user");
 }
+
+#[test]
+fn a_detail_target_can_be_followed_because_navigation_reveals_it() {
+    let fx = fixture(|b, [_, _, o, get, _]| {
+        b.add_flags(o, NodeFlags::DETAIL);
+        b.add_flags(get, NodeFlags::NOISE);
+    });
+    let g = fx.file.graph();
+    let (o, get) = (node(g, &["p", "O"]), node(g, &["p", "O", "get"]));
+    let opts = codescape_layout::LayoutOptions::default();
+    assert!(followable(g, &opts, o), "a detail type");
+    assert!(!followable(g, &opts, get), "a noise member of a detail type");
+    let mut user = opts.clone();
+    user.hidden_nodes.insert(o);
+    assert!(!followable(g, &user, o), "hidden by the user");
+}

@@ -11,7 +11,7 @@ pub fn display_span(raw: &str, byte_col: usize, byte_len: usize) -> (usize, usiz
 }
 
 pub fn followable(g: &ArchivedGraph, opts: &LayoutOptions, target: NodeId) -> bool {
-    !g.path(target).into_iter().any(|n| opts.hides(g, n))
+    !g.path(target).into_iter().any(|n| opts.hides_beyond_details(g, n))
 }
 
 struct Link {

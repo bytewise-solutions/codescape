@@ -181,6 +181,17 @@ impl LayoutOptions {
         !self.hidden_tags.is_empty() && g.tags(node).any(|t| self.hidden_tags.iter().any(|h| h == t))
     }
 
+    pub fn hides_beyond_details(&self, g: &ArchivedGraph, node: NodeId) -> bool {
+        if self.hidden_nodes.contains(&node) {
+            return true;
+        }
+        if self.always_shown.contains(&node) {
+            return false;
+        }
+        let hidden = NodeFlags(self.effective_hidden().0 & !NodeFlags::DETAIL.0);
+        g.flags(node).intersects(hidden) || self.tag_hidden(g, node)
+    }
+
     pub fn hides(&self, g: &ArchivedGraph, node: NodeId) -> bool {
         if self.hidden_nodes.contains(&node) {
             return true;
