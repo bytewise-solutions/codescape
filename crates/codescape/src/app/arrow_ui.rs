@@ -10,6 +10,11 @@ pub(super) struct ArrowWin {
     links: Vec<CallLink>,
 }
 
+fn short(g: &codescape_format::ArchivedGraph, n: NodeId) -> &str {
+    let name = g.name(n);
+    if g.kind(n) == codescape_format::NodeKind::Package { name.rsplit('.').next().unwrap_or(name) } else { name }
+}
+
 impl Project {
     pub(super) fn open_arrow(&mut self, a: NodeId, b: NodeId) {
         let links = calls_between(self.file.graph(), a, b, self.cache.options());
@@ -22,7 +27,7 @@ impl Project {
         let mut open = true;
         let mut open_at: Option<CallLink> = None;
         let mut go: Option<NodeId> = None;
-        egui::Window::new(format!("{} → {}", g.name(w.a), g.name(w.b)))
+        egui::Window::new(format!("{} -> {}", short(g, w.a), short(g, w.b)))
             .id(super::windows::Win::Arrow.id())
             .open(&mut open)
             .collapsible(false)
@@ -30,10 +35,10 @@ impl Project {
             .anchor(Align2::CENTER_TOP, [0.0, 80.0])
             .show(ctx, |ui| {
                 ui.horizontal(|ui| {
-                    if ui.button(format!("Go to {}", g.name(w.a))).clicked() {
+                    if ui.button(format!("Go to {}", short(g, w.a))).on_hover_text(g.name(w.a)).clicked() {
                         go = Some(w.a);
                     }
-                    if ui.button(format!("Go to {}", g.name(w.b))).clicked() {
+                    if ui.button(format!("Go to {}", short(g, w.b))).on_hover_text(g.name(w.b)).clicked() {
                         go = Some(w.b);
                     }
                 });
@@ -44,7 +49,7 @@ impl Project {
                 egui::ScrollArea::vertical().max_height(360.0).show(ui, |ui| {
                     for l in &w.links {
                         let line = l.line.map(|n| format!("  :{n}")).unwrap_or_default();
-                        let text = format!("{} → {}{line}", g.name(l.from), g.name(l.to));
+                        let text = format!("{} -> {}{line}", g.name(l.from), g.name(l.to));
                         if ui.add(egui::Button::new(text).frame(false)).on_hover_cursor(egui::CursorIcon::PointingHand).clicked() {
                             open_at = Some(*l);
                         }

@@ -114,11 +114,11 @@ impl Scene {
     pub fn edge_at(&self, p: [f32; 2]) -> Option<usize> {
         let mut best: Option<(u32, usize)> = None;
         for (i, e) in self.edges.iter().enumerate() {
-            let hit = e.points.windows(2).any(|w| {
+            let near = e.points.windows(2).any(|w| {
                 let (c, _) = nearest_on_segment(w[0], w[1], p);
-                (c[0] - p[0]).hypot(c[1] - p[1]) <= EDGE_HIT_PX && !self.boxes.iter().any(|b| b.depth >= e.depth && b.rect.contains(c))
+                (c[0] - p[0]).hypot(c[1] - p[1]) <= EDGE_HIT_PX
             });
-            if hit && best.is_none_or(|(depth, _)| e.depth >= depth) {
+            if near && !self.boxes.iter().any(|b| b.depth >= e.depth && b.rect.contains(p)) && best.is_none_or(|(depth, _)| e.depth >= depth) {
                 best = Some((e.depth, i));
             }
         }

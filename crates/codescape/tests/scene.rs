@@ -596,3 +596,20 @@ fn edge_at_finds_the_arrow_at_its_midpoint_but_not_beside_its_head() {
     assert_eq!(s.edge_at(inside), None);
     assert_eq!(s.edge_at([-500.0, -500.0]), None);
 }
+
+#[test]
+fn edge_at_ignores_a_click_just_inside_a_box_beside_a_parallel_arrow() {
+    let fx = fixture();
+    let g = fx.file.graph();
+    let mut cache = LayoutCache::new(Vec::new(), LayoutOptions::default());
+    let cam = fit_all(g, &mut cache);
+    let mut s = scene(g, &mut cache, &cam);
+    let mut edge = s.edges[0].clone();
+    let b = s.boxes.iter().find(|b| b.depth == edge.depth).expect("a child box").rect;
+    let (x, y) = (b.x, b.y + b.h / 2.0);
+    edge.points = vec![[x - 3.0, y - 20.0], [x - 3.0, y + 20.0]];
+    s.edges = vec![edge];
+    assert_eq!(s.edge_at([x - 3.0, y]), Some(0));
+    assert!(s.box_at([x + 2.0, y]).is_some());
+    assert_eq!(s.edge_at([x + 2.0, y]), None);
+}
