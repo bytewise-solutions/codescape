@@ -728,3 +728,143 @@ fn integration_tests_resolve_calls_into_their_crate_dependencies() {
     let targets: Vec<&str> = b.edges().iter().filter(|e| e.kind == EdgeKind::Calls && b.name(e.from) == "builds").map(|e| b.name(e.to)).collect();
     assert!(targets.contains(&"add_node") && targets.contains(&"root"), "{targets:?} {stats:?}");
 }
+
+fn project(files: &[(&str, &str)]) -> (GraphBuilder, ProjectFacts) {
+    let tmp = tempfile::tempdir().unwrap();
+    let r = tmp.path();
+    write(r, "Cargo.toml", "[package]\nname = \"u\"\n");
+    for (name, src) in files {
+        write(r, &format!("src/{name}"), src);
+    }
+    let d = discover(r, &default_excludes()).unwrap();
+    let mut b = GraphBuilder::new("u");
+    let module_nodes: Vec<NodeId> = d.modules.iter().map(|m| b.add_node(b.root(), NodeKind::Module, SubKind::None, &m.name, m.lang)).collect();
+    let mut facts = ProjectFacts::default();
+    extract_rust(&d, &module_nodes, &default_excludes(), &mut b, &mut facts);
+    (b, facts)
+}
+
+fn refs_from(b: &GraphBuilder, from: NodeId) -> Vec<(NodeId, u32, u32, u32)> {
+    b.refs().iter().filter(|r| r.from == from).map(|r| (r.to, r.line, r.col as u32, r.len as u32)).collect()
+}
+
+fn span(src: &str, line_text: &str, name: &str) -> (u32, u32, u32) {
+    let (i, l) = src.lines().enumerate().find(|(_, l)| l.contains(line_text)).unwrap_or_else(|| panic!("no line with {line_text}"));
+    let start = l.find(line_text).unwrap() + line_text.find(name).unwrap();
+    (i as u32 + 1, start as u32, name.len() as u32)
+}
+
+const REF_LIB: &str = "mod m;
+use m::{Other, Thing, Tr};
+
+pub struct Holder {
+    thing: Thing,
+    items: Vec<Thing>,
+}
+
+impl Tr for Holder {}
+
+impl Holder {
+    pub fn go(&self, t: &Thing) -> Option<Other> {
+        let o: Other = make();
+        self.thing.run();
+        m::free();
+        let z = Thing::new();
+        let w = Thing { v: 1 };
+        None
+    }
+}
+
+pub fn make() -> Other {
+    Other
+}
+";
+
+const REF_M: &str = "pub struct Thing {
+    pub v: u32,
+}
+pub struct Other;
+pub trait Tr {}
+pub fn free() {}
+impl Thing {
+    pub fn new() -> Thing {
+        Thing { v: 0 }
+    }
+    pub fn run(&self) {}
+}
+";
+
+#[test]
+fn call_and_type_use_positions_are_recorded() {
+    let (b, facts) = project(&[("lib.rs", REF_LIB), ("m.rs", REF_M)]);
+    let n = |p: &[&str]| at(&b, p);
+    let (thing, other, tr) = (n(&["u", "m", "Thing"]), n(&["u", "m", "Other"]), n(&["u", "m", "Tr"]));
+    let go = n(&["u", "(lib)", "Holder", "go"]);
+    let refs = refs_from(&b, go);
+    let sp = |line: &str, name: &str| span(REF_LIB, line, name);
+    let want = |to: NodeId, (l, c, n): (u32, u32, u32)| (to, l, c, n);
+    for (to, line, name) in [
+        (thing, "t: &Thing", "Thing"),
+        (other, "Option<Other>", "Other"),
+        (other, "let o: Other", "Other"),
+        (n(&["u", "(lib)", "make"]), "= make()", "make"),
+        (n(&["u", "m", "Thing", "run"]), "self.thing.run()", "run"),
+        (n(&["u", "m", "free"]), "m::free()", "free"),
+        (n(&["u", "m", "Thing", "new"]), "Thing::new()", "new"),
+        (thing, "Thing { v: 1 }", "Thing"),
+    ] {
+        let w = want(to, sp(line, name));
+        assert!(refs.contains(&w), "{w:?} in {refs:?}");
+    }
+    let holder = n(&["u", "(lib)", "Holder"]);
+    let hrefs = refs_from(&b, holder);
+    let first = want(thing, sp("thing: Thing", "Thing"));
+    let second = want(thing, sp("Vec<Thing>", "Thing"));
+    let tr_ref = want(tr, sp("impl Tr for", "Tr"));
+    let holder_ref = want(holder, sp("for Holder", "Holder"));
+    for w in [first, second, tr_ref, holder_ref] {
+        assert!(hrefs.contains(&w), "{w:?} in {hrefs:?}");
+    }
+    let f = facts.files.iter().find(|f| f.rel_path == "src/lib.rs").unwrap();
+    let (l, c, len) = sp("t: &Thing", "Thing");
+    assert!(f.type_uses.iter().any(|u| u.name == "Thing" && u.line == l && u.col == c && u.len == len));
+    let (l, c, len) = sp("self.thing.run()", "run");
+    assert!(f.calls.iter().any(|x| x.method == "run" && x.line == l && x.col == c && x.len == len));
+}
+
+#[test]
+fn shadowed_guessed_generic_and_macro_names_get_no_ref() {
+    let lib = "mod m;
+use m::Thing;
+
+pub fn g<Thing>(x: Thing) {}
+pub fn k<T>(x: T, y: Vec<T>) -> T {
+    T::new()
+}
+pub fn h() {
+    struct Thing;
+    let a: Thing = Thing;
+    Thing::new();
+}
+pub fn guess(x: Unknown) {
+    x.run();
+    other.run();
+}
+pub fn mac() {
+    println!(\"{}\", Thing::new());
+}
+pub fn shadow(run: u32) {
+    let free = 1;
+    free();
+}
+pub fn ok(x: Thing) {}
+";
+    let (b, _) = project(&[("lib.rs", lib), ("m.rs", REF_M)]);
+    let thing = at(&b, &["u", "m", "Thing"]);
+    for f in ["g", "k", "h", "guess", "mac", "shadow"] {
+        let refs = refs_from(&b, at(&b, &["u", "(lib)", f]));
+        assert!(refs.is_empty(), "{f}: {refs:?}");
+    }
+    let (l, c, n) = span(lib, "pub fn ok(x: Thing)", "Thing");
+    assert!(refs_from(&b, at(&b, &["u", "(lib)", "ok"])).contains(&(thing, l, c, n)), "control");
+}

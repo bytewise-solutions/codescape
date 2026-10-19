@@ -39,6 +39,14 @@ pub struct RsUse {
 }
 
 #[derive(Clone, Debug, PartialEq)]
+pub struct RsTypeUse {
+    pub path: Vec<String>,
+    pub line: u32,
+    pub col: u32,
+    pub len: u32,
+}
+
+#[derive(Clone, Debug, PartialEq)]
 pub struct RsType {
     pub name: String,
     pub kind: SubKind,
@@ -47,6 +55,7 @@ pub struct RsType {
     pub field_decls: Vec<FieldDecl>,
     pub attrs: Vec<Annotation>,
     pub methods: Vec<RsFn>,
+    pub type_uses: Vec<RsTypeUse>,
     pub start_line: u32,
     pub end_line: u32,
 }
@@ -58,6 +67,7 @@ pub struct RsImpl {
     pub attrs: Vec<Annotation>,
     pub generics: Vec<(String, String)>,
     pub fns: Vec<RsFn>,
+    pub type_uses: Vec<RsTypeUse>,
     pub start_line: u32,
     pub end_line: u32,
 }
@@ -74,6 +84,8 @@ pub struct RsFn {
     pub generics: Vec<(String, String)>,
     pub locals: Vec<(String, Expr, (u32, u32))>,
     pub calls: Vec<RsCall>,
+    pub type_uses: Vec<RsTypeUse>,
+    pub local_items: Vec<String>,
     pub start_line: u32,
     pub end_line: u32,
 }
@@ -102,6 +114,8 @@ pub struct RsCall {
     pub ident_args: Vec<Option<String>>,
     pub assigned_to: Option<String>,
     pub line: u32,
+    pub col: u32,
+    pub len: u32,
 }
 
 const WRAPPERS: &[&str] = &["Box", "Rc", "Arc", "Option"];
@@ -161,6 +175,15 @@ fn line(n: Node) -> u32 {
 
 fn end_line(n: Node) -> u32 {
     n.end_position().row as u32 + 1
+}
+
+fn name_token(n: Node) -> Node {
+    match n.kind() {
+        "scoped_identifier" | "scoped_type_identifier" => n.child_by_field_name("name").unwrap_or(n),
+        "generic_type" | "generic_type_with_turbofish" => n.child_by_field_name("type").map_or(n, name_token),
+        "generic_function" => n.child_by_field_name("function").map_or(n, name_token),
+        _ => n,
+    }
 }
 
 fn named_children(n: Node) -> Vec<Node> {
@@ -381,9 +404,13 @@ impl<'s> Ctx<'s> {
             field_decls: Vec::new(),
             attrs,
             methods: Vec::new(),
+            type_uses: Vec::new(),
             start_line: line(n),
             end_line: end_line(n),
         };
+        let own = self.generics(n);
+        let hidden: Vec<String> = own.iter().map(|(g, _)| g.clone()).collect();
+        self.bound_uses(n, &hidden, &mut t.type_uses);
         let body = n.child_by_field_name("body");
         match (n.kind(), body) {
             ("trait_item", Some(list)) => {
@@ -392,7 +419,7 @@ impl<'s> Ctx<'s> {
                     match item.kind() {
                         "attribute_item" => attrs.extend(self.attribute(item)),
                         "function_item" | "function_signature_item" => {
-                            let mut f = self.func(item, std::mem::take(&mut attrs), &[]);
+                            let mut f = self.func(item, std::mem::take(&mut attrs), &own);
                             f.visibility = t.visibility;
                             t.methods.push(f);
                         }
@@ -403,6 +430,7 @@ impl<'s> Ctx<'s> {
             (_, Some(list)) if list.kind() == "field_declaration_list" => {
                 for fd in named_children(list).into_iter().filter(|f| f.kind() == "field_declaration") {
                     if let (Some(fname), Some(fty)) = (fd.child_by_field_name("name"), fd.child_by_field_name("type")) {
+                        self.type_uses(fty, &hidden, &mut t.type_uses);
                         t.fields.push((self.text(fname).to_string(), self.type_name(fty, WRAPPERS)));
                         t.field_decls.push(FieldDecl {
                             name: self.text(fname).to_string(),
@@ -425,6 +453,7 @@ impl<'s> Ctx<'s> {
                     if child.kind() == "attribute_item" {
                         continue;
                     }
+                    self.type_uses(child, &hidden, &mut t.type_uses);
                     t.fields.push((i.to_string(), self.type_name(child, WRAPPERS)));
                     t.field_decls.push(FieldDecl { name: i.to_string(), ty: self.text(child).to_string(), visibility: vis, line: line(child) });
                     vis = Visibility::Private;
@@ -440,6 +469,14 @@ impl<'s> Ctx<'s> {
         let self_ty = n.child_by_field_name("type").map(|t| self.type_name(t, &[])).unwrap_or_default();
         let trait_ = n.child_by_field_name("trait").map(|t| self.type_name(t, &[]));
         let generics = self.generics(n);
+        let hidden: Vec<String> = generics.iter().map(|(g, _)| g.clone()).collect();
+        let mut type_uses = Vec::new();
+        self.bound_uses(n, &hidden, &mut type_uses);
+        for header in ["trait", "type"] {
+            if let Some(t) = n.child_by_field_name(header) {
+                self.type_uses(t, &hidden, &mut type_uses);
+            }
+        }
         let mut fns = Vec::new();
         if let Some(list) = n.child_by_field_name("body") {
             let mut attrs = Vec::new();
@@ -457,7 +494,7 @@ impl<'s> Ctx<'s> {
                 }
             }
         }
-        RsImpl { self_ty, trait_, attrs, generics, fns, start_line: line(n), end_line: end_line(n) }
+        RsImpl { self_ty, trait_, attrs, generics, fns, type_uses, start_line: line(n), end_line: end_line(n) }
     }
 
     fn visibility(&self, n: Node) -> Visibility {
@@ -482,11 +519,19 @@ impl<'s> Ctx<'s> {
             end_line: end_line(n),
             ..Default::default()
         };
+        let hidden: Vec<String> = f.generics.iter().map(|(g, _)| g.clone()).collect();
+        self.bound_uses(n, &hidden, &mut f.type_uses);
+        if let Some(ret) = n.child_by_field_name("return_type") {
+            self.type_uses(ret, &hidden, &mut f.type_uses);
+        }
         if let Some(params) = n.child_by_field_name("parameters") {
             for p in named_children(params) {
                 match p.kind() {
                     "self_parameter" => f.has_self = true,
                     "parameter" => {
+                        if let Some(t) = p.child_by_field_name("type") {
+                            self.type_uses(t, &hidden, &mut f.type_uses);
+                        }
                         let pat = p.child_by_field_name("pattern");
                         let ty = p.child_by_field_name("type").map(|t| self.type_name(t, WRAPPERS)).unwrap_or_default();
                         match pat.map(|x| (x.kind(), x)) {
@@ -505,13 +550,13 @@ impl<'s> Ctx<'s> {
             }
         }
         if let Some(body) = n.child_by_field_name("body") {
-            self.body(body, &mut f);
+            self.body(body, &mut f, &hidden);
         }
         f.calls.sort_by_key(|c| c.line);
         f
     }
 
-    fn body(&self, body: Node, f: &mut RsFn) {
+    fn body(&self, body: Node, f: &mut RsFn, hidden: &[String]) {
         let mut stack = vec![body];
         while let Some(n) = stack.pop() {
             match n.kind() {
@@ -521,7 +566,31 @@ impl<'s> Ctx<'s> {
                     }
                     continue;
                 }
-                "macro_invocation" | "impl_item" | "trait_item" | "mod_item" => continue,
+                "struct_item" | "enum_item" | "union_item" | "type_item" | "trait_item" => {
+                    if let Some(name) = n.child_by_field_name("name") {
+                        f.local_items.push(self.text(name).to_string());
+                    }
+                    continue;
+                }
+                "use_declaration" => {
+                    let mut uses = Vec::new();
+                    if let Some(arg) = n.child_by_field_name("argument") {
+                        self.use_tree(arg, &[], &mut uses);
+                    }
+                    f.local_items.extend(uses.into_iter().filter_map(|u| u.alias.or(u.path.last().cloned())));
+                    continue;
+                }
+                "macro_invocation" | "impl_item" | "mod_item" => continue,
+                "generic_function" => {
+                    if let Some(args) = n.child_by_field_name("type_arguments") {
+                        self.type_uses(args, hidden, &mut f.type_uses);
+                    }
+                }
+                "type_cast_expression" => {
+                    if let Some(t) = n.child_by_field_name("type") {
+                        self.type_uses(t, hidden, &mut f.type_uses);
+                    }
+                }
                 "call_expression" => {
                     if let Some(call) = self.call(n) {
                         f.calls.push(call);
@@ -534,17 +603,22 @@ impl<'s> Ctx<'s> {
                     }
                 }
                 "struct_expression" => {
-                    if let Some(path) = n.child_by_field_name("name").and_then(|t| self.path_segments(t)) {
+                    if let Some((name, path)) = n.child_by_field_name("name").and_then(|t| Some((t, self.path_segments(t)?))) {
                         f.calls.push(RsCall {
                             callee: Callee::Struct(path),
                             string_args: Vec::new(),
                             ident_args: Vec::new(),
                             assigned_to: None,
                             line: line(n),
+                            col: name_token(name).start_position().column as u32,
+                            len: name_token(name).byte_range().len() as u32,
                         });
                     }
                 }
                 "let_declaration" => {
+                    if let Some(t) = n.child_by_field_name("type") {
+                        self.type_uses(t, hidden, &mut f.type_uses);
+                    }
                     if let Some(name) = n.child_by_field_name("pattern").and_then(|p| self.binding(p)) {
                         let ty = n.child_by_field_name("type").map(|t| Expr::Ty(self.type_name(t, WRAPPERS))).filter(|e| *e != Expr::Ty(String::new()));
                         let expr = ty.or_else(|| n.child_by_field_name("value").map(|v| self.expr(v))).unwrap_or(Expr::Unknown);
@@ -608,6 +682,10 @@ impl<'s> Ctx<'s> {
     fn call(&self, n: Node) -> Option<RsCall> {
         let func = n.child_by_field_name("function")?;
         let func = if func.kind() == "generic_function" { func.child_by_field_name("function")? } else { func };
+        let token = match func.kind() {
+            "field_expression" => func.child_by_field_name("field")?,
+            _ => name_token(func),
+        };
         let callee = match func.kind() {
             "identifier" | "scoped_identifier" => match self.path_segments(func) {
                 Some(p) => Callee::Path(p),
@@ -628,7 +706,48 @@ impl<'s> Ctx<'s> {
                 ident_args.push(matches!(a.kind(), "identifier" | "scoped_identifier").then(|| self.text(a).to_string()));
             }
         }
-        Some(RsCall { callee, string_args, ident_args, assigned_to: self.assigned_to(n), line: line(n) })
+        Some(RsCall {
+            callee,
+            string_args,
+            ident_args,
+            assigned_to: self.assigned_to(n),
+            line: line(token),
+            col: token.start_position().column as u32,
+            len: token.byte_range().len() as u32,
+        })
+    }
+
+    fn type_uses(&self, n: Node, hidden: &[String], out: &mut Vec<RsTypeUse>) {
+        match n.kind() {
+            "type_identifier" | "scoped_type_identifier" => {
+                if let Some(path) = self.path_segments(n)
+                    && !path.first().is_some_and(|h| h == "Self" || hidden.contains(h))
+                {
+                    let t = name_token(n);
+                    out.push(RsTypeUse { path, line: line(t), col: t.start_position().column as u32, len: t.byte_range().len() as u32 });
+                }
+            }
+            "type_binding" => {
+                if let Some(t) = n.child_by_field_name("type") {
+                    self.type_uses(t, hidden, out);
+                }
+            }
+            "macro_invocation" | "lifetime" => {}
+            _ => {
+                for c in named_children(n) {
+                    self.type_uses(c, hidden, out);
+                }
+            }
+        }
+    }
+
+    fn bound_uses(&self, item: Node, hidden: &[String], out: &mut Vec<RsTypeUse>) {
+        let Some(tp) = item.child_by_field_name("type_parameters") else { return };
+        for p in named_children(tp).into_iter().filter(|p| p.kind() == "type_parameter") {
+            if let Some(b) = p.child_by_field_name("bounds") {
+                self.type_uses(b, hidden, out);
+            }
+        }
     }
 
     fn assigned_to(&self, n: Node) -> Option<String> {

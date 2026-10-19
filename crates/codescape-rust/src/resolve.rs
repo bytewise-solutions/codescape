@@ -1,6 +1,6 @@
-use crate::parse::{Callee, Expr, RsCall, RsFile, RsFn, has_cfg_test, is_test_attr, parse_rust};
+use crate::parse::{Callee, Expr, RsCall, RsFile, RsFn, RsTypeUse, has_cfg_test, is_test_attr, parse_rust};
 use codescape_build::{Discovery, cargo_crate, rel_path, walk_files_under};
-use codescape_facts::{CallFacts, ExtractStats, FileFacts, FnFacts, Import, ProjectFacts, TypeFacts};
+use codescape_facts::{CallFacts, ExtractStats, FileFacts, FnFacts, Import, ProjectFacts, TypeFacts, TypeUse};
 use codescape_format::*;
 use globset::GlobSet;
 use rayon::prelude::*;
@@ -1151,7 +1151,7 @@ impl<'a> Resolver<'a> {
             return self.expr_type(cx, expr, i, *from, depth + 1);
         }
         let (_, ty) = cx.f.params.iter().find(|(n, _)| n == name)?;
-        self.resolve_ty(cx.pkg, ty, cx.self_ty, &cx.f.generics)
+        self.resolve_local_ty(cx, ty)
     }
 
     fn expr_type(&self, cx: &FnCtx, e: &Expr, upto: usize, at: u32, depth: u32) -> Option<TypeRef> {
@@ -1159,7 +1159,7 @@ impl<'a> Resolver<'a> {
             return None;
         }
         match e {
-            Expr::Ty(s) => self.resolve_ty(cx.pkg, s, cx.self_ty, &cx.f.generics),
+            Expr::Ty(s) => self.resolve_local_ty(cx, s),
             Expr::Var(head, fields) => {
                 let mut cur = self.var_type(cx, head, upto, at, depth)?;
                 for f in fields {
@@ -1206,6 +1206,9 @@ impl<'a> Resolver<'a> {
     }
 
     fn resolve_callee(&self, cx: &FnCtx, segs: &[String]) -> Option<Item> {
+        if segs.first().is_some_and(|h| Self::shadowed(cx, h)) {
+            return None;
+        }
         if segs.first().is_some_and(|s| s == "Self") {
             let mut item = Item::Type(cx.self_ty?);
             for seg in &segs[1..] {
@@ -1216,6 +1219,32 @@ impl<'a> Resolver<'a> {
         self.resolve_path(cx.pkg, segs, 0)
     }
 
+    fn shadowed(cx: &FnCtx, head: &str) -> bool {
+        cx.f.local_items.iter().any(|i| i == head) || cx.f.generics.iter().any(|(g, _)| g == head)
+    }
+
+    fn resolve_local_ty(&self, cx: &FnCtx, s: &str) -> Option<TypeRef> {
+        let head = s.trim_start_matches('[').split("::").next().unwrap_or("");
+        if cx.f.local_items.iter().any(|i| i == head) {
+            return None;
+        }
+        self.resolve_ty(cx.pkg, s, cx.self_ty, &cx.f.generics)
+    }
+
+    fn record_uses(&mut self, pkg: usize, hidden: &[String], from: Option<NodeId>, uses: &[RsTypeUse], out: &mut Vec<TypeUse>) {
+        let Some(from) = from else { return };
+        for u in uses {
+            let name = u.path.join("::");
+            out.push(TypeUse { owner: from, name, line: u.line, col: u.col, len: u.len });
+            if hidden.contains(&u.path[0]) {
+                continue;
+            }
+            if let Some(Item::Type(t)) = self.resolve_path(pkg, &u.path, 0) {
+                self.b.add_ref(from, self.types[t].node, u.line, u.col, u.len);
+            }
+        }
+    }
+
     fn call_edge(&mut self, cx: &FnCtx, target: NodeId, confidence: Confidence, line: u32) {
         self.b.add_edge_at(cx.caller, target, EdgeKind::Calls, cx.scope, confidence, EdgeFlags::NONE, line);
     }
@@ -1223,6 +1252,7 @@ impl<'a> Resolver<'a> {
     fn resolved_fn(&mut self, cx: &FnCtx, fi: usize, cf: &mut CallFacts) {
         let node = self.fns[fi].node;
         self.call_edge(cx, node, Confidence::Resolved, cf.line);
+        self.b.add_ref(cx.caller, node, cf.line, cf.col, cf.len);
         cf.target = Some(node);
         self.stats.resolved += 1;
         let Some(owner) = self.fns[fi].owner else { return };
@@ -1247,6 +1277,9 @@ impl<'a> Resolver<'a> {
                 cf.instantiates = Some(self.types[t].fqn.clone());
                 let to = self.types[t].node;
                 self.b.add_edge_at(cx.caller, to, EdgeKind::Instantiates, cx.scope, Confidence::Resolved, EdgeFlags::NONE, cf.line);
+                if matches!(item, Some(Item::Type(_))) {
+                    self.b.add_ref(cx.caller, to, cf.line, cf.col, cf.len);
+                }
             }
             Some(Item::Ext(s)) => cf.instantiates = Some(s),
             _ => {}
@@ -1275,6 +1308,8 @@ impl<'a> Resolver<'a> {
             ident_args: call.ident_args.clone(),
             assigned_to: call.assigned_to.clone(),
             line: call.line,
+            col: call.col,
+            len: call.len,
             ..Default::default()
         };
         match &call.callee {
@@ -1396,9 +1431,22 @@ impl<'a> Resolver<'a> {
                 calls: Vec::new(),
                 type_uses: Vec::new(),
             };
-            for &(pi, body, i) in &self.type_occs[fi] {
+            let bodies: Vec<(usize, usize)> = file_pkgs.iter().map(|&p| (p, self.pkgs[p].body)).collect();
+            for (pi, body) in bodies {
+                for imp in &f.rf.bodies[body].impls {
+                    let generic = imp.generics.iter().any(|(g, _)| *g == imp.self_ty);
+                    let owner = match self.resolve_path(pi, &segments(&imp.self_ty), 0) {
+                        Some(Item::Type(t)) if !generic => Some(self.types[t].node),
+                        _ => None,
+                    };
+                    self.record_uses(pi, &[], owner, &imp.type_uses, &mut ff.type_uses);
+                }
+            }
+            for (pi, body, i) in self.type_occs[fi].clone() {
                 let t = &f.rf.bodies[body].types[i];
                 let ti = self.pkgs[pi].types[&t.name];
+                let node = Some(self.types[ti].node);
+                self.record_uses(pi, &[], node, &t.type_uses, &mut ff.type_uses);
                 ff.types.push(TypeFacts {
                     node: self.types[ti].node,
                     fqn: self.types[ti].fqn.clone(),
@@ -1422,6 +1470,7 @@ impl<'a> Resolver<'a> {
                     is_main,
                     overrides_external: occ.overrides_external.clone(),
                 });
+                self.record_uses(occ.pkg, &func.local_items, Some(node), &func.type_uses, &mut ff.type_uses);
                 let test = is_test || self.b.flags(node).contains(NodeFlags::TEST);
                 let mut cx = FnCtx {
                     pkg: occ.pkg,
