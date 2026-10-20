@@ -139,8 +139,9 @@ enough to read.
   list stays as it is. The current change (the selected one, else the last one stepped to) is highlighted, and the
   list scrolls to it when you select it elsewhere (on the map, with `N` / `P`, by Ctrl+click in the code). Each change says why it may deserve a look: `complexity 8 to 14`, `used by 12` (many callers),
   `signature` (a public block's first line changed), `made public`, `new upward dependency on <package>` (it adds a
-  dependency against the layering), `unused` (a new block nothing uses) and `untested` (no test reaches it). **Group
-  by package** groups the list under package headers instead; click a package to fold it, or fold and unfold them all with `-` `+` next to the
+  dependency against the layering), `unused` (a new block nothing uses) and `untested` (no test reaches it). The
+  **Order** menu sorts them **Riskiest first** (each tag adds to a score, highest first) or **By package**, under
+  package headers in name order; click a package to fold it, or fold and unfold them all with `-` `+` next to the
   progress. While reviewing, the left panel shows only the review: Insights, Entry points and Modules come back when
   the review ends.
   Zoom into a changed file to see its added lines in green and red marks where lines were removed; hover a mark to

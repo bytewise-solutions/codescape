@@ -1911,9 +1911,7 @@ impl Project {
             ui.horizontal(|ui| {
                 ui.label(egui::RichText::new(format!("{} / {} reviewed", all.reviewed, all.total())).small().color(style::ACCENT))
                     .on_hover_text("N / P: next / previous change · R: mark the selection reviewed");
-                ui.add_enabled_ui(rv.by_package, |ui| fold_next = fold_buttons(ui))
-                    .response
-                    .on_disabled_hover_text("Turn on Group by package to fold the packages");
+                ui.add_enabled_ui(rv.by_package, |ui| fold_next = fold_buttons(ui)).response.on_disabled_hover_text("Order by package to fold the packages");
             });
             progress_bar(ui, all, 6.0);
             if let Some(sel) = rv.scope.node {
@@ -1968,8 +1966,14 @@ impl Project {
             let (mut hide, mut grouped) = (rv.hide_reviewed, rv.by_package);
             ui.horizontal(|ui| {
                 ui.checkbox(&mut hide, egui::RichText::new("Hide reviewed").small());
-                ui.checkbox(&mut grouped, egui::RichText::new("Group by package").small())
-                    .on_hover_text("Off: riskiest first. On: grouped under package headers, in name order");
+                let order = |by_package: bool| if by_package { "By package" } else { "Riskiest first" };
+                egui::ComboBox::from_id_salt("review-order").selected_text(egui::RichText::new(order(grouped)).small()).show_ui(ui, |ui| {
+                    ui.selectable_value(&mut grouped, false, order(false)).on_hover_text(
+                        "Highest risk score first: complexity that rose past the hint, many callers, a changed public signature, a new \
+                         upward dependency, new code nothing calls, code made public, no test",
+                    );
+                    ui.selectable_value(&mut grouped, true, order(true)).on_hover_text("Grouped under package headers, in name order");
+                });
             });
             if (hide, grouped) != (rv.hide_reviewed, rv.by_package) {
                 review_switches = Some((hide, grouped));
