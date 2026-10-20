@@ -34,13 +34,9 @@ if [ -n "$dry_run" ]; then
   exit 0
 fi
 
-cargo fmt --all --check
-cargo clippy --workspace --all-targets --release --locked -- -D warnings
-cargo test --workspace --release --locked
-
+make check
 sed -i "0,/^version = \"$current\"/s//version = \"$next\"/" Cargo.toml
 cargo update --workspace --offline -q
 git commit -q -am "$message"
 git tag -a "$tag" -m "Release $tag"
-git push --atomic origin master "$tag"
-echo "pushed $tag; the Release workflow builds and publishes it"
+echo "committed and tagged $tag locally; look it over, then run make publish"
