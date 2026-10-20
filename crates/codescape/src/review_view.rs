@@ -200,6 +200,10 @@ pub struct ReviewItem {
     pub risks: Vec<Risk>,
 }
 
+pub fn shown_items(g: &ArchivedGraph, items: &[ReviewItem], opts: &codescape_layout::LayoutOptions) -> Vec<ReviewItem> {
+    items.iter().filter(|i| i.node.or(i.parent).is_none_or(|n| !opts.hides_beyond_details(g, n))).cloned().collect()
+}
+
 pub fn within(g: &ArchivedGraph, items: &[ReviewItem], selection: NodeId) -> Vec<usize> {
     (0..items.len()).filter(|&i| items[i].node.or(items[i].parent).is_some_and(|n| g.is_ancestor(selection, n))).collect()
 }

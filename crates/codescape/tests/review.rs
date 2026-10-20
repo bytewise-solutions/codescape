@@ -254,3 +254,18 @@ fn a_box_counts_the_changes_inside_it_left_to_review() {
     assert_eq!(counts[&named("Cart")].to_review(), 1);
     assert_eq!(counts[&named("Cart")].summary(), "0 new · 0 changed · 1 removed · 1 reviewed");
 }
+
+#[test]
+fn test_and_mock_changes_follow_the_tests_switch() {
+    const TESTS: &str =
+        "package cart\n\nimport \"testing\"\n\ntype MockStore struct{}\n\nfunc (m *MockStore) Get() int {\n\treturn 1\n}\n\nfunc TestAdd(t *testing.T) {}\n";
+    let b = side(&[("cart/cart.go", BASE)]);
+    let t = side(&[("cart/cart.go", BASE), ("cart/cart_test.go", TESTS)]);
+    let tg = t.file.graph();
+    let all = items(tg, &compare(b.file.graph(), &b.dir, tg, &t.dir), &analyse(tg, &t.dir));
+    assert!(!all.is_empty());
+    let hidden = codescape_layout::LayoutOptions::default();
+    assert!(shown_items(tg, &all, &hidden).is_empty(), "tests are off: {:?}", shown_items(tg, &all, &hidden).iter().map(|i| &i.label).collect::<Vec<_>>());
+    let shown = codescape_layout::LayoutOptions { show_tests: true, ..Default::default() };
+    assert_eq!(shown_items(tg, &all, &shown).len(), all.len());
+}

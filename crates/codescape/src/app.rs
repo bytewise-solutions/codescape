@@ -17,7 +17,7 @@ use crate::reading::{fill_view, leave_zoom, level_node, open_font, zoom_text};
 use crate::refs::{FileRefs, followable};
 use crate::review_view::{
     BoxCounts, CommitStep, ItemKind, Limits, MarkState, ReviewItem, ReviewMarks, ReviewProgress, ReviewScope, Risk, box_counts, by_risk, current, flag_upward,
-    items_with as review_items, mark_label, scroll_to_row, step as review_step, within,
+    items_with as review_items, mark_label, scroll_to_row, shown_items, step as review_step, within,
 };
 use crate::search::{self, SearchIndex, member_at_line};
 use crate::settings_window::{self, SettingsForm};
@@ -401,6 +401,7 @@ fn short_rev(rev: &str) -> String {
 struct ReviewState {
     label: String,
     review: Review,
+    all: Vec<ReviewItem>,
     items: Vec<ReviewItem>,
     cursor: Option<usize>,
     new_arrows: std::collections::HashSet<(NodeId, NodeId)>,
@@ -423,6 +424,15 @@ impl ReviewState {
             Some(s) => within(g, &self.items, s).into_iter().filter(|&i| shown(i)).collect(),
             None => (0..self.items.len()).filter(|&i| shown(i)).collect(),
         }
+    }
+
+    fn refilter(&mut self, g: &ArchivedGraph, opts: &codescape_layout::LayoutOptions) {
+        let current = self.cursor.map(|c| self.items[c].key.clone());
+        self.items = shown_items(g, &self.all, opts);
+        self.cursor = None;
+        self.reorder();
+        self.cursor = current.and_then(|k| self.items.iter().position(|i| i.key == k));
+        self.refresh(g);
     }
 
     fn reviewed(&self) -> usize {
@@ -945,6 +955,9 @@ impl Project {
         let mut opts = map_options(self.file.graph(), self.settings.settings(), &self.visual);
         opts.details_in = self.details_in.clone();
         self.cache.set_options(opts);
+        if let Some(rv) = self.review.as_mut() {
+            rv.refilter(self.file.graph(), self.cache.options());
+        }
         self.keep_reading();
         self.calls = None;
         self.rebuild_sequence();
@@ -1236,7 +1249,8 @@ impl Project {
                 let mut rv = ReviewState {
                     label: done.label,
                     review: done.review,
-                    items,
+                    items: Vec::new(),
+                    all: items,
                     cursor: None,
                     new_arrows,
                     marks,
@@ -1250,8 +1264,7 @@ impl Project {
                     collapsed: Default::default(),
                     scope: ReviewScope::default(),
                 };
-                rv.reorder();
-                rv.refresh(g);
+                rv.refilter(g, self.cache.options());
                 self.analysis = Some(Arc::new(done.analysis));
                 self.review = Some(rv);
             }
@@ -1831,14 +1844,15 @@ impl Project {
                     ui.separator();
                 }
                 if let Some(rv) = &self.review {
-                    let t = rv.review.totals();
-                    let removed = if t.removed > 0 { format!(" · {} removed", t.removed) } else { String::new() };
+                    let count = |k: ItemKind| rv.items.iter().filter(|i| i.kind == k).count();
+                    let (new, changed, gone) = (count(ItemKind::New), count(ItemKind::Changed), count(ItemKind::Removed));
+                    let removed = if gone > 0 { format!(" · {gone} removed") } else { String::new() };
                     ui.label(
                         egui::RichText::new(format!(
                             "{} · {} new · {} changed{removed} · {} / {} reviewed",
                             rv.label,
-                            t.new,
-                            t.changed,
+                            new,
+                            changed,
                             rv.reviewed(),
                             rv.items.len()
                         ))
