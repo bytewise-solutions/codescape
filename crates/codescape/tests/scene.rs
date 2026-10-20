@@ -511,7 +511,7 @@ fn a_file_opens_at_the_same_zoom_whatever_the_view_width() {
     let r = world_rect(g, &mut cache, api).unwrap();
     let narrow = VIEW;
     let wide = Rect::new(0.0, 0.0, 2400.0, 800.0);
-    for (px, opens) in [(450.0, true), (300.0, false)] {
+    for (px, opens) in [(1.2 * codescape::canvas::FILE_OPEN_PX as f64, true), (0.8 * codescape::canvas::FILE_OPEN_PX as f64, false)] {
         let cam = Camera { center: r.center(), zoom: px / r.w as f64 };
         for view in [narrow, wide] {
             let s = build_scene_at(g, &mut cache, &cam, view, &VisualRules::default(), None, view.center(), &[]);
@@ -528,7 +528,7 @@ fn a_file_opens_once_its_box_is_wide_enough_whatever_its_text_size() {
     let mut cache = LayoutCache::new(Vec::new(), LayoutOptions::default());
     let api = node(g, &["left", "left.api", "T"]);
     let r = world_rect(g, &mut cache, api).unwrap();
-    for (px, opens) in [(400.0, true), (300.0, false)] {
+    for (px, opens) in [(1.05 * codescape::canvas::FILE_OPEN_PX as f64, true), (0.8 * codescape::canvas::FILE_OPEN_PX as f64, false)] {
         let cam = Camera { center: r.center(), zoom: px / r.w as f64 };
         let s = build_scene_at(g, &mut cache, &cam, VIEW, &VisualRules::default(), None, VIEW.center(), &[]);
         assert_eq!(s.boxes.iter().find(|b| b.node == api).unwrap().source, opens, "{px} px box");
@@ -543,7 +543,7 @@ fn an_open_file_fills_the_view_alone_and_keeps_its_text_size() {
     let mut cache = LayoutCache::new(Vec::new(), LayoutOptions::default());
     let api = node(g, &["left", "left.api", "T"]);
     let r = world_rect(g, &mut cache, api).unwrap();
-    let cam = Camera { center: r.center(), zoom: 400.0 / r.w as f64 };
+    let cam = Camera { center: r.center(), zoom: 1.05 * codescape::canvas::FILE_OPEN_PX as f64 / r.w as f64 };
     let mut s = build_scene_at(g, &mut cache, &cam, VIEW, &VisualRules::default(), None, VIEW.center(), &[]);
     assert!(s.boxes.len() > 1);
     assert_eq!(fill_view(&mut s, None, None, VIEW), Some((api, READING_OPEN_PT)));
@@ -568,7 +568,7 @@ fn while_reading_the_breadcrumb_level_stays_at_the_file_s_package() {
     let mut cache = LayoutCache::new(Vec::new(), LayoutOptions::default());
     let api = node(g, &["left", "left.api", "T"]);
     let r = world_rect(g, &mut cache, api).unwrap();
-    let cam = Camera { center: r.center(), zoom: 400.0 / r.w as f64 };
+    let cam = Camera { center: r.center(), zoom: 1.05 * codescape::canvas::FILE_OPEN_PX as f64 / r.w as f64 };
     let mut s = build_scene_at(g, &mut cache, &cam, VIEW, &VisualRules::default(), None, VIEW.center(), &[]);
     let before = s.deepest_open_at(VIEW.center());
     assert_eq!(before, Some(node(g, &["left", "left.api"])));
@@ -623,16 +623,20 @@ fn with_two_files_open_the_jump_target_fills_the_view_then_the_file_being_read()
     let mut cache = LayoutCache::new(Vec::new(), LayoutOptions::default());
     let (api, imp) = (node(g, &["left", "left.api", "T"]), node(g, &["left", "left.impl", "T"]));
     let (a, b) = (world_rect(g, &mut cache, api).unwrap(), world_rect(g, &mut cache, imp).unwrap());
-    let cam = Camera { center: [(a.center()[0] + b.center()[0]) / 2.0, (a.center()[1] + b.center()[1]) / 2.0], zoom: 420.0 / a.w };
+    let cam = Camera {
+        center: [(a.center()[0] + b.center()[0]) / 2.0, (a.center()[1] + b.center()[1]) / 2.0],
+        zoom: 1.1 * codescape::canvas::FILE_OPEN_PX as f64 / a.w,
+    };
+    let view = Rect::new(0.0, 0.0, 2400.0, 1600.0);
     let both = || {
-        build_scene_at(g, &mut LayoutCache::new(Vec::new(), LayoutOptions::default()), &cam, VIEW, &VisualRules::default(), None, VIEW.center(), &[api, imp])
+        build_scene_at(g, &mut LayoutCache::new(Vec::new(), LayoutOptions::default()), &cam, view, &VisualRules::default(), None, view.center(), &[api, imp])
     };
     let s = both();
     let open: Vec<NodeId> = s.boxes.iter().filter(|b| b.source).map(|b| b.node).collect();
     assert!(open.contains(&api) && open.contains(&imp), "both files open: {open:?}");
     let first = open[0];
     let other = if first == api { imp } else { api };
-    assert_eq!(fill_view(&mut both(), Some((first, 20.0)), Some(other), VIEW), Some((other, READING_OPEN_PT)), "the jump target");
-    assert_eq!(fill_view(&mut both(), Some((other, 20.0)), None, VIEW), Some((other, 20.0)), "the file being read");
-    assert_eq!(fill_view(&mut both(), None, None, VIEW), Some((first, READING_OPEN_PT)));
+    assert_eq!(fill_view(&mut both(), Some((first, 20.0)), Some(other), view), Some((other, READING_OPEN_PT)), "the jump target");
+    assert_eq!(fill_view(&mut both(), Some((other, 20.0)), None, view), Some((other, 20.0)), "the file being read");
+    assert_eq!(fill_view(&mut both(), None, None, view), Some((first, READING_OPEN_PT)));
 }

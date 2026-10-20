@@ -11,7 +11,7 @@ pub const OPEN_THRESHOLD_PX: f32 = 220.0;
 pub const MIN_DRAW_PX: f32 = 3.0;
 pub const MIN_LABEL_PX: f32 = 7.0;
 pub const MIN_CHILD_PX: f32 = 36.0;
-pub const FILE_OPEN_PX: f32 = 380.0;
+pub const FILE_OPEN_PX: f32 = 600.0;
 pub const MIN_ROW_PX: f32 = 7.0;
 
 #[derive(Clone, Debug, PartialEq)]
