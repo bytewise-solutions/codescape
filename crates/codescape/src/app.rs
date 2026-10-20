@@ -1974,7 +1974,8 @@ impl Project {
             if (hide, grouped) != (rv.hide_reviewed, rv.by_package) {
                 review_switches = Some((hide, grouped));
             }
-            let row_h = 36.0;
+            let name_h = (ui.text_style_height(&egui::TextStyle::Body) + 2.0 * ui.spacing().button_padding.y).max(ui.spacing().interact_size.y);
+            let row_h = name_h + ui.text_style_height(&egui::TextStyle::Small) + 6.0;
             let list_h = ui.available_height() - 24.0;
             let pitch = row_h + ui.spacing().item_spacing.y;
             let (offset, view_h) = (rv.list_view.0, if rv.list_view.1 > 0.0 { rv.list_view.1 } else { list_h });
