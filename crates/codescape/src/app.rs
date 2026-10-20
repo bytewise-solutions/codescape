@@ -1604,6 +1604,7 @@ impl Project {
         if self.show_left {
             egui::Panel::left("entries").resizable(true).default_size(270.0 * self.prefs.panel_text).min_size(230.0).show(ui, |ui| {
                 ui.style_mut().text_styles = style::scaled_text_styles(self.prefs.panel_text);
+                ui.style_mut().spacing.scroll = egui::style::ScrollStyle::solid();
                 self.entries_panel(ui);
                 if panel_toggle(ui, Align2::RIGHT_BOTTOM, "<", &format!("Hide this panel ({})", key_text(&self.keys, KeyAction::LeftPanel))) {
                     self.show_left = false;
@@ -1619,6 +1620,7 @@ impl Project {
         if self.show_right {
             egui::Panel::right("inspector").resizable(true).default_size(290.0 * self.prefs.panel_text).show(ui, |ui| {
                 ui.style_mut().text_styles = style::scaled_text_styles(self.prefs.panel_text);
+                ui.style_mut().spacing.scroll = egui::style::ScrollStyle::solid();
                 self.inspector(ui);
                 if panel_toggle(ui, Align2::LEFT_BOTTOM, ">", &format!("Hide this panel ({})", key_text(&self.keys, KeyAction::RightPanel))) {
                     self.show_right = false;
