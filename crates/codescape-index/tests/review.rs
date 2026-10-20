@@ -284,3 +284,48 @@ fn a_project_at_the_repository_root_keeps_its_module_name_when_compared() {
     assert_eq!(r.change(node(tg, &["shop", "cart", "Cart"])).status, Status::Unchanged, "same module name on both sides");
     assert!(r.removed.is_empty(), "{:?}", r.removed.iter().map(|x| &x.path).collect::<Vec<_>>());
 }
+
+#[test]
+fn an_old_layout_export_holding_a_folder_named_like_the_repo_is_not_taken_for_the_checkout() {
+    let tmp = tempfile::tempdir().unwrap();
+    let repo = tmp.path().join("shop");
+    std::fs::create_dir_all(repo.join("cart")).unwrap();
+    std::fs::create_dir_all(repo.join("shop")).unwrap();
+    std::fs::write(repo.join("go.mod"), "module example.com/shop\n\ngo 1.22\n").unwrap();
+    std::fs::write(repo.join("cart/cart.go"), BASE_CART).unwrap();
+    std::fs::write(repo.join("shop/README"), "docs\n").unwrap();
+    git(&repo, &["init", "-q", "-b", "main"]);
+    git(&repo, &["add", "."]);
+    git(&repo, &["commit", "-q", "-m", "base"]);
+    let cache = tmp.path().join("cache");
+    let sha = git_out(&repo, &["rev-parse", "HEAD"]);
+    let key = format!("{}-{}", codescape_index::project_key(&repo.canonicalize().unwrap()), &sha[..12]);
+    let old = cache.join("versions").join(&key);
+    std::fs::create_dir_all(&old).unwrap();
+    let st =
+        std::process::Command::new("sh").arg("-c").arg(format!("git -C '{}' archive HEAD | tar -x -C '{}'", repo.display(), old.display())).status().unwrap();
+    assert!(st.success());
+    let r = index_revision(&repo, "main", &ProjectConfig::default(), &cache, &|_| {}).unwrap();
+    assert!(r.dir.join("go.mod").exists(), "{:?}", r.dir);
+}
+
+#[test]
+fn clearing_removes_old_layout_exports_and_their_indexes_whatever_their_age() {
+    let tmp = tempfile::tempdir().unwrap();
+    let repo = small_repo(tmp.path());
+    let cache = tmp.path().join("cache");
+    let pk = codescape_index::project_key(&repo.canonicalize().unwrap());
+    let (key, other) = (format!("{pk}-0123456789ab"), "fedcba9876543210-0123456789ab");
+    for k in [key.as_str(), other] {
+        std::fs::create_dir_all(cache.join("versions").join(k).join("repo")).unwrap();
+        std::fs::write(cache.join(format!("{k}.codescape")), "old").unwrap();
+    }
+    std::fs::create_dir_all(cache.join("versions").join(format!("{key}.partial12-0"))).unwrap();
+    std::fs::write(cache.join(format!("{pk}.codescape")), "main index").unwrap();
+    let fresh = index_revision(&repo, "main", &ProjectConfig::default(), &cache, &|_| {}).unwrap();
+    assert_eq!(clean_versions(&repo, &cache, std::time::Duration::from_secs(14 * 24 * 3600)).unwrap(), 3);
+    assert!(!cache.join("versions").exists());
+    assert!(!cache.join(format!("{key}.codescape")).exists() && !cache.join(format!("{other}.codescape")).exists());
+    assert!(cache.join(format!("{pk}.codescape")).exists(), "the project's own index stays");
+    assert!(fresh.dir.join("go.mod").exists() && fresh.index.exists(), "a recent export stays");
+}

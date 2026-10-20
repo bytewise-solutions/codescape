@@ -292,6 +292,10 @@ pub fn mark_used_at(r: &RevisionIndex, at: std::time::SystemTime) -> std::io::Re
     std::fs::File::create(r.version.join(USED_MARK))?.set_modified(at)
 }
 
+fn is_version_key(name: &str) -> bool {
+    name.split_once('-').is_some_and(|(p, s)| p.len() == 16 && s.len() == 12 && name.bytes().all(|b| b == b'-' || b.is_ascii_hexdigit()))
+}
+
 pub fn clean_versions(project_dir: &Path, cache_root: &Path, unused_for: std::time::Duration) -> anyhow::Result<usize> {
     let root = PathBuf::from(git(project_dir, &["rev-parse", "--show-toplevel"])?);
     let prefix = format!("{}-", crate::project_key(&project_dir.canonicalize()?));
@@ -314,17 +318,27 @@ pub fn clean_versions(project_dir: &Path, cache_root: &Path, unused_for: std::ti
     }
     let _ = git(&root, &["worktree", "prune"]);
     let now = std::time::SystemTime::now();
-    for version in ours(&cache_root.join("versions")) {
+    for version in ours(&cache_root.join("exports")) {
         let used = std::fs::metadata(version.join(USED_MARK)).or_else(|_| std::fs::metadata(&version)).and_then(|m| m.modified()).unwrap_or(now);
         if now.duration_since(used).unwrap_or_default() < unused_for {
             continue;
         }
         std::fs::remove_dir_all(&version)?;
-        if let Some(name) = version.file_name().filter(|n| !n.to_string_lossy().contains(".partial")) {
-            let _ = std::fs::remove_file(cache_root.join(format!("{}.codescape", name.to_string_lossy())));
+        removed += 1;
+    }
+    let legacy = cache_root.join("versions");
+    for old in std::fs::read_dir(&legacy).into_iter().flatten().flatten().map(|e| e.path()) {
+        if old.is_dir() {
+            std::fs::remove_dir_all(&old)?
+        } else {
+            std::fs::remove_file(&old)?
+        }
+        if let Some(name) = old.file_name().map(|n| n.to_string_lossy().into_owned()).filter(|n| is_version_key(n)) {
+            let _ = std::fs::remove_file(cache_root.join(format!("{name}.codescape")));
         }
         removed += 1;
     }
+    let _ = std::fs::remove_dir(&legacy);
     Ok(removed)
 }
 
@@ -391,14 +405,14 @@ pub fn index_revision(
     let project = project_dir.canonicalize()?;
     let rel = project.strip_prefix(&root)?.to_path_buf();
     let key = format!("{}-{}", crate::project_key(&project), &sha[..12]);
-    let version = cache_root.join("versions").join(&key);
+    let version = cache_root.join("exports").join(&key);
     let checkout = version.join(root.file_name().unwrap_or_else(|| "repo".as_ref()));
     if !checkout.exists() {
         std::fs::create_dir_all(&version)?;
         export(&root, &sha, &rel, &checkout)?;
     }
     let dir = checkout.join(rel);
-    let index = cache_root.join(format!("{key}.codescape"));
+    let index = version.join("index.codescape");
     let cfg = crate::ProjectConfig { index: Some(index.clone()), ..cfg.clone() };
     let packs = crate::project_packs(&dir, &cfg)?;
     if crate::needs_reindex(&dir, &index, &cfg, &packs) {
