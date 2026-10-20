@@ -54,5 +54,9 @@ pub fn ensure_entry(data_home: &Path, data_dirs: &[PathBuf], appimage: &Path) ->
     std::fs::write(&entry, text)?;
     std::fs::create_dir_all(icon.parent().unwrap_or(data_home))?;
     std::fs::write(&icon, ICON)?;
+    let theme = data_home.join("icons/hicolor");
+    if theme.join("icon-theme.cache").exists() {
+        let _ = std::process::Command::new("gtk-update-icon-cache").arg("-q").arg("-t").arg(&theme).status();
+    }
     Ok(true)
 }

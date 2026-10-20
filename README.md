@@ -87,7 +87,9 @@ command line. The viewer draws with wgpu (Vulkan, Metal or DirectX 12), so it ne
 such as Mesa's lavapipe. On Linux it runs on Wayland or X11. Review mode needs `git` and `tar` on the `PATH`.
 On Linux, `make install` puts both binaries in `~/.local/bin` with a desktop entry and the icon, so CodeScape shows up
 in the application menu and Wayland desktops give its window the right icon (`make uninstall` removes them; set
-`PREFIX` to install elsewhere).
+`PREFIX` to install elsewhere and `DESTDIR` to stage the files for a package). For a system-wide install, run
+`make build` as yourself first, then `sudo make install PREFIX=/usr/local`: as root it installs what is built and does
+not build.
 
 ## Quick start
 
