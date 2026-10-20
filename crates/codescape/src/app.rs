@@ -17,7 +17,7 @@ use crate::reading::{fill_view, leave_zoom, level_node, open_font, zoom_text};
 use crate::refs::{FileRefs, followable};
 use crate::review_view::{
     CommitStep, ItemKind, Limits, MarkState, ReviewItem, ReviewMarks, ReviewProgress, ReviewScope, Risk, by_risk, current, flag_upward,
-    items_with as review_items, mark_label, scope_of, scroll_to_row, step as review_step, within,
+    items_with as review_items, mark_label, scroll_to_row, step as review_step, within,
 };
 use crate::search::{self, SearchIndex, member_at_line};
 use crate::settings_window::{self, SettingsForm};
@@ -1394,8 +1394,12 @@ impl Project {
     fn goto_review_item(&mut self, i: usize) {
         let Some(rv) = &mut self.review else { return };
         rv.cursor = Some(i);
-        let item = &rv.items[i];
-        if let Some(n) = item.node.or(item.parent) {
+        let Some(n) = rv.items[i].node.or(rv.items[i].parent) else { return };
+        let g = self.file.graph();
+        let in_code = g.file(n).is_some() && (self.reading.is_some() || g.kind(n) == NodeKind::Member);
+        if in_code {
+            self.open_member(n);
+        } else {
             self.set_focus(n, None, true, true);
         }
         if let Some(rv) = &mut self.review {
@@ -1883,7 +1887,7 @@ impl Project {
         let mut review_switches: Option<(bool, bool)> = None;
         let mut review_list: Option<(Option<String>, (f32, f32))> = None;
         let mut review_collapse: Option<(String, bool)> = None;
-        let mut scope_change: Option<bool> = None;
+        let mut show_all = false;
         let mut insights = None;
         let fold = self.left_fold.take();
         let mut fold_next = None;
@@ -1900,7 +1904,6 @@ impl Project {
                     .on_disabled_hover_text("Turn on Group by package to fold the packages");
             });
             progress_bar(ui, all, 6.0);
-            let narrower = self.selected.and_then(|n| scope_of(g, n)).filter(|&n| Some(n) != rv.scope.node);
             if let Some(sel) = rv.scope.node {
                 let part = rv.marks.progress(&rv.items, within(g, &rv.items, sel));
                 let text = if part.total() == 0 {
@@ -1917,15 +1920,10 @@ impl Project {
                     });
                     ui.label(egui::RichText::new("·").small().color(style::MUTED));
                     if ui.link(egui::RichText::new("show all").small()).on_hover_text("List every change; the selection stays").clicked() {
-                        scope_change = Some(false);
+                        show_all = true;
                     }
                 });
                 progress_bar(ui, part, 3.0);
-            } else if let Some(n) = narrower {
-                let only = ui.link(egui::RichText::new(format!("Show only {}", g.name(n))).small()).on_hover_text("List only the changes in the selection");
-                if only.clicked() {
-                    scope_change = Some(true);
-                }
             }
             let mut per_group: HashMap<&str, usize> = HashMap::new();
             for &i in visible.iter().filter(|_| rv.by_package) {
@@ -1956,14 +1954,10 @@ impl Project {
             }
             let cur_row = cur.and_then(|c| rows.iter().position(|r| *r == Ok(c)));
             let (mut hide, mut grouped) = (rv.hide_reviewed, rv.by_package);
-            let mut jump = false;
             ui.horizontal(|ui| {
                 ui.checkbox(&mut hide, egui::RichText::new("Hide reviewed").small());
                 ui.checkbox(&mut grouped, egui::RichText::new("Group by package").small())
                     .on_hover_text("Off: riskiest first. On: grouped under package headers, in name order");
-                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                    jump = target_button(ui, cur_row.is_some()).on_hover_text("Scroll to the current change").clicked();
-                });
             });
             if (hide, grouped) != (rv.hide_reviewed, rv.by_package) {
                 review_switches = Some((hide, grouped));
@@ -1973,18 +1967,18 @@ impl Project {
             let pitch = row_h + ui.spacing().item_spacing.y;
             let (offset, view_h) = (rv.list_view.0, if rv.list_view.1 > 0.0 { rv.list_view.1 } else { list_h });
             let mut area = egui::ScrollArea::vertical().id_salt("changes").max_height(list_h).auto_shrink([false, true]);
-            if let Some(to) = cur_row.filter(|_| moved || jump).and_then(|r| scroll_to_row(r, pitch, offset, view_h, jump)) {
+            if let Some(to) = cur_row.filter(|_| moved).and_then(|r| scroll_to_row(r, pitch, offset, view_h)) {
                 area = area.vertical_scroll_offset(to);
             }
             let out = area.show_rows(ui, row_h, rows.len(), |ui, range| {
                 for row in &rows[range] {
-                    let sense = if row.is_err() { Sense::click() } else { Sense::hover() };
-                    let (rect, response) = ui.allocate_exact_size(egui::vec2(ui.available_width(), row_h), sense);
+                    let (rect, response) = ui.allocate_exact_size(egui::vec2(ui.available_width(), row_h), Sense::click());
                     if *row == Ok(cur.unwrap_or(usize::MAX)) {
                         ui.painter().rect_filled(rect.expand2(egui::vec2(2.0, 1.0)), 3.0, style::tint(style::PANEL, style::ACCENT, 0.14));
                     }
                     let mut ui = ui.new_child(egui::UiBuilder::new().max_rect(rect).layout(egui::Layout::top_down(egui::Align::Min)));
                     ui.style_mut().wrap_mode = Some(egui::TextWrapMode::Truncate);
+                    ui.style_mut().interaction.selectable_labels = false;
                     let i = match *row {
                         Err((group, n)) => {
                             let open = !folded(group);
@@ -2001,6 +1995,9 @@ impl Project {
                         }
                         Ok(i) => i,
                     };
+                    if response.clicked() {
+                        review_pick = Some(i);
+                    }
                     let item = &rv.items[i];
                     let state = rv.marks.state(item);
                     let color = match (state, item.kind) {
@@ -2154,12 +2151,8 @@ impl Project {
         if let (Some(i), Some(rv)) = (review_toggle, self.review.as_mut()) {
             self.review_error = rv.toggle(i);
         }
-        if let (Some(narrow), Some(rv)) = (scope_change, self.review.as_mut()) {
-            if narrow {
-                rv.scope.narrow(self.file.graph());
-            } else {
-                rv.scope.show_all();
-            }
+        if let (true, Some(rv)) = (show_all, self.review.as_mut()) {
+            rv.scope.show_all();
         }
         if let (Some((hide, grouped)), Some(rv)) = (review_switches, self.review.as_mut()) {
             rv.hide_reviewed = hide;
@@ -3543,20 +3536,6 @@ fn progress_bar(ui: &mut egui::Ui, p: ReviewProgress, height: f32) {
         x += w;
     }
     response.on_hover_text(format!("{} reviewed · {} changed since review · {} not looked at yet", p.reviewed, p.changed_since, p.unseen));
-}
-
-fn target_button(ui: &mut egui::Ui, enabled: bool) -> egui::Response {
-    let response = ui.add_enabled(enabled, egui::Button::new("").small().min_size(egui::vec2(18.0, 16.0)));
-    let colour = if enabled { style::ACCENT } else { style::MUTED };
-    let c = response.rect.center();
-    let painter = ui.painter();
-    painter.circle_stroke(c, 4.5, Stroke::new(1.2, colour));
-    painter.circle_filled(c, 1.5, colour);
-    for d in [egui::vec2(1.0, 0.0), egui::vec2(0.0, 1.0)] {
-        painter.line_segment([c + d * 4.5, c + d * 7.0], Stroke::new(1.2, colour));
-        painter.line_segment([c - d * 4.5, c - d * 7.0], Stroke::new(1.2, colour));
-    }
-    response
 }
 
 fn fold_buttons(ui: &mut egui::Ui) -> Option<bool> {

@@ -159,10 +159,10 @@ fn the_current_change_follows_the_selection_else_the_cursor() {
 
 #[test]
 fn the_list_scrolls_only_when_the_current_row_is_out_of_view() {
-    assert_eq!(scroll_to_row(2, 40.0, 0.0, 200.0, false), None, "already in view");
-    assert_eq!(scroll_to_row(10, 40.0, 0.0, 200.0, false), Some(320.0), "centred: 400 - (200 - 40) / 2");
-    assert_eq!(scroll_to_row(4, 40.0, 0.0, 180.0, false), Some(90.0), "half cut off at the bottom");
-    assert_eq!(scroll_to_row(2, 40.0, 0.0, 200.0, true), Some(0.0), "on request, centred but never above the top");
+    assert_eq!(scroll_to_row(2, 40.0, 0.0, 200.0), None, "already in view");
+    assert_eq!(scroll_to_row(10, 40.0, 0.0, 200.0), Some(320.0), "centred: 400 - (200 - 40) / 2");
+    assert_eq!(scroll_to_row(4, 40.0, 0.0, 180.0), Some(90.0), "half cut off at the bottom");
+    assert_eq!(scroll_to_row(2, 40.0, 400.0, 200.0), Some(0.0), "centred but never above the top");
 }
 
 const PAY: &str = "package pay\n\nfunc Charge(x int) int {\n\treturn x\n}\n";
@@ -233,8 +233,4 @@ fn the_list_scope_follows_the_selection_until_show_all_and_the_list_keeps_it_whi
     assert_eq!(scope.node, Some(named("cart")), "picking a change in the list does not narrow the list");
     scope.follow(tg, None);
     assert_eq!(scope.node, None, "no selection, the whole list");
-    scope.follow(tg, Some(named("Add")));
-    scope.show_all();
-    scope.narrow(tg);
-    assert_eq!(scope.node, Some(named("Cart")));
 }

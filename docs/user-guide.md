@@ -133,11 +133,10 @@ enough to read.
   change, riskiest first. The list follows the selection: select a package, file or class on the map and it lists
   only the changes inside (a selected method lists its whole class or file, so its neighbours stay), and `N` / `P`
   step through those; `Esc` brings back the full list. **show all** next to `In <name>` lists everything while
-  keeping the selection, until you select something else (**Show only <name>** narrows it again). Picking a change in
-  the list keeps the list as it is; click one to fly to it, or step through them with `N` / `P`. The current change (the
-  selected one, else the last one stepped to) is highlighted, and the list scrolls to it when you select it elsewhere
-  (on the map, with `N` / `P`, by Ctrl+click in the code); the target button above the list scrolls back to it after
-  you scrolled away. Each change says why it may deserve a look: `complexity 8 to 14`, `used by 12` (many callers),
+  keeping the selection, until you select something else. Click anywhere on a change to go to it (a method, or any change while a
+  file is open, opens the code at it), or step through them with `N` / `P`; either way the
+  list stays as it is. The current change (the selected one, else the last one stepped to) is highlighted, and the
+  list scrolls to it when you select it elsewhere (on the map, with `N` / `P`, by Ctrl+click in the code). Each change says why it may deserve a look: `complexity 8 to 14`, `used by 12` (many callers),
   `signature` (a public block's first line changed), `made public`, `new upward dependency on <package>` (it adds a
   dependency against the layering), `unused` (a new block nothing uses) and `untested` (no test reaches it). **Group
   by package** groups the list under package headers instead; click a package to fold it, or fold and unfold them all with `-` `+` next to the

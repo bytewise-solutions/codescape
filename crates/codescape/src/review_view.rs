@@ -323,9 +323,9 @@ pub fn current(items: &[ReviewItem], cursor: Option<usize>, selected: Option<Nod
     items.iter().position(|i| i.node == Some(s)).or(cursor)
 }
 
-pub fn scroll_to_row(row: usize, pitch: f32, offset: f32, view_h: f32, always: bool) -> Option<f32> {
+pub fn scroll_to_row(row: usize, pitch: f32, offset: f32, view_h: f32) -> Option<f32> {
     let top = row as f32 * pitch;
-    if !always && top >= offset && top + pitch <= offset + view_h {
+    if top >= offset && top + pitch <= offset + view_h {
         return None;
     }
     Some((top - (view_h - pitch) / 2.0).max(0.0))
@@ -360,7 +360,7 @@ impl ReviewScope {
     pub fn follow(&mut self, g: &ArchivedGraph, selected: Option<NodeId>) {
         if selected != self.from {
             self.from = selected;
-            self.narrow(g);
+            self.node = selected.and_then(|n| scope_of(g, n));
         }
     }
 
@@ -370,9 +370,5 @@ impl ReviewScope {
 
     pub fn show_all(&mut self) {
         self.node = None;
-    }
-
-    pub fn narrow(&mut self, g: &ArchivedGraph) {
-        self.node = self.from.and_then(|n| scope_of(g, n));
     }
 }
