@@ -80,7 +80,8 @@ impl Project {
                         }
                         ui.horizontal(|ui| {
                             if !self.keys.is_default(a) && ui.small_button("reset").on_hover_text(format(&a.default_key())).clicked() {
-                                self.keys.reset(a);
+                                let taken = self.keys.reset(a);
+                                self.keys_note = taken.map(|o| format!("{} was on {}; it has no key now", o.label(), shown(&self.keys, a)));
                                 changed = true;
                             }
                             if self.keys.get(a).is_some() && ui.small_button("remove").clicked() {

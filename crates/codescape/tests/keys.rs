@@ -72,3 +72,37 @@ fn a_shortcut_is_captured_only_once_a_non_modifier_key_is_pressed() {
     assert_eq!(capture(&[press(Key::Escape, Modifiers::NONE)]), Capture::Cancelled);
     assert_eq!(capture(&[]), Capture::Waiting);
 }
+
+const LINUX_CTRL: Modifiers = Modifiers { ctrl: true, command: true, ..Modifiers::NONE };
+
+#[test]
+fn ctrl_as_reported_on_linux_is_captured_as_the_portable_ctrl() {
+    use codescape::keys::{Capture, capture};
+    let press = egui::Event::Key { key: Key::K, physical_key: None, pressed: true, repeat: false, modifiers: LINUX_CTRL };
+    assert_eq!(capture(&[press]), Capture::Bound(parse("Ctrl+K").unwrap()));
+}
+
+#[test]
+fn a_rebind_with_raw_ctrl_still_finds_the_action_that_had_the_keys() {
+    let mut k = Keymap::default();
+    assert_eq!(k.bind(Action::Find, KeyboardShortcut::new(LINUX_CTRL, Key::K)), Some(Action::Jump));
+    assert_eq!(k.get(Action::Jump), None);
+    k.bind(Action::Find, KeyboardShortcut::new(LINUX_CTRL, Key::F));
+    assert!(k.is_default(Action::Find), "pressing an action's own default key leaves nothing to reset");
+}
+
+#[test]
+fn a_conflict_in_the_keys_file_leaves_one_action_on_the_key() {
+    let k = Keymap::from_toml("[keys]\nfind = \"Ctrl+K\"\n");
+    assert_eq!(k.get(Action::Find), parse("Ctrl+K"));
+    assert_eq!(k.get(Action::Jump), None);
+}
+
+#[test]
+fn resetting_takes_the_default_back_from_the_action_that_had_it() {
+    let mut k = Keymap::default();
+    k.bind(Action::Structure, parse("Ctrl+K").unwrap());
+    assert_eq!(k.reset(Action::Jump), Some(Action::Structure));
+    assert_eq!(k.get(Action::Jump), parse("Ctrl+K"));
+    assert_eq!(k.get(Action::Structure), None);
+}

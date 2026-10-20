@@ -123,11 +123,17 @@ impl Keymap {
     }
 
     pub fn bind(&mut self, a: Action, s: KeyboardShortcut) -> Option<Action> {
+        let s = portable(s);
+        let taken = self.take_from_others(a, s);
+        self.set(a, Some(s));
+        taken
+    }
+
+    fn take_from_others(&mut self, a: Action, s: KeyboardShortcut) -> Option<Action> {
         let taken = Action::ALL.into_iter().find(|&o| o != a && self.get(o) == Some(s));
         if let Some(o) = taken {
             self.set(o, None);
         }
-        self.set(a, Some(s));
         taken
     }
 
@@ -135,8 +141,9 @@ impl Keymap {
         self.set(a, None);
     }
 
-    pub fn reset(&mut self, a: Action) {
+    pub fn reset(&mut self, a: Action) -> Option<Action> {
         self.changed.remove(&a);
+        self.take_from_others(a, a.default_key())
     }
 
     fn set(&mut self, a: Action, s: Option<KeyboardShortcut>) {
@@ -175,7 +182,7 @@ impl Keymap {
                 Some("") => map.unbind(a),
                 Some(text) => {
                     if let Some(s) = parse(text) {
-                        map.set(a, Some(s));
+                        map.bind(a, s);
                     }
                 }
                 None => {}
@@ -204,9 +211,15 @@ pub fn capture(events: &[egui::Event]) -> Capture {
         if *key == Key::Escape && modifiers.is_none() {
             return Capture::Cancelled;
         }
-        return Capture::Bound(KeyboardShortcut::new(*modifiers, *key));
+        return Capture::Bound(portable(KeyboardShortcut::new(*modifiers, *key)));
     }
     Capture::Waiting
+}
+
+fn portable(s: KeyboardShortcut) -> KeyboardShortcut {
+    let m = s.modifiers;
+    let ctrl = if m.ctrl || m.command || m.mac_cmd { Modifiers::COMMAND } else { Modifiers::NONE };
+    KeyboardShortcut::new(ctrl | Modifiers { shift: m.shift, alt: m.alt, ..Modifiers::NONE }, s.logical_key)
 }
 
 pub fn held(modifiers: Modifiers) -> String {
