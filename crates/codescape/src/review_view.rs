@@ -330,3 +330,14 @@ pub fn scroll_to_row(row: usize, pitch: f32, offset: f32, view_h: f32, always: b
     }
     Some((top - (view_h - pitch) / 2.0).max(0.0))
 }
+
+pub fn mark_label(marks: &ReviewMarks, items: &[ReviewItem], inside: &[usize]) -> Option<String> {
+    if inside.is_empty() {
+        return None;
+    }
+    if marks.all_reviewed(items, inside) {
+        return Some(format!("Unmark reviewed ({})", inside.len()));
+    }
+    let done = inside.iter().filter(|&&i| marks.state(&items[i]) == MarkState::Reviewed).count();
+    Some(format!("Mark reviewed ({done} / {} changes)", inside.len()))
+}

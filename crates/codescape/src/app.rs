@@ -17,7 +17,7 @@ use crate::reading::{fill_view, leave_zoom, level_node, open_font, zoom_text};
 use crate::refs::{FileRefs, followable};
 use crate::review_view::{
     CommitStep, ItemKind, Limits, MarkState, ReviewItem, ReviewMarks, ReviewProgress, Risk, by_risk, current, flag_upward, items_with as review_items,
-    scroll_to_row, step as review_step, within,
+    mark_label, scroll_to_row, step as review_step, within,
 };
 use crate::search::{self, SearchIndex, member_at_line};
 use crate::settings_window::{self, SettingsForm};
@@ -2232,19 +2232,10 @@ impl Project {
                     fold_next = fold_buttons(ui);
                 });
             }
-            if let Some(rv) = &self.review {
-                let inside = within(g, &rv.items, n);
-                if !inside.is_empty() {
-                    let label = if rv.marks.all_reviewed(&rv.items, &inside) {
-                        format!("Unmark reviewed ({})", inside.len())
-                    } else {
-                        let done = inside.iter().filter(|&&i| rv.marks.state(&rv.items[i]) == MarkState::Reviewed).count();
-                        format!("Mark reviewed ({done} / {} changes)", inside.len())
-                    };
-                    if ui.button(label).on_hover_text("R: every change inside the selection").clicked() {
-                        mark_selection = Some(n);
-                    }
-                }
+            if let Some(label) = self.review.as_ref().and_then(|rv| mark_label(&rv.marks, &rv.items, &within(g, &rv.items, n)))
+                && ui.button(label).on_hover_text("R: every change inside the selection").clicked()
+            {
+                mark_selection = Some(n);
             }
             if let Some(l) = insights_ui::flags_ui(ui, g, self.flags.current()) {
                 self.pending_flag_go = Some(l);
@@ -2438,8 +2429,14 @@ impl Project {
         }
         if let Some(n) = self.context_node {
             let mut hide = None;
+            let mut mark = None;
             resp.context_menu(|ui| {
                 ui.label(egui::RichText::new(g.name(n)).strong());
+                if let Some(label) = self.review.as_ref().and_then(|rv| mark_label(&rv.marks, &rv.items, &within(g, &rv.items, n)))
+                    && ui.button(label).on_hover_text("R: every change inside it").clicked()
+                {
+                    mark = Some(n);
+                }
                 if g.kind(n) == NodeKind::Type && ui.add(egui::Button::new("Sequence diagram").shortcut_text("S")).clicked() {
                     self.pending_sequence = Some(n);
                 }
@@ -2455,6 +2452,9 @@ impl Project {
             });
             if hide.is_some() {
                 self.pending_hide = hide;
+            }
+            if let (Some(n), Some(rv)) = (mark, self.review.as_mut()) {
+                self.review_error = rv.toggle_within(g, n);
             }
         }
         if self.needs_fit {

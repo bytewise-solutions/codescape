@@ -184,3 +184,19 @@ fn a_change_that_adds_an_upward_dependency_says_so_and_ranks_high() {
     by_risk(&mut items);
     assert_eq!(items[0].label, "Cart.Add");
 }
+
+#[test]
+fn the_mark_action_counts_the_changes_inside_and_offers_to_unmark_once_all_are_reviewed() {
+    let (b, t) = (side(&[("cart/cart.go", BASE)]), side(&[("cart/cart.go", TARGET)]));
+    let tg = t.file.graph();
+    let items = items(tg, &compare(b.file.graph(), &b.dir, tg, &t.dir), &analyse(tg, &t.dir));
+    let named = |name: &str| (0..tg.node_count() as NodeId).find(|&n| tg.name(n) == name).unwrap();
+    let mut marks = ReviewMarks::default();
+    let cart = within(tg, &items, named("Cart"));
+    assert_eq!(mark_label(&marks, &items, &cart).as_deref(), Some("Mark reviewed (0 / 2 changes)"));
+    marks.set_reviewed(&items, &cart[..1], true);
+    assert_eq!(mark_label(&marks, &items, &cart).as_deref(), Some("Mark reviewed (1 / 2 changes)"));
+    marks.set_reviewed(&items, &cart, true);
+    assert_eq!(mark_label(&marks, &items, &cart).as_deref(), Some("Unmark reviewed (2)"));
+    assert_eq!(mark_label(&marks, &items, &[]), None, "nothing to mark outside the changes");
+}
