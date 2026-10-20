@@ -157,6 +157,13 @@ impl Threshold {
         }
     }
 
+    pub fn max(self) -> u32 {
+        match self {
+            Threshold::ComplexityHint | Threshold::ComplexityHigh => u32::from(u16::MAX - 1),
+            _ => u32::MAX,
+        }
+    }
+
     pub fn label(self) -> &'static str {
         match self {
             Threshold::ComplexityHint => "Complexity hint from",
@@ -655,7 +662,7 @@ impl Settings {
         }
         for t in Threshold::ALL {
             if let Some(n) = f.view.threshold(t) {
-                self.thresholds[t as usize] = at(n.max(t.min()), layer);
+                self.thresholds[t as usize] = at(n.clamp(t.min(), t.max()), layer);
             }
         }
         for p in &f.view.shown_again {

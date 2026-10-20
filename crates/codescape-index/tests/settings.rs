@@ -340,3 +340,12 @@ fn duplicate_tokens_have_a_floor_of_ten() {
     assert_eq!(Threshold::DuplicateTokens.min(), 10);
     assert_eq!(Threshold::ComplexityHint.min(), 1);
 }
+
+#[test]
+fn complexity_levels_are_capped_to_what_the_map_can_count() {
+    let e = env();
+    write(&e.paths.shared, "[view]\ncomplexity_high = 70000\ncomplexity_hint = 65535\n");
+    let store = SettingsStore::load(e.paths.clone()).unwrap();
+    assert_eq!(store.settings().threshold(Threshold::ComplexityHigh).value, Threshold::ComplexityHigh.max());
+    assert!(Threshold::ComplexityHint.max() < u32::from(u16::MAX), "the ramp needs room above the hint");
+}

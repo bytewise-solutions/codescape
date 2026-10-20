@@ -274,13 +274,17 @@ pub fn complexity_hint(value: u16, hint: u16, high: u16) -> Option<Color32> {
 }
 
 pub fn complexity_ramp(value: u16, hint: u16, high: u16) -> Option<Color32> {
-    let hint = hint.max(1);
+    let hint = hint.clamp(1, u16::MAX - 1);
     let high = high.max(hint + 1);
     if value < hint {
         return None;
     }
     let t = f32::from((value - hint).min(high - hint)) / f32::from(high - hint);
     Some(tint(EDGE_SIDEWAYS, EDGE_UP, t))
+}
+
+pub fn ramp_level(high: u16, step: u32, steps: u32) -> u16 {
+    (1 + u32::from(high) * step / steps.saturating_sub(1).max(1)).min(u32::from(u16::MAX)) as u16
 }
 
 pub const RAMP_TINT: f32 = 0.3;

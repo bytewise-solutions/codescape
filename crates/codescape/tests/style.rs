@@ -174,3 +174,12 @@ fn panel_text_scales_every_text_style() {
         assert_eq!(big[style].size, font.size * 1.5, "{style:?}");
     }
 }
+
+#[test]
+fn complexity_levels_at_the_top_of_the_range_do_not_overflow() {
+    use codescape::style::{complexity_ramp, ramp_level};
+    assert!(complexity_ramp(u16::MAX, u16::MAX, u16::MAX).is_some());
+    assert_eq!(ramp_level(u16::MAX, 8, 9), u16::MAX);
+    assert_eq!(ramp_level(20, 0, 9), 1);
+    assert_eq!(ramp_level(20, 8, 9), 21);
+}

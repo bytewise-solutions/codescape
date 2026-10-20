@@ -2888,7 +2888,7 @@ impl Project {
                     let (hint, high) = self.levels();
                     let steps = 9;
                     for i in 0..steps {
-                        let v = 1 + (u32::from(high) * i / (steps - 1)) as u16;
+                        let v = style::ramp_level(high, i, steps);
                         let w = sample.width() / steps as f32;
                         let cell = egui::Rect::from_min_size(Pos2::new(sample.min.x + w * i as f32, sample.min.y), egui::vec2(w + 0.5, sample.height()));
                         let fill = style::complexity_ramp(v, hint, high).map_or(style::BOX_FILL, |c| style::tint(style::BOX_FILL, c, style::RAMP_TINT));
