@@ -143,3 +143,24 @@ fn progress_counts_reviewed_changed_since_and_unseen_changes() {
     assert_eq!(all.total(), 3);
     assert_eq!(marks.progress(&second, [1, 2]), ReviewProgress { reviewed: 1, changed_since: 0, unseen: 1 });
 }
+
+#[test]
+fn the_current_change_follows_the_selection_else_the_cursor() {
+    let (b, t) = (side(&[("cart/cart.go", BASE)]), side(&[("cart/cart.go", TARGET)]));
+    let tg = t.file.graph();
+    let items = items(tg, &compare(b.file.graph(), &b.dir, tg, &t.dir), &analyse(tg, &t.dir));
+    let named = |name: &str| (0..tg.node_count() as NodeId).find(|&n| tg.name(n) == name).unwrap();
+    assert_eq!(current(&items, None, Some(named("Coupon"))), Some(2));
+    assert_eq!(current(&items, Some(0), Some(named("Coupon"))), Some(2), "the selection wins over the cursor");
+    assert_eq!(current(&items, Some(1), Some(named("Cart"))), Some(1), "a removed method stays current while its type is selected");
+    assert_eq!(current(&items, Some(0), Some(named("cart"))), Some(0), "a selection with no change of its own keeps the cursor");
+    assert_eq!(current(&items, None, None), None);
+}
+
+#[test]
+fn the_list_scrolls_only_when_the_current_row_is_out_of_view() {
+    assert_eq!(scroll_to_row(2, 40.0, 0.0, 200.0, false), None, "already in view");
+    assert_eq!(scroll_to_row(10, 40.0, 0.0, 200.0, false), Some(320.0), "centred: 400 - (200 - 40) / 2");
+    assert_eq!(scroll_to_row(4, 40.0, 0.0, 180.0, false), Some(90.0), "half cut off at the bottom");
+    assert_eq!(scroll_to_row(2, 40.0, 0.0, 200.0, true), Some(0.0), "on request, centred but never above the top");
+}

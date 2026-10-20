@@ -130,7 +130,9 @@ enough to read.
   Open boxes add up what changed inside them (`2 new · 3 changed · 1 removed`), card rows are tinted with their line
   counts and any complexity increase, and arrows the change introduced are drawn green. The left
   panel lists every change, riskiest first, then new and removed dependencies (upward ones flagged); click one to fly
-  to it, or step through them with `N` / `P`. Each change says why it may deserve a look: `complexity 8 to 14`,
+  to it, or step through them with `N` / `P`. The current change (the selected one, else the last one stepped to) is
+  highlighted, and the list scrolls to it when you select it elsewhere (on the map, with `N` / `P`, by Ctrl+click
+  in the code); the target button above the list scrolls back to it after you scrolled away. Each change says why it may deserve a look: `complexity 8 to 14`,
   `used by 12` (many callers), `signature` (a public block's first line changed), `made public`, `unused` (a new
   block nothing uses) and `untested` (no test reaches it). **By package** groups the list instead.
   Zoom into a changed file to see its added lines in green and red marks where lines were removed; hover a mark to

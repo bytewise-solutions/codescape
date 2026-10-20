@@ -295,3 +295,19 @@ impl CommitStep {
         }
     }
 }
+
+pub fn current(items: &[ReviewItem], cursor: Option<usize>, selected: Option<NodeId>) -> Option<usize> {
+    let Some(s) = selected else { return cursor };
+    if cursor.is_some_and(|c| items[c].node.or(items[c].parent) == Some(s)) {
+        return cursor;
+    }
+    items.iter().position(|i| i.node == Some(s)).or(cursor)
+}
+
+pub fn scroll_to_row(row: usize, pitch: f32, offset: f32, view_h: f32, always: bool) -> Option<f32> {
+    let top = row as f32 * pitch;
+    if !always && top >= offset && top + pitch <= offset + view_h {
+        return None;
+    }
+    Some((top - (view_h - pitch) / 2.0).max(0.0))
+}
