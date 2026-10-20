@@ -92,6 +92,14 @@ struct PkgInfo {
     ctor_owner: HashMap<String, usize>,
 }
 
+pub fn is_mock_dir(dir: &str) -> bool {
+    dir.split('/').any(|s| s.ends_with("mock") || s.ends_with("mocks"))
+}
+
+pub fn is_mock_type(name: &str) -> bool {
+    name.strip_prefix("Mock").and_then(|rest| rest.chars().next()).is_some_and(char::is_uppercase)
+}
+
 pub fn extract_go(d: &Discovery, module_nodes: &[NodeId], excludes: &GlobSet, b: &mut GraphBuilder, facts: &mut ProjectFacts) -> ExtractStats {
     let sources = list_sources(d, excludes);
     let parsed: Vec<ParsedFile> = sources
@@ -102,8 +110,7 @@ pub fn extract_go(d: &Discovery, module_nodes: &[NodeId], excludes: &GlobSet, b:
             let m = &d.modules[*module];
             let dir = rel_path(&m.dir, path.parent().unwrap());
             let file_name = path.file_name().unwrap().to_string_lossy().into_owned();
-            let is_mock =
-                gf.generated_mock || dir.split('/').any(|s| s == "mock" || s == "mocks") || file_name.starts_with("mock_") || file_name.ends_with("_mock.go");
+            let is_mock = gf.generated_mock || is_mock_dir(&dir) || file_name.starts_with("mock_") || file_name.ends_with("_mock.go");
             Some(ParsedFile {
                 module: *module,
                 rel: rel_path(&d.root, path),
@@ -243,6 +250,10 @@ impl<'a> Resolver<'a> {
                 self.b.set_span(node, &f.rel, t.start_line, t.end_line);
                 self.b.set_lines(node, t.end_line - t.start_line + 1);
                 self.flag(node, f);
+                let mock_type = is_mock_type(&t.name);
+                if mock_type {
+                    self.b.add_flags(node, NodeFlags::MOCK);
+                }
                 let mut methods = HashMap::new();
                 for m in &t.methods {
                     let id = self.b.add_node(node, NodeKind::Member, SubKind::Method, m, Lang::Go);
@@ -268,7 +279,7 @@ impl<'a> Resolver<'a> {
                     methods,
                     arity: HashMap::new(),
                     file: fi,
-                    excluded: f.is_test || f.is_mock,
+                    excluded: f.is_test || f.is_mock || mock_type,
                 });
                 self.pkgs[pi].types.insert(t.name.clone(), ti);
             }

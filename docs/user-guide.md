@@ -201,7 +201,8 @@ enough to read.
   Go also `SugaredLogger`) and types extending them, plus fields of those types on cards and in the inspector, and
   their entries in USES / USED BY lists. Tick **View ▸ Logging** to show them.
 - **Test code is out:** test sources, test helpers (files importing `testing`/testify or JUnit/Mockito, folders such
-  as `testutil`/`testdata`, globs under `[test] paths`) and test mains are not drawn or listed. Tick **View ▸ Tests**
+  as `testutil`/`testdata`, globs under `[test] paths`), Go mocks (mockery output, `mock_*.go` and `*_mock.go` files, folders
+  ending in `mock` or `mocks` such as `rawemailmock`, types named `Mock…`) and test mains are not drawn or listed. Tick **View ▸ Tests**
   to draw them and **View ▸ Test dependencies** to see test-only dependencies.
 
 ## Choosing what's on the map
