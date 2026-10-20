@@ -156,3 +156,29 @@ fn helpers_named_like_object_methods_but_taking_other_arguments_are_still_unused
         assert_ne!(a.usage[n as usize], Usage::Used, "{name}");
     }
 }
+
+#[test]
+fn a_method_marked_as_an_override_is_used_even_without_a_declared_supertype() {
+    let tmp = tempfile::tempdir().unwrap();
+    let dir = tmp.path().join("proj");
+    std::fs::create_dir_all(dir.join("src/main/java/b")).unwrap();
+    std::fs::write(dir.join("settings.gradle"), "rootProject.name = 'proj'\n").unwrap();
+    std::fs::write(dir.join("build.gradle"), "apply plugin: 'java'\n").unwrap();
+    std::fs::write(
+        dir.join("src/main/java/b/Handler.java"),
+        "package b;\n\npublic class Handler {\n    @Override\n    @Deprecated\n    protected Object handle(String event) {\n        return null;\n    }\n\n    protected void stale() {\n    }\n}\n",
+    )
+    .unwrap();
+    std::fs::write(
+        dir.join("src/main/java/b/Main.java"),
+        "package b;\n\npublic class Main {\n    public static void main(String[] args) {\n        new Handler();\n    }\n}\n",
+    )
+    .unwrap();
+    let cfg = ProjectConfig { index: Some(tmp.path().join("i.codescape")), ..Default::default() };
+    let file = IndexFile::open(&index_project(&dir, &cfg, &|_| {}).unwrap().path).unwrap();
+    let g = file.graph();
+    let a = analyse(g, &dir);
+    let named = |name: &str| (0..g.node_count() as NodeId).find(|&n| g.name(n) == name).unwrap_or_else(|| panic!("no {name}"));
+    assert_eq!(a.usage[named("handle") as usize], Usage::Used);
+    assert_ne!(a.usage[named("stale") as usize], Usage::Used);
+}

@@ -106,18 +106,34 @@ fn arity(text: &str, start_line: u32, name: &str) -> Option<usize> {
     None
 }
 
+fn declaration(text: &str, start_line: u32, name: &str) -> Option<String> {
+    let head: String = text.lines().skip(start_line.saturating_sub(1) as usize).take(12).collect::<Vec<_>>().join("\n");
+    let at = head.find(&format!("{name}("))?;
+    Some(head[..at].to_string())
+}
+
+fn marked_override(lang: Lang, declaration: &str) -> bool {
+    let words = || declaration.split(|c: char| !(c.is_alphanumeric() || c == '_' || c == '@'));
+    match lang {
+        Lang::Java => words().any(|w| w == "@Override"),
+        Lang::TypeScript | Lang::JavaScript => words().any(|w| w == "override"),
+        _ => false,
+    }
+}
+
 fn implicitly_called(g: &ArchivedGraph, root: &Path, n: NodeId) -> bool {
     if g.kind(n) != NodeKind::Member || g.sub_kind(n) != SubKind::Method {
         return false;
     }
     let (lang, name) = (g.lang(n), g.name(n));
     let wanted: Vec<usize> = IMPLICIT.iter().filter(|&&(l, m, _)| l == lang && m == name).map(|&(_, _, a)| a).collect();
-    if wanted.is_empty() {
+    if wanted.is_empty() && !matches!(lang, Lang::Java | Lang::TypeScript | Lang::JavaScript) {
         return false;
     }
     let Some(file) = g.file(n) else { return false };
     let Ok(text) = std::fs::read_to_string(root.join(file)) else { return false };
-    arity(&text, g.span(n).0, name).is_some_and(|a| wanted.contains(&a))
+    let start = g.span(n).0;
+    declaration(&text, start, name).is_some_and(|d| marked_override(lang, &d)) || arity(&text, start, name).is_some_and(|a| wanted.contains(&a))
 }
 
 pub fn analyse(g: &ArchivedGraph, root: &Path) -> Analysis {

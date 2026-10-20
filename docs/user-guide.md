@@ -147,7 +147,7 @@ enough to read.
 - **Unused code.** **View ▸ Unused code** marks blocks nothing in main code calls, creates or names outside their
   own lines, and lists them on the left: `unused`, `no caller in the project` (public, so possibly API used by
   others) or `only tests use it`. Entry points, tests, generated code, constructors, methods implementing a
-  supertype's and the methods the runtime calls itself (Java `equals(Object)`, `hashCode()`, `toString()`, `clone()`,
+  supertype's or marked as overrides (Java `@Override`, TS `override`), and the methods the runtime calls itself (Java `equals(Object)`, `hashCode()`, `toString()`, `clone()`,
   `finalize()`; Go `String()` and `Error()`; TS/JS `toString()`, `valueOf()`, `toJSON(key)`) are never listed. Code reached by reflection or a framework can still show up, so read it as a hint.
   `codescape-index <dir> --unused` prints the same list.
 - **Insights.** Below MODULES the left panel lists areas of interest, each row a name and a short reason (hover for
