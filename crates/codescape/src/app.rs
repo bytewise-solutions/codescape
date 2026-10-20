@@ -16,8 +16,8 @@ use crate::panels::{EntryGroupView, group_entries};
 use crate::reading::{fill_view, leave_zoom, level_node, open_font, zoom_text};
 use crate::refs::{FileRefs, followable};
 use crate::review_view::{
-    CommitStep, ItemKind, Limits, MarkState, ReviewItem, ReviewMarks, ReviewProgress, Risk, by_risk, current, items_with as review_items, scroll_to_row,
-    step as review_step, within,
+    CommitStep, ItemKind, Limits, MarkState, ReviewItem, ReviewMarks, ReviewProgress, Risk, by_risk, current, flag_upward, items_with as review_items,
+    scroll_to_row, step as review_step, within,
 };
 use crate::search::{self, SearchIndex, member_at_line};
 use crate::settings_window::{self, SettingsForm};
@@ -379,7 +379,6 @@ struct ReviewState {
     items: Vec<ReviewItem>,
     cursor: Option<usize>,
     new_arrows: std::collections::HashSet<(NodeId, NodeId)>,
-    upward: std::collections::HashSet<(NodeId, NodeId)>,
     marks: ReviewMarks,
     marks_path: PathBuf,
     states: HashMap<NodeId, MarkState>,
@@ -1192,9 +1191,9 @@ impl Project {
                 }
                 self.version = done.version;
                 let g = self.file.graph();
-                let items = review_items(g, &done.review, &done.analysis, self.limits());
+                let mut items = review_items(g, &done.review, &done.analysis, self.limits());
                 let new_arrows = done.review.new_arrows.iter().copied().collect();
-                let upward: std::collections::HashSet<(NodeId, NodeId)> = done
+                let upward: Vec<(NodeId, NodeId)> = done
                     .review
                     .new_arrows
                     .iter()
@@ -1203,18 +1202,16 @@ impl Project {
                         g.parent(a).is_some_and(|p| self.cache.get_or_compute(g, p).edges.iter().any(|e| e.a == a && e.b == b && e.dir == Direction::Up))
                     })
                     .collect();
-                let mut review = done.review;
-                review.new_arrows.sort_by_key(|arrow| !upward.contains(arrow));
+                flag_upward(g, &mut items, &upward);
                 let marks_path = codescape_index::cache_path(&self.origin().0).with_extension("marks");
                 let marks = ReviewMarks::load(&marks_path);
                 let (hide_reviewed, by_package) = self.review.as_ref().map_or((false, false), |r| (r.hide_reviewed, r.by_package));
                 let mut rv = ReviewState {
                     label: done.label,
-                    review,
+                    review: done.review,
                     items,
                     cursor: None,
                     new_arrows,
-                    upward,
                     marks,
                     marks_path,
                     states: HashMap::new(),
@@ -1852,7 +1849,6 @@ impl Project {
         let mut fold_next = None;
         self.refresh_insights();
         let g = self.file.graph();
-        let list_h = ui.available_height() * 0.6;
         if let Some(rv) = &self.review {
             let visible = rv.visible();
             let all = rv.marks.progress(&rv.items, 0..rv.items.len());
@@ -1912,6 +1908,7 @@ impl Project {
                 review_switches = Some((hide, grouped));
             }
             let row_h = 36.0;
+            let list_h = ui.available_height() - 24.0;
             let pitch = row_h + ui.spacing().item_spacing.y;
             let (offset, view_h) = (rv.list_view.0, if rv.list_view.1 > 0.0 { rv.list_view.1 } else { list_h });
             let mut area = egui::ScrollArea::vertical().id_salt("changes").max_height(list_h).auto_shrink([false, true]);
@@ -1975,116 +1972,92 @@ impl Project {
                             ui.label(egui::RichText::new("changed since review").small().color(style::ACCENT));
                         }
                         for r in &item.risks {
-                            ui.label(egui::RichText::new(r.label()).small().color(if *r == Risk::Untested { style::MUTED } else { style::EDGE_SIDEWAYS }));
+                            let colour = match r {
+                                Risk::Untested => style::MUTED,
+                                Risk::Upward(_) => style::EDGE_UP,
+                                _ => style::EDGE_SIDEWAYS,
+                            };
+                            ui.label(egui::RichText::new(r.label()).small().color(colour));
                         }
                     });
                 }
             });
             let followed = if moved { cur_key } else { rv.followed.clone() };
             review_list = Some((followed, (out.state.clamped_offset().y, out.inner_rect.height())));
-            ui.separator();
         }
-        egui::ScrollArea::vertical().id_salt("entries").show(ui, |ui| {
-            if let Some(rv) = &self.review {
-                if !rv.review.new_arrows.is_empty() {
-                    ui.label(egui::RichText::new(format!("NEW DEPENDENCIES ({})", rv.review.new_arrows.len())).small().color(style::ACCENT));
-                    for &(a, b) in &rv.review.new_arrows {
-                        ui.horizontal_wrapped(|ui| {
-                            if ui
-                                .selectable_label(false, egui::RichText::new(format!("{} uses {}", g.name(a), g.name(b))).color(style::ADDED))
-                                .on_hover_text(format!("{} uses {}", full_path(g, a), full_path(g, b)))
-                                .clicked()
-                            {
-                                fly = Some(a);
-                            }
-                            if rv.upward.contains(&(a, b)) {
-                                ui.label(egui::RichText::new("upward dependency").small().color(style::EDGE_UP));
-                            }
-                        });
-                    }
-                }
-                if !rv.review.removed_arrows.is_empty() {
-                    ui.label(egui::RichText::new(format!("REMOVED DEPENDENCIES ({})", rv.review.removed_arrows.len())).small().color(style::MUTED));
-                    for (a, b) in &rv.review.removed_arrows {
-                        ui.label(
-                            egui::RichText::new(format!("{} uses {}", a.rsplit('/').next().unwrap_or(a), b.rsplit('/').next().unwrap_or(b)))
-                                .color(style::MUTED),
-                        )
-                        .on_hover_text(format!("{a} uses {b}"));
-                    }
-                }
-                return;
-            }
-            ui.horizontal(|ui| {
-                ui.label(egui::RichText::new("INSIGHTS").small().color(style::MUTED));
-                fold_next = fold_buttons(ui);
-            });
-            insights = Some(self.insights_ui(ui, fold));
-            ui.add_space(12.0);
-            ui.label(egui::RichText::new("ENTRY POINTS").small().color(style::MUTED));
-            for (gi, group) in self.groups.iter().enumerate() {
-                egui::CollapsingHeader::new(format!("{} ({})", group.label, group.items.len()))
-                    .id_salt(("group", gi))
-                    .default_open(self.prefs.opens(group.items.len()))
-                    .open(fold)
-                    .show(ui, |ui| {
-                        for item in &group.items {
-                            let i = item.entry as usize;
-                            let mut text = g.entry_label(i).to_string();
-                            if let Some(h) = g.entry_handoff(i) {
-                                text.push_str(&format!("  · {h}"));
-                            }
-                            let selected = self.selected_entry == Some(i);
-                            if item.children.is_empty() {
-                                if ui.selectable_label(selected, text).clicked() {
-                                    select = Some(i);
+        if self.review.is_none() {
+            egui::ScrollArea::vertical().id_salt("entries").show(ui, |ui| {
+                ui.horizontal(|ui| {
+                    ui.label(egui::RichText::new("INSIGHTS").small().color(style::MUTED));
+                    fold_next = fold_buttons(ui);
+                });
+                insights = Some(self.insights_ui(ui, fold));
+                ui.add_space(12.0);
+                ui.label(egui::RichText::new("ENTRY POINTS").small().color(style::MUTED));
+                for (gi, group) in self.groups.iter().enumerate() {
+                    egui::CollapsingHeader::new(format!("{} ({})", group.label, group.items.len()))
+                        .id_salt(("group", gi))
+                        .default_open(self.prefs.opens(group.items.len()))
+                        .open(fold)
+                        .show(ui, |ui| {
+                            for item in &group.items {
+                                let i = item.entry as usize;
+                                let mut text = g.entry_label(i).to_string();
+                                if let Some(h) = g.entry_handoff(i) {
+                                    text.push_str(&format!("  · {h}"));
                                 }
-                                continue;
-                            }
-                            let id = ui.make_persistent_id(("entry", i));
-                            let mut state =
-                                egui::collapsing_header::CollapsingState::load_with_default_open(ui.ctx(), id, self.prefs.opens(item.children.len()));
-                            if let Some(open) = fold {
-                                state.set_open(open);
-                            }
-                            state
-                                .show_header(ui, |ui| {
-                                    if ui.selectable_label(selected, format!("{text}  ({})", item.children.len())).clicked() {
+                                let selected = self.selected_entry == Some(i);
+                                if item.children.is_empty() {
+                                    if ui.selectable_label(selected, text).clicked() {
                                         select = Some(i);
                                     }
-                                })
-                                .body(|ui| {
-                                    for &c in &item.children {
-                                        let c = c as usize;
-                                        let label = format!("{}  [{}]", g.entry_label(c), lifecycle_badge(g.entry_lifecycle(c)));
-                                        if ui.selectable_label(self.selected_entry == Some(c), label).clicked() {
-                                            select = Some(c);
+                                    continue;
+                                }
+                                let id = ui.make_persistent_id(("entry", i));
+                                let mut state =
+                                    egui::collapsing_header::CollapsingState::load_with_default_open(ui.ctx(), id, self.prefs.opens(item.children.len()));
+                                if let Some(open) = fold {
+                                    state.set_open(open);
+                                }
+                                state
+                                    .show_header(ui, |ui| {
+                                        if ui.selectable_label(selected, format!("{text}  ({})", item.children.len())).clicked() {
+                                            select = Some(i);
                                         }
-                                    }
-                                });
-                        }
-                    });
-            }
-            ui.add_space(12.0);
-            ui.label(egui::RichText::new("MODULES").small().color(style::MUTED));
-            let hidden = self.cache.options().hidden;
-            for m in g.children(g.root()).filter(|&m| !g.flags(m).intersects(hidden)) {
-                egui::CollapsingHeader::new(g.name(m))
-                    .id_salt(("mod", m))
-                    .default_open(self.prefs.opens(g.children(m).filter(|&p| !g.flags(p).intersects(hidden)).count()))
-                    .open(fold)
-                    .show(ui, |ui| {
-                        if ui.small_button("show").clicked() {
-                            fly = Some(m);
-                        }
-                        for p in g.children(m).filter(|&p| !g.flags(p).intersects(hidden)).take(300) {
-                            if ui.selectable_label(self.selected == Some(p), g.name(p)).clicked() {
-                                fly = Some(p);
+                                    })
+                                    .body(|ui| {
+                                        for &c in &item.children {
+                                            let c = c as usize;
+                                            let label = format!("{}  [{}]", g.entry_label(c), lifecycle_badge(g.entry_lifecycle(c)));
+                                            if ui.selectable_label(self.selected_entry == Some(c), label).clicked() {
+                                                select = Some(c);
+                                            }
+                                        }
+                                    });
                             }
-                        }
-                    });
-            }
-        });
+                        });
+                }
+                ui.add_space(12.0);
+                ui.label(egui::RichText::new("MODULES").small().color(style::MUTED));
+                let hidden = self.cache.options().hidden;
+                for m in g.children(g.root()).filter(|&m| !g.flags(m).intersects(hidden)) {
+                    egui::CollapsingHeader::new(g.name(m))
+                        .id_salt(("mod", m))
+                        .default_open(self.prefs.opens(g.children(m).filter(|&p| !g.flags(p).intersects(hidden)).count()))
+                        .open(fold)
+                        .show(ui, |ui| {
+                            if ui.small_button("show").clicked() {
+                                fly = Some(m);
+                            }
+                            for p in g.children(m).filter(|&p| !g.flags(p).intersects(hidden)).take(300) {
+                                if ui.selectable_label(self.selected == Some(p), g.name(p)).clicked() {
+                                    fly = Some(p);
+                                }
+                            }
+                        });
+                }
+            });
+        }
         if fold_next.is_some() {
             self.left_fold = fold_next;
             ui.ctx().request_repaint();

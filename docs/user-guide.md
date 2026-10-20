@@ -128,15 +128,16 @@ enough to read.
   cached versions** deletes them all. Blocks are matched by their
   names: new ones are outlined green with `NEW`, changed ones amber with `+added −removed` lines, the rest dimmed.
   Open boxes add up what changed inside them (`2 new · 3 changed · 1 removed`), card rows are tinted with their line
-  counts and any complexity increase, and arrows the change introduced are drawn green. The left
-  panel lists every change, riskiest first, then new and removed dependencies (upward ones flagged); click one to fly
-  to it, or step through them with `N` / `P`. The current change (the selected one, else the last one stepped to) is
-  highlighted, and the list scrolls to it when you select it elsewhere (on the map, with `N` / `P`, by Ctrl+click
-  in the code); the target button above the list scrolls back to it after you scrolled away. Each change says why it
-  may deserve a look: `complexity 8 to 14`, `used by 12` (many callers), `signature` (a public block's first line changed), `made public`, `unused` (a new
-  block nothing uses) and `untested` (no test reaches it). **By package** groups the list instead; click a package
-  to fold it, or fold and unfold them all with `-` `+` next to the progress. While reviewing, the left panel shows only
-  the review: Insights, Entry points and Modules come back when the review ends.
+  counts and any complexity increase, and arrows the change introduced are drawn green. The left panel lists every
+  change, riskiest first; click one to fly to it, or step through them with `N` / `P`. The current change (the
+  selected one, else the last one stepped to) is highlighted, and the list scrolls to it when you select it elsewhere
+  (on the map, with `N` / `P`, by Ctrl+click in the code); the target button above the list scrolls back to it after
+  you scrolled away. Each change says why it may deserve a look: `complexity 8 to 14`, `used by 12` (many callers),
+  `signature` (a public block's first line changed), `made public`, `new upward dependency on <package>` (it adds a
+  dependency against the layering), `unused` (a new block nothing uses) and `untested` (no test reaches it). **By
+  package** groups the list instead; click a package to fold it, or fold and unfold them all with `-` `+` next to the
+  progress. While reviewing, the left panel shows only the review: Insights, Entry points and Modules come back when
+  the review ends.
   Zoom into a changed file to see its added lines in green and red marks where lines were removed; hover a mark to
   read them. Renamed or moved blocks show as removed plus new.
 - **Sequence diagrams.** Right-click a method (or select it and press `S`, or use the button in the right panel) to

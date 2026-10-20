@@ -26,6 +26,7 @@ pub enum Risk {
     MadePublic,
     Untested,
     Unused(Usage),
+    Upward(String),
 }
 
 impl Risk {
@@ -37,6 +38,7 @@ impl Risk {
             Risk::MadePublic => "made public".into(),
             Risk::Untested => "untested".into(),
             Risk::Unused(u) => u.label().unwrap_or_default().into(),
+            Risk::Upward(target) => format!("new upward dependency on {target}"),
         }
     }
 
@@ -44,7 +46,7 @@ impl Risk {
         match self {
             Risk::Complexity(before, after) => 30 + u32::from(after - before),
             Risk::Callers(n) => 20 + n.min(&30),
-            Risk::Signature => 25,
+            Risk::Signature | Risk::Upward(_) => 25,
             Risk::Unused(_) => 20,
             Risk::MadePublic => 15,
             Risk::Untested => 10,
@@ -74,6 +76,23 @@ fn risks(g: &ArchivedGraph, n: NodeId, c: &Change, a: &Analysis, limits: Limits)
         out.push(Risk::Untested);
     }
     out
+}
+
+fn reaches(g: &ArchivedGraph, n: NodeId, target: NodeId) -> bool {
+    g.out_edges(n).iter().any(|e| g.is_ancestor(target, e.to.to_native())) || g.children(n).any(|c| reaches(g, c, target))
+}
+
+pub fn flag_upward(g: &ArchivedGraph, items: &mut [ReviewItem], upward: &[(NodeId, NodeId)]) {
+    for &(from, to) in upward {
+        let inside: Vec<usize> = (0..items.len()).filter(|&i| items[i].node.is_some_and(|n| g.is_ancestor(from, n) || g.is_ancestor(n, from))).collect();
+        let callers: Vec<usize> = inside.iter().copied().filter(|&i| items[i].node.is_some_and(|n| reaches(g, n, to))).collect();
+        for i in if callers.is_empty() { inside } else { callers } {
+            let risk = Risk::Upward(g.name(to).to_string());
+            if !items[i].risks.contains(&risk) {
+                items[i].risks.push(risk);
+            }
+        }
+    }
 }
 
 pub fn by_risk(items: &mut [ReviewItem]) {

@@ -164,3 +164,23 @@ fn the_list_scrolls_only_when_the_current_row_is_out_of_view() {
     assert_eq!(scroll_to_row(4, 40.0, 0.0, 180.0, false), Some(90.0), "half cut off at the bottom");
     assert_eq!(scroll_to_row(2, 40.0, 0.0, 200.0, true), Some(0.0), "on request, centred but never above the top");
 }
+
+const PAY: &str = "package pay\n\nfunc Charge(x int) int {\n\treturn x\n}\n";
+const PAYING: &str = "package cart\n\nimport \"example.com/shop/pay\"\n\ntype Cart struct{}\n\nfunc (c *Cart) Add(x int) int {\n\treturn pay.Charge(x)\n}\n\nfunc (c *Cart) Clear() {}\n\ntype Coupon struct{}\n";
+
+#[test]
+fn a_change_that_adds_an_upward_dependency_says_so_and_ranks_high() {
+    let (b, t) = (side(&[("cart/cart.go", BASE), ("pay/pay.go", PAY)]), side(&[("cart/cart.go", PAYING), ("pay/pay.go", PAY)]));
+    let tg = t.file.graph();
+    let r = compare(b.file.graph(), &b.dir, tg, &t.dir);
+    let named = |name: &str| (0..tg.node_count() as NodeId).find(|&n| tg.name(n) == name).unwrap_or_else(|| panic!("no {name}"));
+    let arrow = (named("cart"), named("pay"));
+    assert!(r.new_arrows.contains(&arrow), "{:?}", r.new_arrows);
+    let mut items = items(tg, &r, &analyse(tg, &t.dir));
+    flag_upward(tg, &mut items, &[arrow]);
+    let risks = |label: &str| items.iter().find(|i| i.label == label).unwrap().risks.iter().map(Risk::label).collect::<Vec<_>>();
+    assert!(risks("Cart.Add").contains(&"new upward dependency on pay".to_string()), "{:?}", risks("Cart.Add"));
+    assert!(!risks("Coupon").iter().any(|r| r.contains("upward")), "Coupon does not call into pay");
+    by_risk(&mut items);
+    assert_eq!(items[0].label, "Cart.Add");
+}
