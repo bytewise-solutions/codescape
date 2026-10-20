@@ -67,7 +67,7 @@ Download the file for your system from the [releases page](https://github.com/by
   `codescape.desktop` is already installed (by `make install` or a package) in any of the XDG data folders. It
   updates that entry when the AppImage is moved or upgraded, and leaves it alone when CodeScape is not the AppImage
   running (an `APPIMAGE` inherited from another AppImage is ignored).
-- **Windows** (x86-64): `codescape-<version>-x86_64.exe`. Run it directly; there is nothing to install.
+- **Windows** (x86-64): `CodeScape-<version>-x86_64.exe`. Run it directly; there is nothing to install.
 - **macOS** (Apple Silicon and Intel): `CodeScape-<version>-macos.dmg`. Drag CodeScape to Applications. The app is not
   signed yet, so the first time right-click it ▸ **Open** and confirm, or run
   `xattr -d com.apple.quarantine /Applications/CodeScape.app`.
