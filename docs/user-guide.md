@@ -205,7 +205,8 @@ enough to read.
   their entries in USES / USED BY lists. Tick **View ▸ Logging** to show them.
 - **Test code is out:** test sources, test helpers (files importing `testing`/testify or JUnit/Mockito, folders such
   as `testutil`/`testdata`, globs under `[test] paths`), Go mocks (mockery output, `mock_*.go` and `*_mock.go` files, folders
-  ending in `mock` or `mocks` such as `rawemailmock`, types named `Mock…`) and test mains are not drawn or listed. Tick **View ▸ Tests**
+  named `mock` or `mocks`, ending in `_mock`/`-mocks`, or named after their parent package plus `mock` such as
+  `rawemail/rawemailmock`, but not `hammock`, types named `Mock…`) and test mains are not drawn or listed. Tick **View ▸ Tests**
   to draw them and **View ▸ Test dependencies** to see test-only dependencies.
 
 ## Choosing what's on the map

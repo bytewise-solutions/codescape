@@ -329,3 +329,20 @@ fn clearing_removes_old_layout_exports_and_their_indexes_whatever_their_age() {
     assert!(cache.join(format!("{pk}.codescape")).exists(), "the project's own index stays");
     assert!(fresh.dir.join("go.mod").exists() && fresh.index.exists(), "a recent export stays");
 }
+
+#[test]
+fn an_export_cut_short_long_ago_is_removed_before_exporting_again() {
+    let tmp = tempfile::tempdir().unwrap();
+    let repo = small_repo(tmp.path());
+    let cache = tmp.path().join("cache");
+    let sha = git_out(&repo, &["rev-parse", "HEAD"]);
+    let version = cache.join("exports").join(format!("{}-{}", codescape_index::project_key(&repo.canonicalize().unwrap()), &sha[..12]));
+    let (stale, running) = (version.join("repo.partial999-0"), version.join("repo.partial998-0"));
+    std::fs::create_dir_all(stale.join("cart")).unwrap();
+    std::fs::create_dir_all(&running).unwrap();
+    let old = std::time::SystemTime::now() - std::time::Duration::from_secs(2 * 24 * 3600);
+    std::fs::File::open(&stale).unwrap().set_modified(old).unwrap();
+    index_revision(&repo, "main", &ProjectConfig::default(), &cache, &|_| {}).unwrap();
+    assert!(!stale.exists(), "a crashed export is cleaned");
+    assert!(running.exists(), "a recent one may still be running");
+}

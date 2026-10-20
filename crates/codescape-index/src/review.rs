@@ -288,6 +288,19 @@ fn export(root: &Path, sha: &str, rel: &Path, dest: &Path) -> anyhow::Result<()>
     Ok(())
 }
 
+fn remove_stale_partials(dest: &Path) {
+    let (Some(dir), Some(name)) = (dest.parent(), dest.with_extension("partial").file_name().map(|n| n.to_string_lossy().into_owned())) else { return };
+    let stale =
+        |p: &Path| std::fs::metadata(p).and_then(|m| m.modified()).is_ok_and(|t| t.elapsed().unwrap_or_default() > std::time::Duration::from_secs(3600));
+    for e in std::fs::read_dir(dir).into_iter().flatten().flatten() {
+        if e.file_name().to_string_lossy().strip_prefix(&name).is_some_and(|rest| !rest.is_empty() && rest.bytes().all(|b| b == b'-' || b.is_ascii_digit()))
+            && stale(&e.path())
+        {
+            let _ = std::fs::remove_dir_all(e.path());
+        }
+    }
+}
+
 pub fn mark_used_at(r: &RevisionIndex, at: std::time::SystemTime) -> std::io::Result<()> {
     std::fs::File::create(r.version.join(USED_MARK))?.set_modified(at)
 }
@@ -409,6 +422,7 @@ pub fn index_revision(
     let checkout = version.join(root.file_name().unwrap_or_else(|| "repo".as_ref()));
     if !checkout.exists() {
         std::fs::create_dir_all(&version)?;
+        remove_stale_partials(&checkout);
         export(&root, &sha, &rel, &checkout)?;
     }
     let dir = checkout.join(rel);

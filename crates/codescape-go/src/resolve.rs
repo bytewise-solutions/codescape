@@ -93,7 +93,11 @@ struct PkgInfo {
 }
 
 pub fn is_mock_dir(dir: &str) -> bool {
-    dir.split('/').any(|s| s.ends_with("mock") || s.ends_with("mocks"))
+    let segs: Vec<&str> = dir.split('/').collect();
+    segs.iter().enumerate().any(|(i, s)| {
+        let Some(stem) = s.strip_suffix("mocks").or_else(|| s.strip_suffix("mock")) else { return false };
+        stem.is_empty() || stem.ends_with(['_', '-', '.']) || (i > 0 && stem == segs[i - 1])
+    })
 }
 
 pub fn is_mock_type(name: &str) -> bool {
