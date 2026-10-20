@@ -320,6 +320,15 @@ impl CommitStep {
     }
 }
 
+pub fn step_from(visible: &[usize], cursor: Option<usize>, forward: bool) -> Option<usize> {
+    let c = match cursor {
+        Some(c) if !visible.contains(&c) => c,
+        _ => return step(visible.len(), cursor.and_then(|c| visible.iter().position(|&v| v == c)), forward).map(|i| visible[i]),
+    };
+    let next = if forward { visible.iter().find(|&&v| v > c).or(visible.first()) } else { visible.iter().rev().find(|&&v| v < c).or(visible.last()) };
+    next.copied()
+}
+
 pub fn current(items: &[ReviewItem], cursor: Option<usize>, selected: Option<NodeId>) -> Option<usize> {
     let Some(s) = selected else { return cursor };
     if cursor.is_some_and(|c| items[c].node.or(items[c].parent) == Some(s)) {

@@ -352,3 +352,14 @@ fn same_named_functions_in_one_package_keep_their_own_marks() {
     marks.toggle(hooks[0]);
     assert_eq!((marks.state(hooks[0]), marks.state(hooks[1])), (MarkState::Reviewed, MarkState::Unseen));
 }
+
+#[test]
+fn stepping_from_a_change_hidden_since_goes_on_from_where_it_was() {
+    let visible = [0, 1, 4, 6];
+    assert_eq!(step_from(&visible, Some(3), true), Some(4), "after the change just marked and hidden");
+    assert_eq!(step_from(&visible, Some(3), false), Some(1));
+    assert_eq!(step_from(&visible, Some(7), true), Some(0), "wraps");
+    assert_eq!(step_from(&visible, Some(1), true), Some(4));
+    assert_eq!(step_from(&visible, None, false), Some(6));
+    assert_eq!(step_from(&[], Some(1), true), None);
+}

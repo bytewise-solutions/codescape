@@ -17,7 +17,7 @@ use crate::reading::{fill_view, leave_zoom, level_node, open_font, zoom_text};
 use crate::refs::{FileRefs, followable};
 use crate::review_view::{
     BoxCounts, CommitStep, ItemKind, Limits, MarkState, ReviewItem, ReviewMarks, ReviewProgress, ReviewScope, Risk, box_counts, by_risk, current, flag_upward,
-    items_with as review_items, mark_label, scroll_to_row, shown_items, step as review_step, within,
+    items_with as review_items, mark_label, scroll_to_row, shown_items, step_from, within,
 };
 use crate::search::{self, SearchIndex, member_at_line};
 use crate::settings_window::{self, SettingsForm};
@@ -1470,10 +1470,8 @@ impl Project {
         if let Some(rv) = &mut self.review {
             let forward = plain(Key::N);
             if forward || plain(Key::P) {
-                let visible = rv.visible(self.file.graph());
-                let at = rv.cursor.and_then(|c| visible.iter().position(|&v| v == c));
-                if let Some(i) = review_step(visible.len(), at, forward) {
-                    self.goto_review_item(visible[i]);
+                if let Some(i) = step_from(&rv.visible(self.file.graph()), rv.cursor, forward) {
+                    self.goto_review_item(i);
                 }
                 return;
             }
