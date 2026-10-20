@@ -87,7 +87,8 @@ enough to read.
   select or review; fold it with its arrow or **View ▸ Legend**.
 - **The file when you zoom in close.** The class, struct or top-level function under the pointer (the middle of the
   view from the keyboard) gives way to its whole file once it is wide enough on screen, and the code then fills the
-  whole map area; the minimap and the legend step aside. Only that one opens. While it is open, zooming (`Ctrl` +
+  whole map area; the minimap and the legend step aside. The text starts as large as lets the rest of the file from that point fit the
+  view (13 px at most, 9 px at least). Only that one opens. While it is open, zooming (`Ctrl` +
   wheel, pinch, `+` `−`) changes only the text size; zoom out past the smallest size, or press `Esc`, to go back to
   the map. The wheel and dragging scroll the file, sideways too (horizontal wheel, `Shift` + wheel or a sideways
   drag), and so do `Page Up`/`Page Down`/`Home`/`End`. It opens at the type's first line. The type's own lines and

@@ -5,6 +5,12 @@ use codescape_layout::Rect;
 pub const READING_OPEN_PT: f32 = 13.0;
 pub const READING_MIN_PT: f32 = 6.5;
 pub const READING_MAX_PT: f32 = 32.0;
+pub const READING_FIT_MIN_PT: f32 = 9.0;
+
+pub fn open_font(lines: u32, view_h: f32) -> f32 {
+    let fit = (view_h - 12.0) / (lines.max(1) as f32 * crate::source::LINE_SPACING);
+    fit.clamp(READING_FIT_MIN_PT, READING_OPEN_PT)
+}
 
 pub fn zoom_text(font: f32, factor: f32) -> Option<f32> {
     let next = font * factor;

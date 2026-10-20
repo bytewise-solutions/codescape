@@ -13,7 +13,7 @@ use crate::input::{CHEATSHEET, Nav, Step, interpret, nearest_in};
 use crate::inspector;
 use crate::keys::{Action as KeyAction, Keymap};
 use crate::panels::{EntryGroupView, group_entries};
-use crate::reading::{fill_view, leave_zoom, level_node, zoom_text};
+use crate::reading::{fill_view, leave_zoom, level_node, open_font, zoom_text};
 use crate::refs::{FileRefs, followable};
 use crate::review_view::{CommitStep, ItemKind, Limits, MarkState, ReviewItem, ReviewMarks, Risk, by_risk, items_with as review_items, step as review_step};
 use crate::search::{self, SearchIndex, member_at_line};
@@ -2410,7 +2410,14 @@ impl Project {
         if let Some(rv) = &self.review {
             review_dim(rv, &mut self.scene);
         }
-        self.reading = fill_view(&mut self.scene, self.reading, self.goto_line.map(|(t, _)| t), self.view);
+        let was_reading = self.reading.map(|(n, _)| n);
+        self.reading = fill_view(&mut self.scene, self.reading, self.goto_line.map(|(t, _)| t), self.view).map(|(n, font)| {
+            if Some(n) == was_reading {
+                return (n, font);
+            }
+            let total = g.file(n).and_then(|f| self.source.borrow_mut().file(f).map(|l| l.len() as u32)).unwrap_or(0);
+            (n, open_font(total.saturating_sub(g.span(n).0.saturating_sub(1)), self.view.h))
+        });
         let shown: Vec<(NodeId, f32, f32)> =
             self.scene.boxes.iter().filter(|b| b.source).filter_map(|b| Some((b.node, b.rect.y, self.page_font(b)? * LINE_SPACING))).collect();
         self.file_scroll.retain(|n, _| shown.iter().any(|(s, _, _)| s == n));
