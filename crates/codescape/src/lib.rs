@@ -1,6 +1,7 @@
 pub mod app;
 pub mod camera;
 pub mod canvas;
+pub mod desktop;
 pub mod find;
 pub mod focus;
 pub mod input;

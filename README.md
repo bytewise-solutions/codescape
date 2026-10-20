@@ -62,6 +62,8 @@ Download the file for your system from the [releases page](https://github.com/by
 
 - **Linux** (x86-64): `CodeScape-<version>-x86_64.AppImage`. Make it executable (`chmod +x`) and run it. If it
   complains about FUSE, install `libfuse2` or start it with `--appimage-extract-and-run`.
+  On its first start it adds a hidden
+  `codescape.desktop` and its icon under `~/.local/share` so Wayland desktops can show the window's icon.
 - **Windows** (x86-64): `codescape-<version>-x86_64.exe`. Run it directly; there is nothing to install.
 - **macOS** (Apple Silicon and Intel): `CodeScape-<version>-macos.dmg`. Drag CodeScape to Applications. The app is not
   signed yet, so the first time right-click it ▸ **Open** and confirm, or run

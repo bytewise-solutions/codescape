@@ -52,6 +52,10 @@ struct Args {
 
 fn main() -> eframe::Result {
     let args = Args::parse();
+    #[cfg(target_os = "linux")]
+    if let (Some(appimage), Some(data)) = (std::env::var_os("APPIMAGE"), dirs::data_dir()) {
+        let _ = codescape::desktop::ensure_entry(&data, std::path::Path::new(&appimage));
+    }
     let options = eframe::NativeOptions {
         viewport: egui::ViewportBuilder::default()
             .with_title(codescape::app::window_title(None))

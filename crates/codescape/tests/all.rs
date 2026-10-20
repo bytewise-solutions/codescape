@@ -1,4 +1,5 @@
 mod camera;
+mod desktop;
 mod find;
 mod focus;
 mod input;
