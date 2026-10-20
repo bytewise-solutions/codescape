@@ -329,6 +329,10 @@ pub fn step_from(visible: &[usize], cursor: Option<usize>, forward: bool) -> Opt
     next.copied()
 }
 
+pub fn marks_cursor_only(items: &[ReviewItem], cursor: Option<usize>, selected: Option<NodeId>) -> bool {
+    cursor.is_some_and(|c| items[c].node.is_none() && selected.is_some() && items[c].parent == selected)
+}
+
 pub fn current(items: &[ReviewItem], cursor: Option<usize>, selected: Option<NodeId>) -> Option<usize> {
     let Some(s) = selected else { return cursor };
     if cursor.is_some_and(|c| items[c].node.or(items[c].parent) == Some(s)) {

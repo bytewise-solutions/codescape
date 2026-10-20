@@ -363,3 +363,23 @@ fn stepping_from_a_change_hidden_since_goes_on_from_where_it_was() {
     assert_eq!(step_from(&visible, None, false), Some(6));
     assert_eq!(step_from(&[], Some(1), true), None);
 }
+
+#[test]
+fn r_on_a_removed_change_marks_only_that_change() {
+    let item = |node: Option<NodeId>, parent: Option<NodeId>| ReviewItem {
+        node,
+        parent,
+        group: String::new(),
+        label: String::new(),
+        kind: if node.is_some() { ItemKind::Changed } else { ItemKind::Removed },
+        detail: String::new(),
+        key: String::new(),
+        fingerprint: 1,
+        risks: Vec::new(),
+        base_flags: NodeFlags::NONE,
+    };
+    let items = [item(Some(5), Some(3)), item(None, Some(3))];
+    assert!(marks_cursor_only(&items, Some(1), Some(3)), "stepping to it selected its class");
+    assert!(!marks_cursor_only(&items, Some(1), Some(2)), "another selection marks what it holds");
+    assert!(!marks_cursor_only(&items, Some(0), Some(3)));
+}

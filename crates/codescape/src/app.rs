@@ -17,7 +17,7 @@ use crate::reading::{fill_view, leave_zoom, level_node, open_font, zoom_text};
 use crate::refs::{FileRefs, followable};
 use crate::review_view::{
     BoxCounts, CommitStep, ItemKind, Limits, MarkState, ReviewItem, ReviewMarks, ReviewProgress, ReviewScope, Risk, box_counts, by_risk, current, flag_upward,
-    items_with as review_items, mark_label, scroll_to_row, shown_items, step_from, within,
+    items_with as review_items, mark_label, marks_cursor_only, scroll_to_row, shown_items, step_from, within,
 };
 use crate::search::{self, SearchIndex, member_at_line};
 use crate::settings_window::{self, SettingsForm};
@@ -1488,7 +1488,9 @@ impl Project {
             }
             if plain(Key::R) {
                 let g = self.file.graph();
-                if let Some(n) = self.selected.filter(|&n| !within(g, &rv.items, n).is_empty()) {
+                if marks_cursor_only(&rv.items, rv.cursor, self.selected) {
+                    self.review_error = rv.toggle(g, rv.cursor.unwrap_or_default());
+                } else if let Some(n) = self.selected.filter(|&n| !within(g, &rv.items, n).is_empty()) {
                     self.review_error = rv.toggle_within(g, n);
                 } else if let Some(c) = rv.cursor {
                     self.review_error = rv.toggle(g, c);
