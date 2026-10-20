@@ -39,4 +39,5 @@ sed -i "0,/^version = \"$current\"/s//version = \"$next\"/" Cargo.toml
 cargo update --workspace --offline -q
 git commit -q -am "$message"
 git tag -a "$tag" -m "Release $tag"
-echo "committed and tagged $tag locally; look it over, then run make publish"
+git push --atomic origin master "$tag"
+echo "pushed $tag; the Release workflow builds and publishes it"

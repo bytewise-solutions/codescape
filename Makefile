@@ -1,4 +1,4 @@
-.PHONY: build check release publish help
+.PHONY: build check release help
 
 type ?= minor
 dry-run ?=
@@ -16,11 +16,7 @@ check:
 release:
 	@scripts/release.sh $(type) $(dry-run)
 
-publish:
-	@scripts/publish.sh
-
 help:
 	@echo "make build      Build codescape and codescape-index into target/release"
 	@echo "make check      Formatting, clippy and the tests, as CI runs them"
-	@echo "make release    Check, bump the version, commit and tag on master, locally (type=patch|minor|major, dry-run=true)"
-	@echo "make publish    Push master and the release tag, follow the Release workflow, print the release page"
+	@echo "make release    Check, bump the version, commit, tag and push from master (type=patch|minor|major, dry-run=true)"
