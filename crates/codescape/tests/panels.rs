@@ -65,3 +65,13 @@ fn entries_skip_tests() {
     let all: Vec<&str> = groups.iter().flat_map(|gr| gr.items.iter().map(|i| g.entry_label(i.entry as usize))).collect();
     assert_eq!(all, ["App", "Tool"]);
 }
+
+#[test]
+fn panel_text_size_is_remembered_and_kept_in_range() {
+    use codescape::panels::Prefs;
+    assert_eq!(Prefs::parse("").panel_text, 1.0, "a missing file keeps the usual size");
+    let p = Prefs { panel_text: 1.4 };
+    assert_eq!(Prefs::parse(&p.to_toml()).panel_text, 1.4);
+    assert_eq!(Prefs::parse("panel_text = 9.0").panel_text, 2.0);
+    assert_eq!(Prefs::parse("panel_text = 0.1").panel_text, 0.8);
+}

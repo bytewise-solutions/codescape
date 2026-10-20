@@ -40,6 +40,10 @@ pub fn text_styles() -> std::collections::BTreeMap<egui::TextStyle, egui::FontId
     .into()
 }
 
+pub fn scaled_text_styles(scale: f32) -> std::collections::BTreeMap<egui::TextStyle, egui::FontId> {
+    text_styles().into_iter().map(|(style, font)| (style, egui::FontId::new(font.size * scale, font.family))).collect()
+}
+
 pub fn visuals() -> egui::Visuals {
     let mut v = egui::Visuals::dark();
     v.panel_fill = PANEL;

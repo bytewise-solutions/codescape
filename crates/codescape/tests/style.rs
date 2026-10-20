@@ -165,3 +165,12 @@ fn the_legend_shows_the_complexity_ramp_only_when_the_map_is_tinted() {
     assert!(legend(LegendShown { complexity_colour: true, ..Default::default() }).iter().any(|i| matches!(i.sample, LegendSample::Ramp)));
     assert!(legend(LegendShown::default()).is_empty());
 }
+
+#[test]
+fn panel_text_scales_every_text_style() {
+    use codescape::style::{scaled_text_styles, text_styles};
+    let (base, big) = (text_styles(), scaled_text_styles(1.5));
+    for (style, font) in &base {
+        assert_eq!(big[style].size, font.size * 1.5, "{style:?}");
+    }
+}

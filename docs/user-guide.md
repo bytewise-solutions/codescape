@@ -226,6 +226,9 @@ too).
 The `+` and `-` buttons at the top of the left panel (next to ENTRY POINTS) and in the right panel (next to Hide)
 expand or collapse every section of that panel at once.
 
+**View ▸ Panel text** sets the size of the side panels' text (80–200 %), remembered for every project in
+`prefs.toml` in the user config folder.
+
 ## Screenshots without a person at the window
 
 ```sh

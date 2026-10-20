@@ -42,3 +42,44 @@ pub fn group_entries(g: &ArchivedGraph, vis: &VisualRules) -> Vec<EntryGroupView
     groups.retain(|grp| !grp.items.is_empty());
     groups
 }
+
+pub const PANEL_TEXT: std::ops::RangeInclusive<f32> = 0.8..=2.0;
+
+#[derive(Clone, Copy, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(default)]
+pub struct Prefs {
+    pub panel_text: f32,
+}
+
+impl Default for Prefs {
+    fn default() -> Prefs {
+        Prefs { panel_text: 1.0 }
+    }
+}
+
+impl Prefs {
+    pub fn parse(text: &str) -> Prefs {
+        let p: Prefs = toml::from_str(text).unwrap_or_default();
+        Prefs { panel_text: p.panel_text.clamp(*PANEL_TEXT.start(), *PANEL_TEXT.end()) }
+    }
+
+    pub fn to_toml(&self) -> String {
+        toml::to_string(self).unwrap_or_default()
+    }
+
+    fn path() -> Option<std::path::PathBuf> {
+        dirs::config_dir().map(|d| d.join("codescape").join("prefs.toml"))
+    }
+
+    pub fn load() -> Prefs {
+        Prefs::path().and_then(|p| std::fs::read_to_string(p).ok()).map_or_else(Prefs::default, |t| Prefs::parse(&t))
+    }
+
+    pub fn save(&self) {
+        let Some(path) = Prefs::path() else { return };
+        if let Some(dir) = path.parent() {
+            let _ = std::fs::create_dir_all(dir);
+        }
+        let _ = std::fs::write(path, self.to_toml());
+    }
+}

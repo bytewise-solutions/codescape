@@ -503,6 +503,7 @@ struct Project {
     insights: crate::insights::InsightsCache,
     flags: crate::insights::FlagsCache,
     insights_selection: bool,
+    prefs: crate::panels::Prefs,
     left_fold: Option<bool>,
     right_fold: Option<bool>,
     sequence: Option<sequence_ui::SequenceView>,
@@ -738,6 +739,7 @@ impl Project {
             insights: Default::default(),
             flags: Default::default(),
             insights_selection: false,
+            prefs: crate::panels::Prefs::load(),
             left_fold: None,
             right_fold: None,
             sequence: None,
@@ -936,6 +938,15 @@ impl Project {
             if ui.add(egui::Button::new("Map only").shortcut_text(both)).clicked() {
                 self.toggle_both_panels();
             }
+            ui.horizontal(|ui| {
+                ui.label("Panel text");
+                let mut size = self.prefs.panel_text;
+                let slider = egui::Slider::new(&mut size, crate::panels::PANEL_TEXT).step_by(0.1).custom_formatter(|v, _| format!("{:.0}%", v * 100.0));
+                if ui.add(slider).changed() {
+                    self.prefs.panel_text = size;
+                    self.prefs.save();
+                }
+            });
             ui.separator();
             if ui.add(egui::Button::new("Jump to…").shortcut_text(jump)).clicked() {
                 self.search_open = true;
@@ -1591,7 +1602,8 @@ impl Project {
             self.toggle_both_panels();
         }
         if self.show_left {
-            egui::Panel::left("entries").resizable(true).default_size(270.0).min_size(230.0).show(ui, |ui| {
+            egui::Panel::left("entries").resizable(true).default_size(270.0 * self.prefs.panel_text).min_size(230.0).show(ui, |ui| {
+                ui.style_mut().text_styles = style::scaled_text_styles(self.prefs.panel_text);
                 self.entries_panel(ui);
                 if panel_toggle(ui, Align2::RIGHT_BOTTOM, "<", &format!("Hide this panel ({})", key_text(&self.keys, KeyAction::LeftPanel))) {
                     self.show_left = false;
@@ -1605,7 +1617,8 @@ impl Project {
             });
         }
         if self.show_right {
-            egui::Panel::right("inspector").resizable(true).default_size(290.0).show(ui, |ui| {
+            egui::Panel::right("inspector").resizable(true).default_size(290.0 * self.prefs.panel_text).show(ui, |ui| {
+                ui.style_mut().text_styles = style::scaled_text_styles(self.prefs.panel_text);
                 self.inspector(ui);
                 if panel_toggle(ui, Align2::LEFT_BOTTOM, ">", &format!("Hide this panel ({})", key_text(&self.keys, KeyAction::RightPanel))) {
                     self.show_right = false;
@@ -2002,7 +2015,8 @@ impl Project {
         egui::ScrollArea::vertical().show(ui, |ui| {
             if let Some(i) = self.selected_entry {
                 ui.label(egui::RichText::new("ENTRY POINT").small().color(style::MUTED));
-                ui.label(egui::RichText::new(g.entry_label(i)).size(16.0).color(style::ENTRY)).on_hover_text(format!("found by {}", g.entry_rule(i)));
+                ui.label(egui::RichText::new(g.entry_label(i)).size(16.0 * self.prefs.panel_text).color(style::ENTRY))
+                    .on_hover_text(format!("found by {}", g.entry_rule(i)));
                 let mut line = format!("{} · {}", g.entry_kind(i).replace('-', " "), g.entry_lifecycle(i).label());
                 if let Some(h) = g.entry_handoff(i) {
                     line.push_str(&format!(" · hands off to {h}"));
@@ -2029,7 +2043,7 @@ impl Project {
                     }
                 });
             });
-            ui.label(egui::RichText::new(&h.name).size(18.0).color(style::TEXT));
+            ui.label(egui::RichText::new(&h.name).size(18.0 * self.prefs.panel_text).color(style::TEXT));
             if !h.owners.is_empty() {
                 ui.horizontal_wrapped(|ui| {
                     ui.spacing_mut().item_spacing.x = 4.0;
