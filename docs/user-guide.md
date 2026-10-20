@@ -153,8 +153,8 @@ enough to read.
   left panel tracks progress, with a bar of the reviewed changes (green), those changed since review (amber) and the
   rest (grey). When the selection holds changes, a smaller bar below counts them (`In cart: 2 / 5`).
   **Hide reviewed** leaves the rest. A mark remembers the block's text: when the agent changes it again, the change
-  comes back as `changed since review`. Marks are kept per project in the cache folder. **Mark reviewed** in the right
-  panel (or `R`) marks every change inside the selection at once: a method, a class or file, or a whole package.
+  comes back as `changed since review`. Marks are kept per project in the cache folder. **Mark reviewed** at the top of the
+  right panel, under the name (or `R`), marks every change inside the selection at once: a method, a class or file, or a whole package.
   Right-click a box or a method row on the map for the same action on it (**Unmark reviewed** once all are marked).
 - **Unused code.** **View ▸ Unused code** marks blocks nothing in main code calls, creates or names outside their
   own lines, and lists them under Insights ▸ Unused code: `unused`, `no caller in the project` (public, so possibly API used by

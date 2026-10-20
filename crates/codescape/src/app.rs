@@ -2188,6 +2188,19 @@ impl Project {
                 });
             });
             ui.label(egui::RichText::new(&h.name).size(18.0 * self.prefs.panel_text).color(style::TEXT));
+            let marking = self.review.as_ref().and_then(|rv| {
+                let inside = within(g, &rv.items, n);
+                Some((mark_label(&rv.marks, &rv.items, &inside)?, rv.marks.all_reviewed(&rv.items, &inside)))
+            });
+            if let Some((label, unmark)) = marking {
+                let (fill, text) = if unmark { (style::BAR, style::MUTED) } else { (style::ACCENT, style::BG) };
+                let button = egui::Button::new(egui::RichText::new(label).strong().color(text)).fill(fill).corner_radius(4.0);
+                ui.add_space(4.0);
+                if ui.add_sized([ui.available_width(), 28.0], button).on_hover_text("R: every change inside the selection").clicked() {
+                    mark_selection = Some(n);
+                }
+                ui.add_space(4.0);
+            }
             if !h.owners.is_empty() {
                 ui.horizontal_wrapped(|ui| {
                     ui.spacing_mut().item_spacing.x = 4.0;
@@ -2231,11 +2244,6 @@ impl Project {
                     }
                     fold_next = fold_buttons(ui);
                 });
-            }
-            if let Some(label) = self.review.as_ref().and_then(|rv| mark_label(&rv.marks, &rv.items, &within(g, &rv.items, n)))
-                && ui.button(label).on_hover_text("R: every change inside the selection").clicked()
-            {
-                mark_selection = Some(n);
             }
             if let Some(l) = insights_ui::flags_ui(ui, g, self.flags.current()) {
                 self.pending_flag_go = Some(l);
