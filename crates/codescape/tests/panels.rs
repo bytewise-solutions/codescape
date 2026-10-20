@@ -70,9 +70,22 @@ fn entries_skip_tests() {
 fn panel_text_size_is_remembered_and_kept_in_range() {
     use codescape::panels::Prefs;
     assert_eq!(Prefs::parse("").panel_text, 1.0, "a missing file keeps the usual size");
-    let p = Prefs { panel_text: 1.4 };
+    let p = Prefs { panel_text: 1.4, ..Prefs::default() };
     assert_eq!(Prefs::parse(&p.to_toml()).panel_text, 1.4);
     assert_eq!(Prefs::parse("panel_text = 9.0").panel_text, 2.0);
     assert_eq!(Prefs::parse("panel_text = 0.1").panel_text, 0.8);
     assert_eq!(Prefs::parse("panel_text = nan").panel_text, 1.0);
+}
+
+#[test]
+fn lists_open_by_default_only_up_to_the_chosen_size() {
+    use codescape::panels::Prefs;
+    let p = Prefs::parse("");
+    assert_eq!(p.open_lists_up_to, 0, "everything starts collapsed");
+    assert!(!p.opens(1));
+    let p = Prefs::parse("open_lists_up_to = 12");
+    assert!(p.opens(12) && !p.opens(13));
+    assert!(!p.opens(0), "an empty list has nothing to show");
+    assert_eq!(Prefs::parse("open_lists_up_to = 100000").open_lists_up_to, 500);
+    assert_eq!(Prefs::parse(&p.to_toml()).open_lists_up_to, 12);
 }

@@ -229,6 +229,8 @@ expand or collapse every section of that panel at once.
 
 **View ▸ Panel text** sets the size of the side panels' text (80–200 %), remembered for every project in
 `prefs.toml` in the user config folder.
+**View ▸ Open lists up to** sets which sections of both panels start open: those with at most that many items
+(0, the default, starts them all collapsed). It is kept in the same file.
 
 ## Screenshots without a person at the window
 

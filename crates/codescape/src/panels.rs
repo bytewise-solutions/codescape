@@ -44,16 +44,18 @@ pub fn group_entries(g: &ArchivedGraph, vis: &VisualRules) -> Vec<EntryGroupView
 }
 
 pub const PANEL_TEXT: std::ops::RangeInclusive<f32> = 0.8..=2.0;
+pub const OPEN_LISTS_MAX: u32 = 500;
 
 #[derive(Clone, Copy, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
 #[serde(default)]
 pub struct Prefs {
     pub panel_text: f32,
+    pub open_lists_up_to: u32,
 }
 
 impl Default for Prefs {
     fn default() -> Prefs {
-        Prefs { panel_text: 1.0 }
+        Prefs { panel_text: 1.0, open_lists_up_to: 0 }
     }
 }
 
@@ -61,7 +63,11 @@ impl Prefs {
     pub fn parse(text: &str) -> Prefs {
         let p: Prefs = toml::from_str(text).unwrap_or_default();
         let size = if p.panel_text.is_finite() { p.panel_text } else { Prefs::default().panel_text };
-        Prefs { panel_text: size.clamp(*PANEL_TEXT.start(), *PANEL_TEXT.end()) }
+        Prefs { panel_text: size.clamp(*PANEL_TEXT.start(), *PANEL_TEXT.end()), open_lists_up_to: p.open_lists_up_to.min(OPEN_LISTS_MAX) }
+    }
+
+    pub fn opens(&self, len: usize) -> bool {
+        len > 0 && len <= self.open_lists_up_to as usize
     }
 
     pub fn to_toml(&self) -> String {

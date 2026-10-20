@@ -209,7 +209,8 @@ impl Project {
                 _ => None,
             };
             let count = if note.is_some() { String::new() } else { format!(" ({})", rows.len()) };
-            CollapsingHeader::new(format!("{}{count}", section.title)).id_salt(("insight", si)).default_open(si == 0).open(fold).show(ui, |ui| {
+            let open = note.is_none() && self.prefs.opens(rows.len());
+            CollapsingHeader::new(format!("{}{count}", section.title)).id_salt(("insight", si)).default_open(open).open(fold).show(ui, |ui| {
                 if let Some(note) = note {
                     ui.label(RichText::new(note).small().color(style::MUTED));
                     return;

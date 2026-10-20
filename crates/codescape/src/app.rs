@@ -976,6 +976,13 @@ impl Project {
                     self.prefs.save();
                 }
             });
+            ui.horizontal(|ui| {
+                ui.label("Open lists up to");
+                let drag = egui::DragValue::new(&mut self.prefs.open_lists_up_to).range(0..=crate::panels::OPEN_LISTS_MAX).suffix(" items");
+                if ui.add(drag).on_hover_text("0: every section starts collapsed").changed() {
+                    self.prefs.save();
+                }
+            });
             ui.separator();
             if ui.add(egui::Button::new("Jump to…").shortcut_text(jump)).clicked() {
                 self.search_open = true;
@@ -1941,7 +1948,7 @@ impl Project {
             for (gi, group) in self.groups.iter().enumerate() {
                 egui::CollapsingHeader::new(format!("{} ({})", group.label, group.items.len()))
                     .id_salt(("group", gi))
-                    .default_open(!group.collapsed)
+                    .default_open(self.prefs.opens(group.items.len()))
                     .open(fold)
                     .show(ui, |ui| {
                         for item in &group.items {
@@ -1958,7 +1965,8 @@ impl Project {
                                 continue;
                             }
                             let id = ui.make_persistent_id(("entry", i));
-                            let mut state = egui::collapsing_header::CollapsingState::load_with_default_open(ui.ctx(), id, false);
+                            let mut state =
+                                egui::collapsing_header::CollapsingState::load_with_default_open(ui.ctx(), id, self.prefs.opens(item.children.len()));
                             if let Some(open) = fold {
                                 state.set_open(open);
                             }
@@ -1984,16 +1992,20 @@ impl Project {
             ui.label(egui::RichText::new("MODULES").small().color(style::MUTED));
             let hidden = self.cache.options().hidden;
             for m in g.children(g.root()).filter(|&m| !g.flags(m).intersects(hidden)) {
-                egui::CollapsingHeader::new(g.name(m)).id_salt(("mod", m)).default_open(false).open(fold).show(ui, |ui| {
-                    if ui.small_button("show").clicked() {
-                        fly = Some(m);
-                    }
-                    for p in g.children(m).filter(|&p| !g.flags(p).intersects(hidden)).take(300) {
-                        if ui.selectable_label(self.selected == Some(p), g.name(p)).clicked() {
-                            fly = Some(p);
+                egui::CollapsingHeader::new(g.name(m))
+                    .id_salt(("mod", m))
+                    .default_open(self.prefs.opens(g.children(m).filter(|&p| !g.flags(p).intersects(hidden)).count()))
+                    .open(fold)
+                    .show(ui, |ui| {
+                        if ui.small_button("show").clicked() {
+                            fly = Some(m);
                         }
-                    }
-                });
+                        for p in g.children(m).filter(|&p| !g.flags(p).intersects(hidden)).take(300) {
+                            if ui.selectable_label(self.selected == Some(p), g.name(p)).clicked() {
+                                fly = Some(p);
+                            }
+                        }
+                    });
             }
         });
         if fold_next.is_some() {
@@ -2180,7 +2192,7 @@ impl Project {
                     for group in inspector::group_links(g, n, &list) {
                         egui::CollapsingHeader::new(egui::RichText::new(format!("{}  ({})", group.label, group.items.len())).small().color(style::MUTED))
                             .id_salt((title, &group.label))
-                            .default_open(group.items.len() <= LIST_LIMIT)
+                            .default_open(self.prefs.opens(group.items.len()))
                             .open(fold)
                             .show(ui, |ui| {
                                 for (m, label) in group.items.iter().take(LIST_LIMIT) {
@@ -2205,7 +2217,7 @@ impl Project {
                 ui.label(egui::RichText::new(format!("FIELDS ({})", fields.len())).small().strong().color(style::MUTED));
                 egui::CollapsingHeader::new(egui::RichText::new("list").small().color(style::MUTED))
                     .id_salt(("fields", n))
-                    .default_open(fields.len() <= 12)
+                    .default_open(self.prefs.opens(fields.len()))
                     .open(fold)
                     .show(ui, |ui| {
                         for f in fields.iter().take(LIST_LIMIT) {
@@ -2222,7 +2234,7 @@ impl Project {
                 ui.label(egui::RichText::new(summary).small().color(style::MUTED));
                 egui::CollapsingHeader::new(egui::RichText::new("list").small().color(style::MUTED))
                     .id_salt(("inside", n))
-                    .default_open(kids.len() <= 12)
+                    .default_open(self.prefs.opens(kids.len()))
                     .open(fold)
                     .show(ui, |ui| {
                         for (c, name) in kids.iter().take(LIST_LIMIT) {

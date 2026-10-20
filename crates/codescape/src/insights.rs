@@ -157,7 +157,7 @@ pub fn compute(g: &ArchivedGraph, analysis: &Analysis, churn: &HashMap<String, u
     for c in (0..g.node_count() as NodeId).filter(|&c| g.kind(c) != NodeKind::Member && !g.aggregates(c).is_empty() && cx.shown(c)) {
         for (a, b, count) in upward_edges(g, c, opts) {
             if cx.shown(a) && cx.shown(b) && scope.is_none_or(|s| g.is_ancestor(s, a)) {
-                out.upward.push(row(a, format!("→ {}, a higher layer", label(g, b)), count));
+                out.upward.push(row(a, format!("uses {}, a higher layer", label(g, b)), count));
             }
         }
     }
