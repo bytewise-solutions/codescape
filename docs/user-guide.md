@@ -69,7 +69,7 @@ saved for every project in `~/.config/codescape/keys.toml` (only the ones you ch
 | `Ctrl+Shift+O` | the open file's methods, fields and nested types in source order; type to filter, `Enter` to go |
 | `S` | sequence diagram of the selected method (click a line in an open file to select its method), or of a class from its most used method |
 | `N` / `P` | next / previous change (Review) |
-| `R` | mark the current change reviewed (Review) |
+| `R` | mark every change in the selection reviewed, or the current change (Review); again to unmark |
 | `[` / `]` | previous / next commit, commit by commit (Review) |
 | `Ctrl+B` / `Ctrl+I` / `F11` | hide or show the left panel / the right panel / both |
 | `Ctrl+O` / `Ctrl+,` | open a folder / project settings |
@@ -145,7 +145,8 @@ enough to read.
   **Back to map** or `Esc` returns. In Review mode new and changed calls are coloured as on the map.
 - **Reviewed marks.** Tick a change (or press `R`) once you have looked at it; `34 / 91 reviewed` tracks progress and
   **Hide reviewed** leaves the rest. A mark remembers the block's text: when the agent changes it again, the change
-  comes back as `changed since review`. Marks are kept per project in the cache folder.
+  comes back as `changed since review`. Marks are kept per project in the cache folder. **Mark reviewed** in the right
+  panel (or `R`) marks every change inside the selection at once: a method, a class or file, or a whole package.
 - **Unused code.** **View ▸ Unused code** marks blocks nothing in main code calls, creates or names outside their
   own lines, and lists them under Insights ▸ Unused code: `unused`, `no caller in the project` (public, so possibly API used by
   others) or `only tests use it`. Entry points, tests, generated code, constructors, methods implementing a

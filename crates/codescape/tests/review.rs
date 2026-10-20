@@ -108,3 +108,23 @@ fn risk_thresholds_follow_the_settings() {
     let strict = Limits { complexity_hint: 11, ..Limits::default() };
     assert!(add(&items_with(tg, &r, &a, strict)).is_empty(), "10 is below a hint level of 11");
 }
+
+#[test]
+fn a_selection_marks_every_change_inside_it_reviewed() {
+    let (b, t) = (side(&[("cart/cart.go", BASE)]), side(&[("cart/cart.go", TARGET)]));
+    let tg = t.file.graph();
+    let items = items(tg, &compare(b.file.graph(), &b.dir, tg, &t.dir), &analyse(tg, &t.dir));
+    let named = |name: &str| (0..tg.node_count() as NodeId).find(|&n| tg.name(n) == name).unwrap_or_else(|| panic!("no {name}"));
+    let labels = |found: Vec<usize>| found.into_iter().map(|i| items[i].label.as_str()).collect::<Vec<_>>();
+    assert_eq!(labels(within(tg, &items, named("cart"))), ["Cart.Add", "Cart.Clear", "Coupon"], "a package holds all its changes");
+    assert_eq!(labels(within(tg, &items, named("Cart"))), ["Cart.Add", "Cart.Clear"], "a removed method counts under its type");
+    assert_eq!(labels(within(tg, &items, named("Add"))), ["Cart.Add"]);
+    let mut marks = ReviewMarks::default();
+    let inside = within(tg, &items, named("Cart"));
+    assert!(!marks.all_reviewed(&items, &inside));
+    marks.set_reviewed(&items, &inside, true);
+    assert!(marks.all_reviewed(&items, &inside));
+    assert_eq!(marks.state(&items[2]), MarkState::Unseen, "outside the selection stays as it was");
+    marks.set_reviewed(&items, &inside, false);
+    assert_eq!(marks.state(&items[0]), MarkState::Unseen);
+}

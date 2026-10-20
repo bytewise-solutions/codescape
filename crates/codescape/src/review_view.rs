@@ -113,6 +113,20 @@ impl ReviewMarks {
         }
     }
 
+    pub fn all_reviewed(&self, items: &[ReviewItem], which: &[usize]) -> bool {
+        !which.is_empty() && which.iter().all(|&i| self.state(&items[i]) == MarkState::Reviewed)
+    }
+
+    pub fn set_reviewed(&mut self, items: &[ReviewItem], which: &[usize], reviewed: bool) {
+        for &i in which {
+            if reviewed {
+                self.seen.insert(items[i].key.clone(), items[i].fingerprint);
+            } else {
+                self.seen.remove(&items[i].key);
+            }
+        }
+    }
+
     pub fn toggle(&mut self, item: &ReviewItem) {
         if self.state(item) == MarkState::Reviewed {
             self.seen.remove(&item.key);
@@ -140,6 +154,10 @@ pub struct ReviewItem {
     pub key: String,
     pub fingerprint: u64,
     pub risks: Vec<Risk>,
+}
+
+pub fn within(g: &ArchivedGraph, items: &[ReviewItem], selection: NodeId) -> Vec<usize> {
+    (0..items.len()).filter(|&i| items[i].node.or(items[i].parent).is_some_and(|n| g.is_ancestor(selection, n))).collect()
 }
 
 fn key_of(g: &ArchivedGraph, n: NodeId) -> String {

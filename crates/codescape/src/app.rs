@@ -15,7 +15,9 @@ use crate::keys::{Action as KeyAction, Keymap};
 use crate::panels::{EntryGroupView, group_entries};
 use crate::reading::{fill_view, leave_zoom, level_node, open_font, zoom_text};
 use crate::refs::{FileRefs, followable};
-use crate::review_view::{CommitStep, ItemKind, Limits, MarkState, ReviewItem, ReviewMarks, Risk, by_risk, items_with as review_items, step as review_step};
+use crate::review_view::{
+    CommitStep, ItemKind, Limits, MarkState, ReviewItem, ReviewMarks, Risk, by_risk, items_with as review_items, step as review_step, within,
+};
 use crate::search::{self, SearchIndex, member_at_line};
 use crate::settings_window::{self, SettingsForm};
 use crate::shot::{Shot, ShotPlan, ShotStep};
@@ -408,6 +410,14 @@ impl ReviewState {
 
     fn toggle(&mut self, i: usize) -> Option<String> {
         self.marks.toggle(&self.items[i]);
+        self.refresh();
+        self.marks.save(&self.marks_path).err().map(|e| format!("saving review marks: {e}"))
+    }
+
+    fn toggle_within(&mut self, g: &ArchivedGraph, selection: NodeId) -> Option<String> {
+        let inside = within(g, &self.items, selection);
+        let reviewed = !self.marks.all_reviewed(&self.items, &inside);
+        self.marks.set_reviewed(&self.items, &inside, reviewed);
         self.refresh();
         self.marks.save(&self.marks_path).err().map(|e| format!("saving review marks: {e}"))
     }
@@ -1392,7 +1402,10 @@ impl Project {
                 return;
             }
             if plain(Key::R) {
-                if let Some(c) = rv.cursor {
+                let g = self.file.graph();
+                if let Some(n) = self.selected.filter(|&n| !within(g, &rv.items, n).is_empty()) {
+                    self.review_error = rv.toggle_within(g, n);
+                } else if let Some(c) = rv.cursor {
                     self.review_error = rv.toggle(c);
                 }
                 return;
@@ -1834,7 +1847,7 @@ impl Project {
         if let Some(rv) = &self.review {
             let visible = rv.visible();
             ui.label(egui::RichText::new(format!("CHANGES · {} / {} reviewed", rv.reviewed(), rv.items.len())).small().color(style::ACCENT))
-                .on_hover_text("N / P: next / previous change · R: mark the current one reviewed");
+                .on_hover_text("N / P: next / previous change · R: mark the selection reviewed");
             let (mut hide, mut grouped) = (rv.hide_reviewed, rv.by_package);
             ui.horizontal(|ui| {
                 ui.checkbox(&mut hide, egui::RichText::new("Hide reviewed").small());
@@ -2044,6 +2057,7 @@ impl Project {
         self.refresh_flags();
         let fold = self.right_fold.take();
         let mut fold_next = None;
+        let mut mark_selection = None;
         let g = self.file.graph();
         let shown_state = self.selected.map(|n| {
             let opts = self.cache.options();
@@ -2136,6 +2150,20 @@ impl Project {
                     }
                     fold_next = fold_buttons(ui);
                 });
+            }
+            if let Some(rv) = &self.review {
+                let inside = within(g, &rv.items, n);
+                if !inside.is_empty() {
+                    let label = if rv.marks.all_reviewed(&rv.items, &inside) {
+                        format!("Unmark reviewed ({})", inside.len())
+                    } else {
+                        let done = inside.iter().filter(|&&i| rv.marks.state(&rv.items[i]) == MarkState::Reviewed).count();
+                        format!("Mark reviewed ({done} / {} changes)", inside.len())
+                    };
+                    if ui.button(label).on_hover_text("R: every change inside the selection").clicked() {
+                        mark_selection = Some(n);
+                    }
+                }
             }
             if let Some(l) = insights_ui::flags_ui(ui, g, self.flags.current()) {
                 self.pending_flag_go = Some(l);
@@ -2251,6 +2279,9 @@ impl Project {
         if fold_next.is_some() {
             self.right_fold = fold_next;
             ui.ctx().request_repaint();
+        }
+        if let (Some(n), Some(rv)) = (mark_selection, self.review.as_mut()) {
+            self.review_error = rv.toggle_within(self.file.graph(), n);
         }
         if std::mem::take(&mut self.pending_refocus) {
             self.refocus();
