@@ -341,3 +341,38 @@ pub fn mark_label(marks: &ReviewMarks, items: &[ReviewItem], inside: &[usize]) -
     let done = inside.iter().filter(|&&i| marks.state(&items[i]) == MarkState::Reviewed).count();
     Some(format!("Mark reviewed ({done} / {} changes)", inside.len()))
 }
+
+pub fn scope_of(g: &ArchivedGraph, n: NodeId) -> Option<NodeId> {
+    match g.kind(n) {
+        NodeKind::Project | NodeKind::External => None,
+        NodeKind::Member => g.path(n).into_iter().rev().skip(1).find(|&p| g.kind(p) == NodeKind::Type).or(g.parent(n).filter(|&p| p != g.root())),
+        _ => Some(n),
+    }
+}
+
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct ReviewScope {
+    pub node: Option<NodeId>,
+    from: Option<NodeId>,
+}
+
+impl ReviewScope {
+    pub fn follow(&mut self, g: &ArchivedGraph, selected: Option<NodeId>) {
+        if selected != self.from {
+            self.from = selected;
+            self.narrow(g);
+        }
+    }
+
+    pub fn keep(&mut self, selected: Option<NodeId>) {
+        self.from = selected;
+    }
+
+    pub fn show_all(&mut self) {
+        self.node = None;
+    }
+
+    pub fn narrow(&mut self, g: &ArchivedGraph) {
+        self.node = self.from.and_then(|n| scope_of(g, n));
+    }
+}

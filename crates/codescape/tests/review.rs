@@ -200,3 +200,41 @@ fn the_mark_action_counts_the_changes_inside_and_offers_to_unmark_once_all_are_r
     assert_eq!(mark_label(&marks, &items, &cart).as_deref(), Some("Unmark reviewed (2)"));
     assert_eq!(mark_label(&marks, &items, &[]), None, "nothing to mark outside the changes");
 }
+
+#[test]
+fn the_list_scope_of_a_method_is_its_type_and_of_a_block_the_block_itself() {
+    let t = side(&[("cart/cart.go", TARGET), ("pay/pay.go", PAY)]);
+    let tg = t.file.graph();
+    let named = |name: &str| (0..tg.node_count() as NodeId).find(|&n| tg.name(n) == name).unwrap_or_else(|| panic!("no {name}"));
+    assert_eq!(scope_of(tg, named("Add")), Some(named("Cart")), "a method keeps its neighbours in view");
+    assert_eq!(scope_of(tg, named("Cart")), Some(named("Cart")));
+    assert_eq!(scope_of(tg, named("cart")), Some(named("cart")));
+    assert_eq!(scope_of(tg, named("Charge")), tg.parent(named("Charge")), "a free function scopes to what holds it");
+    assert_eq!(scope_of(tg, tg.root()), None);
+}
+
+#[test]
+fn the_list_scope_follows_the_selection_until_show_all_and_the_list_keeps_it_while_stepping() {
+    let t = side(&[("cart/cart.go", TARGET)]);
+    let tg = t.file.graph();
+    let named = |name: &str| (0..tg.node_count() as NodeId).find(|&n| tg.name(n) == name).unwrap();
+    let mut scope = ReviewScope::default();
+    scope.follow(tg, None);
+    assert_eq!(scope.node, None);
+    scope.follow(tg, Some(named("Add")));
+    assert_eq!(scope.node, Some(named("Cart")));
+    scope.show_all();
+    scope.follow(tg, Some(named("Add")));
+    assert_eq!(scope.node, None, "show all holds while the selection stays");
+    scope.follow(tg, Some(named("cart")));
+    assert_eq!(scope.node, Some(named("cart")), "a new selection scopes again");
+    scope.keep(Some(named("Add")));
+    scope.follow(tg, Some(named("Add")));
+    assert_eq!(scope.node, Some(named("cart")), "picking a change in the list does not narrow the list");
+    scope.follow(tg, None);
+    assert_eq!(scope.node, None, "no selection, the whole list");
+    scope.follow(tg, Some(named("Add")));
+    scope.show_all();
+    scope.narrow(tg);
+    assert_eq!(scope.node, Some(named("Cart")));
+}

@@ -130,13 +130,17 @@ enough to read.
   names: new ones are outlined green with `NEW`, changed ones amber with `+added −removed` lines, the rest dimmed.
   Open boxes add up what changed inside them (`2 new · 3 changed · 1 removed`), card rows are tinted with their line
   counts and any complexity increase, and arrows the change introduced are drawn green. The left panel lists every
-  change, riskiest first; click one to fly to it, or step through them with `N` / `P`. The current change (the
+  change, riskiest first. The list follows the selection: select a package, file or class on the map and it lists
+  only the changes inside (a selected method lists its whole class or file, so its neighbours stay), and `N` / `P`
+  step through those; `Esc` brings back the full list. **show all** next to `In <name>` lists everything while
+  keeping the selection, until you select something else (**Show only <name>** narrows it again). Picking a change in
+  the list keeps the list as it is; click one to fly to it, or step through them with `N` / `P`. The current change (the
   selected one, else the last one stepped to) is highlighted, and the list scrolls to it when you select it elsewhere
   (on the map, with `N` / `P`, by Ctrl+click in the code); the target button above the list scrolls back to it after
   you scrolled away. Each change says why it may deserve a look: `complexity 8 to 14`, `used by 12` (many callers),
   `signature` (a public block's first line changed), `made public`, `new upward dependency on <package>` (it adds a
-  dependency against the layering), `unused` (a new block nothing uses) and `untested` (no test reaches it). **By
-  package** groups the list instead; click a package to fold it, or fold and unfold them all with `-` `+` next to the
+  dependency against the layering), `unused` (a new block nothing uses) and `untested` (no test reaches it). **Group
+  by package** groups the list under package headers instead; click a package to fold it, or fold and unfold them all with `-` `+` next to the
   progress. While reviewing, the left panel shows only the review: Insights, Entry points and Modules come back when
   the review ends.
   Zoom into a changed file to see its added lines in green and red marks where lines were removed; hover a mark to
@@ -151,7 +155,7 @@ enough to read.
   **Back to map** or `Esc` returns. In Review mode new and changed calls are coloured as on the map.
 - **Reviewed marks.** Tick a change (or press `R`) once you have looked at it; `34 / 91 reviewed` at the top of the
   left panel tracks progress, with a bar of the reviewed changes (green), those changed since review (amber) and the
-  rest (grey). When the selection holds changes, a smaller bar below counts them (`In cart: 2 / 5`).
+  rest (grey). While the list is narrowed to a selection, a smaller bar below counts its changes (`In cart: 2 / 5`).
   **Hide reviewed** leaves the rest. A mark remembers the block's text: when the agent changes it again, the change
   comes back as `changed since review`. Marks are kept per project in the cache folder. **Mark reviewed** at the top of the
   right panel, under the name (or `R`), marks every change inside the selection at once: a method, a class or file, or a whole package.

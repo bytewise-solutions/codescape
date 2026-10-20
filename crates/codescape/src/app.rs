@@ -16,8 +16,8 @@ use crate::panels::{EntryGroupView, group_entries};
 use crate::reading::{fill_view, leave_zoom, level_node, open_font, zoom_text};
 use crate::refs::{FileRefs, followable};
 use crate::review_view::{
-    CommitStep, ItemKind, Limits, MarkState, ReviewItem, ReviewMarks, ReviewProgress, Risk, by_risk, current, flag_upward, items_with as review_items,
-    mark_label, scroll_to_row, step as review_step, within,
+    CommitStep, ItemKind, Limits, MarkState, ReviewItem, ReviewMarks, ReviewProgress, ReviewScope, Risk, by_risk, current, flag_upward,
+    items_with as review_items, mark_label, scope_of, scroll_to_row, step as review_step, within,
 };
 use crate::search::{self, SearchIndex, member_at_line};
 use crate::settings_window::{self, SettingsForm};
@@ -412,11 +412,16 @@ struct ReviewState {
     followed: Option<String>,
     list_view: (f32, f32),
     collapsed: std::collections::HashSet<String>,
+    scope: ReviewScope,
 }
 
 impl ReviewState {
-    fn visible(&self) -> Vec<usize> {
-        (0..self.items.len()).filter(|&i| !self.hide_reviewed || self.marks.state(&self.items[i]) != MarkState::Reviewed).collect()
+    fn visible(&self, g: &ArchivedGraph) -> Vec<usize> {
+        let shown = |i: usize| !self.hide_reviewed || self.marks.state(&self.items[i]) != MarkState::Reviewed;
+        match self.scope.node {
+            Some(s) => within(g, &self.items, s).into_iter().filter(|&i| shown(i)).collect(),
+            None => (0..self.items.len()).filter(|&i| shown(i)).collect(),
+        }
     }
 
     fn reviewed(&self) -> usize {
@@ -1245,6 +1250,7 @@ impl Project {
                     followed: None,
                     list_view: (0.0, 0.0),
                     collapsed: Default::default(),
+                    scope: ReviewScope::default(),
                 };
                 rv.reorder();
                 rv.refresh();
@@ -1392,6 +1398,9 @@ impl Project {
         if let Some(n) = item.node.or(item.parent) {
             self.set_focus(n, None, true, true);
         }
+        if let Some(rv) = &mut self.review {
+            rv.scope.keep(self.selected);
+        }
     }
 
     fn keyboard(&mut self, ui: &egui::Ui) {
@@ -1412,7 +1421,7 @@ impl Project {
         if let Some(rv) = &mut self.review {
             let forward = plain(Key::N);
             if forward || plain(Key::P) {
-                let visible = rv.visible();
+                let visible = rv.visible(self.file.graph());
                 let at = rv.cursor.and_then(|c| visible.iter().position(|&v| v == c));
                 if let Some(i) = review_step(visible.len(), at, forward) {
                     self.goto_review_item(visible[i]);
@@ -1581,6 +1590,9 @@ impl Project {
     fn ui(&mut self, ui: &mut egui::Ui) -> Option<Action> {
         let mut action = None;
         self.poll_review(ui.ctx());
+        if let Some(rv) = &mut self.review {
+            rv.scope.follow(self.file.graph(), self.selected);
+        }
         self.poll_analysis(ui.ctx());
         self.poll_churn(ui.ctx());
         if self.review_job.is_none()
@@ -1871,27 +1883,48 @@ impl Project {
         let mut review_switches: Option<(bool, bool)> = None;
         let mut review_list: Option<(Option<String>, (f32, f32))> = None;
         let mut review_collapse: Option<(String, bool)> = None;
+        let mut scope_change: Option<bool> = None;
         let mut insights = None;
         let fold = self.left_fold.take();
         let mut fold_next = None;
         self.refresh_insights();
         let g = self.file.graph();
         if let Some(rv) = &self.review {
-            let visible = rv.visible();
+            let visible = rv.visible(g);
             let all = rv.marks.progress(&rv.items, 0..rv.items.len());
             ui.horizontal(|ui| {
                 ui.label(egui::RichText::new(format!("{} / {} reviewed", all.reviewed, all.total())).small().color(style::ACCENT))
                     .on_hover_text("N / P: next / previous change · R: mark the selection reviewed");
-                ui.add_enabled_ui(rv.by_package, |ui| fold_next = fold_buttons(ui)).response.on_disabled_hover_text("Turn on By package to fold the packages");
+                ui.add_enabled_ui(rv.by_package, |ui| fold_next = fold_buttons(ui))
+                    .response
+                    .on_disabled_hover_text("Turn on Group by package to fold the packages");
             });
             progress_bar(ui, all, 6.0);
-            if let Some(sel) = self.selected.filter(|&s| s != g.root()) {
-                let inside = within(g, &rv.items, sel);
-                if !inside.is_empty() {
-                    let part = rv.marks.progress(&rv.items, inside);
-                    let text = egui::RichText::new(format!("In {}: {} / {}", g.name(sel), part.reviewed, part.total())).small().color(style::MUTED);
-                    ui.add(egui::Label::new(text).truncate());
-                    progress_bar(ui, part, 3.0);
+            let narrower = self.selected.and_then(|n| scope_of(g, n)).filter(|&n| Some(n) != rv.scope.node);
+            if let Some(sel) = rv.scope.node {
+                let part = rv.marks.progress(&rv.items, within(g, &rv.items, sel));
+                let text = if part.total() == 0 {
+                    format!("No changes in {}", g.name(sel))
+                } else {
+                    format!("In {}: {} / {}", g.name(sel), part.reviewed, part.total())
+                };
+                ui.horizontal(|ui| {
+                    ui.spacing_mut().item_spacing.x = 4.0;
+                    let room = (ui.available_width() - 60.0).max(40.0);
+                    ui.scope(|ui| {
+                        ui.set_max_width(room);
+                        ui.add(egui::Label::new(egui::RichText::new(text).small().color(style::MUTED)).truncate());
+                    });
+                    ui.label(egui::RichText::new("·").small().color(style::MUTED));
+                    if ui.link(egui::RichText::new("show all").small()).on_hover_text("List every change; the selection stays").clicked() {
+                        scope_change = Some(false);
+                    }
+                });
+                progress_bar(ui, part, 3.0);
+            } else if let Some(n) = narrower {
+                let only = ui.link(egui::RichText::new(format!("Show only {}", g.name(n))).small()).on_hover_text("List only the changes in the selection");
+                if only.clicked() {
+                    scope_change = Some(true);
                 }
             }
             let mut per_group: HashMap<&str, usize> = HashMap::new();
@@ -1926,7 +1959,8 @@ impl Project {
             let mut jump = false;
             ui.horizontal(|ui| {
                 ui.checkbox(&mut hide, egui::RichText::new("Hide reviewed").small());
-                ui.checkbox(&mut grouped, egui::RichText::new("By package").small()).on_hover_text("Off: riskiest first");
+                ui.checkbox(&mut grouped, egui::RichText::new("Group by package").small())
+                    .on_hover_text("Off: riskiest first. On: grouped under package headers, in name order");
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                     jump = target_button(ui, cur_row.is_some()).on_hover_text("Scroll to the current change").clicked();
                 });
@@ -2119,6 +2153,13 @@ impl Project {
         }
         if let (Some(i), Some(rv)) = (review_toggle, self.review.as_mut()) {
             self.review_error = rv.toggle(i);
+        }
+        if let (Some(narrow), Some(rv)) = (scope_change, self.review.as_mut()) {
+            if narrow {
+                rv.scope.narrow(self.file.graph());
+            } else {
+                rv.scope.show_all();
+            }
         }
         if let (Some((hide, grouped)), Some(rv)) = (review_switches, self.review.as_mut()) {
             rv.hide_reviewed = hide;
