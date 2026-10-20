@@ -17,7 +17,7 @@ use crate::reading::{fill_view, leave_zoom, level_node, open_font, zoom_text};
 use crate::refs::{FileRefs, followable};
 use crate::review_view::{
     BoxCounts, CommitStep, ItemKind, Limits, MarkState, ReviewItem, ReviewMarks, ReviewProgress, ReviewScope, Risk, box_counts, by_risk, current, flag_upward,
-    items_with as review_items, mark_label, marks_cursor_only, scroll_to_row, shown_items, step_from, within,
+    items_with as review_items, mark_label, marks_cursor_only, on_review, scroll_to_row, short_name, shown_items, step_from, within,
 };
 use crate::search::{self, SearchIndex, member_at_line};
 use crate::settings_window::{self, SettingsForm};
@@ -375,10 +375,10 @@ impl eframe::App for CodescapeApp {
     }
 }
 
-fn review_dim(rv: &ReviewState, scene: &mut Scene) {
+fn review_dim(g: &ArchivedGraph, rv: &ReviewState, scene: &mut Scene) {
     let quiet = |n: NodeId| {
         let c = rv.review.change(n);
-        c.status == Status::Unchanged && c.inside == Default::default()
+        (c.status == Status::Unchanged && c.inside == Default::default()) || !rv.on_review(g, n)
     };
     for b in scene.boxes.iter_mut().filter(|b| matches!(b.kind, NodeKind::Module | NodeKind::Package | NodeKind::Type | NodeKind::Member)) {
         b.dimmed |= quiet(b.node);
@@ -397,6 +397,25 @@ struct ReviewBar {
     branches: Vec<String>,
     current: Option<String>,
     other: Option<(bool, String)>,
+}
+
+#[derive(Clone)]
+struct BarRange {
+    base: Option<String>,
+    target: Option<String>,
+    by_commit: bool,
+    steps: Vec<CommitStep>,
+    step: usize,
+}
+
+impl ReviewBar {
+    fn range(&self) -> BarRange {
+        BarRange { base: self.base.clone(), target: self.target.clone(), by_commit: self.by_commit, steps: self.steps.clone(), step: self.step }
+    }
+
+    fn restore(&mut self, r: BarRange) {
+        (self.base, self.target, self.by_commit, self.steps, self.step) = (r.base, r.target, r.by_commit, r.steps, r.step);
+    }
 }
 
 struct ReviewDone {
@@ -449,6 +468,10 @@ impl ReviewState {
         self.reorder();
         self.cursor = current.and_then(|k| self.items.iter().position(|i| i.key == k));
         self.refresh(g);
+    }
+
+    fn on_review(&self, g: &ArchivedGraph, n: NodeId) -> bool {
+        on_review(g, &self.review, &self.items, &self.counts, n)
     }
 
     fn reviewed(&self) -> usize {
@@ -568,6 +591,7 @@ struct Project {
     scroll_drag: Option<NodeId>,
     review: Option<ReviewState>,
     review_job: Option<(String, Receiver<Result<ReviewDone, String>>)>,
+    review_ranges: (Option<BarRange>, Option<BarRange>),
     review_bar: Option<ReviewBar>,
     home: Option<(PathBuf, PathBuf)>,
     version: Option<String>,
@@ -816,6 +840,7 @@ impl Project {
             scroll_drag: None,
             review: None,
             review_job: None,
+            review_ranges: (None, None),
             analysis: None,
             analysis_job: None,
             churn: insights_ui::ChurnState::new(),
@@ -904,7 +929,7 @@ impl Project {
 
     fn fly_to(&mut self, node: NodeId) {
         let g = self.file.graph();
-        if let Some(r) = world_rect(g, &mut self.cache, node) {
+        if let Some(r) = g.path(node).into_iter().rev().find_map(|n| world_rect(g, &mut self.cache, n)) {
             self.target = Some(Camera::fit(r, self.view));
         }
     }
@@ -949,7 +974,8 @@ impl Project {
         if let Some(n) = focus {
             self.set_focus(n, None, false, true);
             self.fly_to(n);
-            if let (Some(z), Some(w)) = (plan.zoom, world_rect(self.file.graph(), &mut self.cache, n))
+            let g = self.file.graph();
+            if let (Some(z), Some(w)) = (plan.zoom, g.path(n).into_iter().rev().find_map(|p| world_rect(g, &mut self.cache, p)))
                 && let Some(t) = self.target.as_mut()
             {
                 t.zoom *= z;
@@ -1230,6 +1256,7 @@ impl Project {
         });
         self.review_error = None;
         self.review_job = Some((shown, rx));
+        self.review_ranges.0 = self.review_bar.as_ref().map(ReviewBar::range);
     }
 
     fn show_version(&mut self, dir: PathBuf, index: PathBuf) -> Result<(), String> {
@@ -1239,6 +1266,7 @@ impl Project {
         self.home = (dir != origin.0).then_some(origin);
         self.review_bar = old.review_bar.take();
         self.review_job = old.review_job.take();
+        self.review_ranges = std::mem::take(&mut old.review_ranges);
         self.deferred_plan = old.deferred_plan.take();
         self.cam = old.cam;
         self.view = old.view;
@@ -1298,10 +1326,14 @@ impl Project {
                 rv.refilter(g, self.cache.options());
                 self.analysis = Some(Arc::new(done.analysis));
                 self.review = Some(rv);
+                self.review_ranges.1 = self.review_ranges.0.take();
             }
             Ok(Err(e)) => {
                 self.review_error = Some(e);
                 self.review_job = None;
+                if let (Some(bar), Some(good)) = (self.review_bar.as_mut(), self.review_ranges.1.clone()) {
+                    bar.restore(good);
+                }
             }
             Err(_) => ctx.request_repaint_after(std::time::Duration::from_millis(200)),
         }
@@ -1467,22 +1499,22 @@ impl Project {
             }
             return;
         }
+        let (back, ahead) = (typed("["), typed("]"));
+        if (back || ahead) && self.review_bar.is_some() {
+            if let Some(bar) = self.review_bar.as_mut().filter(|b| b.by_commit && !b.steps.is_empty()) {
+                let next = if ahead { (bar.step + 1).min(bar.steps.len() - 1) } else { bar.step.saturating_sub(1) };
+                if next != bar.step {
+                    bar.step = next;
+                    self.compare_now();
+                }
+            }
+            return;
+        }
         if let Some(rv) = &mut self.review {
             let forward = plain(Key::N);
             if forward || plain(Key::P) {
                 if let Some(i) = step_from(&rv.visible(self.file.graph()), rv.cursor, forward) {
                     self.goto_review_item(i);
-                }
-                return;
-            }
-            let (back, ahead) = (typed("["), typed("]"));
-            if back || ahead {
-                if let Some(bar) = self.review_bar.as_mut().filter(|b| b.by_commit && !b.steps.is_empty()) {
-                    let next = if ahead { (bar.step + 1).min(bar.steps.len() - 1) } else { bar.step.saturating_sub(1) };
-                    if next != bar.step {
-                        bar.step = next;
-                        self.compare_now();
-                    }
                 }
                 return;
             }
@@ -1745,7 +1777,7 @@ impl Project {
         }
         if self.show_left {
             egui::Panel::left("entries").resizable(true).default_size(270.0 * self.prefs.panel_text).min_size(230.0).show(ui, |ui| {
-                ui.style_mut().text_styles = style::scaled_text_styles(self.prefs.panel_text);
+                style::scale_panel(ui.style_mut(), self.prefs.panel_text);
                 ui.style_mut().spacing.scroll = egui::style::ScrollStyle::solid();
                 self.entries_panel(ui);
                 if panel_toggle(ui, Align2::RIGHT_BOTTOM, "<", &format!("Hide this panel ({})", key_text(&self.keys, KeyAction::LeftPanel))) {
@@ -1761,7 +1793,7 @@ impl Project {
         }
         if self.show_right {
             egui::Panel::right("inspector").resizable(true).default_size(290.0 * self.prefs.panel_text).show(ui, |ui| {
-                ui.style_mut().text_styles = style::scaled_text_styles(self.prefs.panel_text);
+                style::scale_panel(ui.style_mut(), self.prefs.panel_text);
                 ui.style_mut().spacing.scroll = egui::style::ScrollStyle::solid();
                 self.inspector(ui);
                 if panel_toggle(ui, Align2::LEFT_BOTTOM, ">", &format!("Hide this panel ({})", key_text(&self.keys, KeyAction::RightPanel))) {
@@ -1875,7 +1907,7 @@ impl Project {
                 }
                 let mut items: Vec<(String, Color32, Option<String>)> = Vec::new();
                 if let Some(e) = &self.review_error {
-                    items.push((format!("Review failed: {e}"), style::EDGE_UP, None));
+                    items.push((format!("Review failed: {}", e.lines().next().unwrap_or_default()), style::EDGE_UP, Some(e.clone())));
                 }
                 if let Some(rv) = &self.review {
                     let count = |k: ItemKind| rv.items.iter().filter(|i| i.kind == k).count();
@@ -1949,19 +1981,21 @@ impl Project {
                 ui.add_enabled_ui(rv.by_package, |ui| fold_next = fold_buttons(ui)).response.on_disabled_hover_text("Order by package to fold the packages");
             });
             progress_bar(ui, all, 6.0);
+            if rv.items.is_empty() && !rv.all.is_empty() {
+                let hidden = rv.all.len();
+                let text = format!("{hidden} {} hidden by View > Tests or hidden boxes", if hidden == 1 { "change" } else { "changes" });
+                ui.label(egui::RichText::new(text).small().color(style::MUTED));
+            }
             if let Some(sel) = rv.scope.node {
                 let part = rv.marks.progress(&rv.items, within(g, &rv.items, sel));
-                let text = if part.total() == 0 {
-                    format!("No changes in {}", g.name(sel))
-                } else {
-                    format!("In {}: {} / {}", g.name(sel), part.reviewed, part.total())
-                };
+                let name = short_name(g.name(sel));
+                let text = if part.total() == 0 { format!("No changes in {name}") } else { format!("In {name}: {} / {}", part.reviewed, part.total()) };
                 ui.horizontal(|ui| {
                     ui.spacing_mut().item_spacing.x = 4.0;
                     let room = (ui.available_width() - 60.0).max(40.0);
                     ui.scope(|ui| {
                         ui.set_max_width(room);
-                        ui.add(egui::Label::new(egui::RichText::new(text).small().color(style::MUTED)).truncate());
+                        ui.add(egui::Label::new(egui::RichText::new(text).small().color(style::MUTED)).truncate()).on_hover_text(g.name(sel));
                     });
                     ui.label(egui::RichText::new("·").small().color(style::MUTED));
                     if ui.link(egui::RichText::new("show all").small()).on_hover_text("List every change; the selection stays").clicked() {
@@ -2678,7 +2712,7 @@ impl Project {
         open_files.extend(self.goto_line.map(|(t, _)| t));
         self.scene = build_scene_at(g, &mut self.cache, &self.cam, self.view, &self.visual, self.focus.as_ref().map(|f| &f.marks), anchor, &open_files);
         if let Some(rv) = &self.review {
-            review_dim(rv, &mut self.scene);
+            review_dim(g, rv, &mut self.scene);
         }
         let was_reading = self.reading.map(|(n, _)| n);
         self.reading = fill_view(&mut self.scene, self.reading, self.goto_line.map(|(t, _)| t), self.view).map(|(n, font)| {
@@ -2825,7 +2859,7 @@ impl Project {
             Mark::Focus => stroke = Stroke::new(1.5, style::ACCENT),
             Mark::None => {}
         }
-        let change = self.review.as_ref().map(|rv| rv.review.change(b.node));
+        let change = self.review.as_ref().filter(|rv| rv.on_review(self.file.graph(), b.node)).map(|rv| rv.review.change(b.node));
         let counts = self.review.as_ref().map(|rv| (rv.counts.get(&b.node).copied().unwrap_or_default(), rv.hide_reviewed));
         let reviewed = counts.is_some_and(|(c, _)| c.to_review() == 0 && c.reviewed > 0);
         let unused = self.unused(b.node);
@@ -2997,7 +3031,7 @@ impl Project {
                     None => {}
                 }
                 on.unused |= self.unused(n).is_some();
-                if let Some(rv) = rv {
+                if let Some(rv) = rv.filter(|rv| rv.on_review(g, n)) {
                     match rv.review.change(n).status {
                         Status::New => on.added = true,
                         Status::Changed => on.changed = true,

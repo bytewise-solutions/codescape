@@ -10,7 +10,7 @@ struct Args {
     dir: Option<PathBuf>,
     #[arg(long, help = "Settings file to use instead of the project's codescape.toml")]
     config: Option<PathBuf>,
-    #[arg(long, help = "Render one frame to this PNG and exit")]
+    #[arg(long, requires = "dir", help = "Render one frame of the project to this PNG and exit")]
     screenshot: Option<PathBuf>,
     #[arg(long, help = "With --screenshot: zoom to the first node matching this name")]
     focus: Option<String>,

@@ -92,11 +92,13 @@ struct PkgInfo {
     ctor_owner: HashMap<String, usize>,
 }
 
-pub fn is_mock_dir(dir: &str) -> bool {
+pub fn is_mock_dir(module: &str, dir: &str) -> bool {
+    let root = module.rsplit('/').next().unwrap_or_default();
     let segs: Vec<&str> = dir.split('/').collect();
     segs.iter().enumerate().any(|(i, s)| {
         let Some(stem) = s.strip_suffix("mocks").or_else(|| s.strip_suffix("mock")) else { return false };
-        stem.is_empty() || stem.ends_with(['_', '-', '.']) || (i > 0 && stem == segs[i - 1])
+        let parent = if i == 0 { root } else { segs[i - 1] };
+        stem.is_empty() || stem.ends_with(['_', '-', '.']) || stem == parent
     })
 }
 
@@ -114,7 +116,10 @@ pub fn extract_go(d: &Discovery, module_nodes: &[NodeId], excludes: &GlobSet, b:
             let m = &d.modules[*module];
             let dir = rel_path(&m.dir, path.parent().unwrap());
             let file_name = path.file_name().unwrap().to_string_lossy().into_owned();
-            let is_mock = gf.generated_mock || is_mock_dir(&dir) || file_name.starts_with("mock_") || file_name.ends_with("_mock.go");
+            let is_mock = gf.generated_mock
+                || is_mock_dir(m.go_module_path.as_deref().unwrap_or(&m.name), &dir)
+                || file_name.starts_with("mock_")
+                || file_name.ends_with("_mock.go");
             Some(ParsedFile {
                 module: *module,
                 rel: rel_path(&d.root, path),

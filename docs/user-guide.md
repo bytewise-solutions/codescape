@@ -139,7 +139,7 @@ enough to read.
   list stays as it is. The current change (the selected one, else the last one stepped to) is highlighted, and the
   list scrolls to it when you select it elsewhere (on the map, with `N` / `P`, by Ctrl+click in the code). Each change says why it may deserve a look: `complexity 8 to 14`, `used by 12` (many callers),
   `signature` (a public block's first line changed), `made public`, `new upward dependency on <package>` (it adds a
-  dependency against the layering), `unused` (a new block nothing uses) and `untested` (no test reaches it). The
+  dependency against the layering), `unused` (a new block nothing uses) and `untested` (no test reaches it; never on tests and mocks). The
   **Order** menu sorts them **Riskiest first** (each tag adds to a score, highest first) or **By package**, under
   package headers in name order; click a package to fold it, or fold and unfold them all with `-` `+` next to the
   progress. While reviewing, the left panel shows only the review: Insights, Entry points and Modules come back when
@@ -205,7 +205,7 @@ enough to read.
   their entries in USES / USED BY lists. Tick **View ▸ Logging** to show them.
 - **Test code is out:** test sources, test helpers (files importing `testing`/testify or JUnit/Mockito, folders such
   as `testutil`/`testdata`, globs under `[test] paths`), Go mocks (mockery output, `mock_*.go` and `*_mock.go` files, folders
-  named `mock` or `mocks`, ending in `_mock`/`-mocks`, or named after their parent package plus `mock` such as
+  named `mock` or `mocks`, ending in `_mock`/`-mocks`, or named after their parent package (or the module) plus `mock` such as
   `rawemail/rawemailmock`, but not `hammock`, types named `Mock…`) and test mains are not drawn or listed. Tick **View ▸ Tests**
   to draw them and **View ▸ Test dependencies** to see test-only dependencies.
 

@@ -1,4 +1,5 @@
 mod camera;
+mod cli;
 mod desktop;
 mod find;
 mod focus;

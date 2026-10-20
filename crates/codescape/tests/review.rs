@@ -383,3 +383,40 @@ fn r_on_a_removed_change_marks_only_that_change() {
     assert!(!marks_cursor_only(&items, Some(1), Some(2)), "another selection marks what it holds");
     assert!(!marks_cursor_only(&items, Some(0), Some(3)));
 }
+
+#[test]
+fn tests_and_mocks_are_not_tagged_untested() {
+    const T: &str = "package cart\n\nimport \"testing\"\n\ntype MockStore struct{}\n\nfunc (m *MockStore) Get() int {\n\treturn 1\n}\n\nfunc TestAdd(t *testing.T) {\n\t(&Cart{}).Add(1)\n}\n";
+    let b = side(&[("cart/cart.go", BASE)]);
+    let t = side(&[("cart/cart.go", TARGET), ("cart/cart_test.go", T)]);
+    let tg = t.file.graph();
+    let all = items(tg, &compare(b.file.graph(), &b.dir, tg, &t.dir), &analyse(tg, &t.dir));
+    let untested: Vec<&str> = all.iter().filter(|i| i.risks.contains(&Risk::Untested)).map(|i| i.label.as_str()).collect();
+    assert!(!untested.is_empty(), "the check is on: {:?}", all.iter().map(|i| (&i.label, &i.risks)).collect::<Vec<_>>());
+    assert!(untested.iter().all(|l| !l.starts_with("Test") && !l.starts_with("Mock")), "{untested:?}");
+}
+
+#[test]
+fn boxes_whose_changes_are_all_hidden_are_drawn_as_unchanged() {
+    const T: &str = "package cart\n\nimport \"testing\"\n\nfunc TestAdd(t *testing.T) {}\n";
+    let b = side(&[("cart/cart.go", BASE), ("pay/pay.go", "package pay\n\nfunc Pay() {}\n")]);
+    let t = side(&[("cart/cart.go", TARGET), ("pay/pay.go", "package pay\n\nfunc Pay() {}\n"), ("pay/pay_test.go", T)]);
+    let tg = t.file.graph();
+    let r = compare(b.file.graph(), &b.dir, tg, &t.dir);
+    let shown = shown_items(tg, &items(tg, &r, &analyse(tg, &t.dir)), &codescape_layout::LayoutOptions::default());
+    let counts = box_counts(tg, &shown, &ReviewMarks::default());
+    let named = |name: &str| (0..tg.node_count() as NodeId).find(|&n| tg.name(n) == name).unwrap();
+    let on = |n: NodeId| on_review(tg, &r, &shown, &counts, n);
+    assert!(!on(named("pay")), "only a hidden test changed in pay");
+    assert!(on(named("cart")) && on(named("Coupon")));
+    assert!(on(named("Apply")), "a method of a new type, listed with its type");
+    assert!(!on(named("Pay")));
+}
+
+#[test]
+fn a_scoped_list_is_named_by_the_last_part_of_a_long_package() {
+    assert_eq!(short_name("org.springframework.samples.petclinic.model"), "model");
+    assert_eq!(short_name("internal/repo"), "repo");
+    assert_eq!(short_name("Cart"), "Cart");
+    assert_eq!(short_name("(root)"), "(root)");
+}

@@ -44,6 +44,13 @@ pub fn scaled_text_styles(scale: f32) -> std::collections::BTreeMap<egui::TextSt
     text_styles().into_iter().map(|(style, font)| (style, egui::FontId::new(font.size * scale, font.family))).collect()
 }
 
+pub fn scale_panel(style: &mut egui::Style, scale: f32) {
+    style.text_styles = scaled_text_styles(scale);
+    style.spacing.icon_width *= scale;
+    style.spacing.icon_width_inner *= scale;
+    style.spacing.icon_spacing *= scale;
+}
+
 pub fn visuals() -> egui::Visuals {
     let mut v = egui::Visuals::dark();
     v.panel_fill = PANEL;

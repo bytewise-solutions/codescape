@@ -123,7 +123,7 @@ codescape-index ~/path/to/project --unused   # also list unused code
 codescape-index --help
 ```
 
-`codescape --screenshot out.png` renders one frame without anyone at the window and exits; with `--focus`,
+`codescape <dir> --screenshot out.png` renders one frame of the project without anyone at the window and exits; with `--focus`,
 `--review`, `--sequence` and other flags it scripts a view first (see the [user guide](docs/user-guide.md#screenshots-without-a-person-at-the-window)).
 CI uses it to check that the app renders.
 

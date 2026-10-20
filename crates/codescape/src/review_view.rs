@@ -72,7 +72,8 @@ fn risks(g: &ArchivedGraph, n: NodeId, c: &Change, a: &Analysis, limits: Limits)
     if c.status == Status::New && a.usage[n as usize] != Usage::Used {
         out.push(Risk::Unused(a.usage[n as usize]));
     }
-    if a.tested.iter().any(|&t| t) && !a.tested[n as usize] {
+    let test_code = g.path(n).into_iter().any(|p| g.flags(p).intersects(NodeFlags::TEST | NodeFlags::MOCK));
+    if a.tested.iter().any(|&t| t) && !a.tested[n as usize] && !test_code {
         out.push(Risk::Untested);
     }
     out
@@ -426,4 +427,12 @@ pub fn box_counts(g: &ArchivedGraph, items: &[ReviewItem], marks: &ReviewMarks) 
         }
     }
     out
+}
+
+pub fn on_review(g: &ArchivedGraph, r: &Review, items: &[ReviewItem], counts: &HashMap<NodeId, BoxCounts>, n: NodeId) -> bool {
+    counts.contains_key(&n) || g.path(n).into_iter().any(|p| r.change(p).status == Status::New && items.iter().any(|i| i.node == Some(p)))
+}
+
+pub fn short_name(name: &str) -> &str {
+    name.rsplit(['.', '/']).find(|s| !s.is_empty()).unwrap_or(name)
 }

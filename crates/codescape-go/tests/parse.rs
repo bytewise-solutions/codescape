@@ -135,11 +135,13 @@ fn an_else_if_chain_does_not_count_as_nesting() {
 #[test]
 fn mocks_are_told_by_folder_file_and_type_name() {
     use codescape_go::{is_mock_dir, is_mock_type};
-    assert!(is_mock_dir("internal/repo/mocks") && is_mock_dir("core/rawemail/rawemailmock") && is_mock_dir("mock"));
-    assert!(!is_mock_dir("internal/mockingbird") && !is_mock_dir("internal/repo"));
-    assert!(is_mock_dir("store/storemocks") && is_mock_dir("store/store_mock") && is_mock_dir("store/fake-mocks"));
+    assert!(is_mock_dir("", "internal/repo/mocks") && is_mock_dir("", "core/rawemail/rawemailmock") && is_mock_dir("", "mock"));
+    assert!(!is_mock_dir("", "internal/mockingbird") && !is_mock_dir("", "internal/repo"));
+    assert!(is_mock_dir("", "store/storemocks") && is_mock_dir("", "store/store_mock") && is_mock_dir("", "store/fake-mocks"));
+    assert!(is_mock_dir("github.com/spf13/cobra", "cobramocks"), "named after the module's root package");
+    assert!(!is_mock_dir("github.com/golang/mock", "sample") && !is_mock_dir("example.com/ham", "hammockery"));
     for real in ["hammock", "lib/hammock", "nomock", "x/unmock", "gomock"] {
-        assert!(!is_mock_dir(real), "{real}");
+        assert!(!is_mock_dir("example.com/shop", real), "{real}");
     }
     assert!(is_mock_type("MockRawEmailStore") && is_mock_type("MockX"));
     assert!(!is_mock_type("Mockingbird") && !is_mock_type("Mock") && !is_mock_type("mockStore"));

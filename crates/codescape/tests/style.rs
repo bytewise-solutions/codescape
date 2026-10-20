@@ -183,3 +183,13 @@ fn complexity_levels_at_the_top_of_the_range_do_not_overflow() {
     assert_eq!(ramp_level(20, 0, 9), 1);
     assert_eq!(ramp_level(20, 8, 9), 21);
 }
+
+#[test]
+fn panel_text_size_also_scales_checkboxes() {
+    let base = egui::Style::default();
+    let mut big = base.clone();
+    codescape::style::scale_panel(&mut big, 2.0);
+    assert_eq!(big.spacing.icon_width, base.spacing.icon_width * 2.0);
+    assert_eq!(big.spacing.icon_width_inner, base.spacing.icon_width_inner * 2.0);
+    assert_eq!(big.text_styles, codescape::style::scaled_text_styles(2.0));
+}
