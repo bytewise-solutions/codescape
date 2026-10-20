@@ -1749,62 +1749,65 @@ impl Project {
         let total = (r + gu + u).max(1) as f32;
         let level = level_node(g, &self.scene, self.reading, self.view.center()).map(|n| format!("{:?}", g.kind(n))).unwrap_or_else(|| "Project".into());
         let up = self.cache.get(g.root()).map_or(0, |l| l.up_edges());
-        ui.horizontal(|ui| {
-            if let Some((shown, _)) = &self.review_job {
-                ui.spinner();
-                ui.label(egui::RichText::new(format!("Comparing with {shown}…")).color(style::ACCENT));
-                ui.separator();
+        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+            if ui.link(egui::RichText::new("? shortcuts").color(style::MUTED)).clicked() {
+                self.shortcuts_open = true;
             }
-            if let Some(e) = &self.review_error {
-                ui.colored_label(style::EDGE_UP, format!("Review failed: {e}"));
+            ui.add_space(12.0);
+            ui.with_layout(egui::Layout::left_to_right(egui::Align::Center), |ui| {
+                ui.set_clip_rect(ui.max_rect().intersect(ui.clip_rect()));
+                if let Some((shown, _)) = &self.review_job {
+                    ui.spinner();
+                    ui.label(egui::RichText::new(format!("Comparing with {shown}…")).color(style::ACCENT));
+                    ui.separator();
+                }
+                if let Some(e) = &self.review_error {
+                    ui.colored_label(style::EDGE_UP, format!("Review failed: {e}"));
+                    ui.separator();
+                }
+                if let Some(rv) = &self.review {
+                    let t = rv.review.totals();
+                    let removed = if t.removed > 0 { format!(" · {} removed", t.removed) } else { String::new() };
+                    ui.label(
+                        egui::RichText::new(format!(
+                            "{} · {} new · {} changed{removed} · {} / {} reviewed",
+                            rv.label,
+                            t.new,
+                            t.changed,
+                            rv.reviewed(),
+                            rv.items.len()
+                        ))
+                        .strong()
+                        .color(style::ACCENT),
+                    );
+                    ui.separator();
+                }
+                ui.label(egui::RichText::new(format!("zoom {:.0}% · inside {level}", self.cam.zoom * 100.0)).color(style::MUTED));
                 ui.separator();
-            }
-            if let Some(rv) = &self.review {
-                let t = rv.review.totals();
-                let removed = if t.removed > 0 { format!(" · {} removed", t.removed) } else { String::new() };
+                let t = &self.totals;
                 ui.label(
-                    egui::RichText::new(format!(
-                        "{} · {} new · {} changed{removed} · {} / {} reviewed",
-                        rv.label,
-                        t.new,
-                        t.changed,
-                        rv.reviewed(),
-                        rv.items.len()
-                    ))
-                    .strong()
-                    .color(style::ACCENT),
+                    egui::RichText::new(format!("{} modules · {} packages · {} types · {:.0}k loc", t.modules, t.packages, t.types, t.lines as f32 / 1000.0))
+                        .color(style::MUTED),
                 );
                 ui.separator();
-            }
-            ui.label(egui::RichText::new(format!("zoom {:.0}% · inside {level}", self.cam.zoom * 100.0)).color(style::MUTED));
-            ui.separator();
-            let t = &self.totals;
-            ui.label(
-                egui::RichText::new(format!("{} modules · {} packages · {} types · {:.0}k loc", t.modules, t.packages, t.types, t.lines as f32 / 1000.0))
-                    .color(style::MUTED),
-            );
-            ui.separator();
-            ui.label(egui::RichText::new(format!("{} apps · {} dev tools", t.apps, t.tools)).color(style::MUTED));
-            ui.separator();
-            ui.label(
-                egui::RichText::new(format!("calls {:.0}% resolved · {:.0}% guessed", r as f32 * 100.0 / total, gu as f32 * 100.0 / total)).color(style::MUTED),
-            )
-            .on_hover_text(format!("Calls in your code: {r} resolved, {gu} guessed, {u} unresolved\n{ext} library calls (not counted in the percentages)"));
-            if up > 0 {
+                ui.label(egui::RichText::new(format!("{} apps · {} dev tools", t.apps, t.tools)).color(style::MUTED));
                 ui.separator();
-                ui.colored_label(style::EDGE_UP, format!("{up} upward module dependencies"));
-            }
-            let skipped: Vec<String> = g.skipped_roots().map(|(_, p)| p.to_string()).collect();
-            if !skipped.is_empty() {
-                ui.separator();
-                ui.label(egui::RichText::new(format!("not indexed: {}", skipped.join(", "))).color(style::MUTED));
-            }
-            ui.separator();
-            ui.label(egui::RichText::new(format!("{:.1} ms · {} boxes", self.scene_ms, self.scene.stats.drawn)).color(style::MUTED));
-            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                if ui.link(egui::RichText::new("? shortcuts").color(style::MUTED)).clicked() {
-                    self.shortcuts_open = true;
+                ui.label(
+                    egui::RichText::new(format!("calls {:.0}% resolved · {:.0}% guessed", r as f32 * 100.0 / total, gu as f32 * 100.0 / total))
+                        .color(style::MUTED),
+                )
+                .on_hover_text(format!("Calls in your code: {r} resolved, {gu} guessed, {u} unresolved\n{ext} library calls (not counted in the percentages)"));
+                if up > 0 {
+                    ui.separator();
+                    ui.colored_label(style::EDGE_UP, format!("{up} upward module dependencies"));
                 }
+                let skipped: Vec<String> = g.skipped_roots().map(|(_, p)| p.to_string()).collect();
+                if !skipped.is_empty() {
+                    ui.separator();
+                    ui.label(egui::RichText::new(format!("not indexed: {}", skipped.join(", "))).color(style::MUTED));
+                }
+                ui.separator();
+                ui.label(egui::RichText::new(format!("{:.1} ms · {} boxes", self.scene_ms, self.scene.stats.drawn)).color(style::MUTED));
             });
         });
     }
