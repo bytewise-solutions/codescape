@@ -2998,7 +2998,15 @@ impl Project {
     fn paint_file(&self, painter: &egui::Painter, b: &crate::canvas::SceneBox) {
         let g = self.file.graph();
         let Some(path) = g.file(b.node) else { return };
-        let Some(lines) = self.source.borrow_mut().file(path) else { return };
+        let Some(lines) = self.source.borrow_mut().file(path) else {
+            let sheet = self.file_page(b);
+            let clip = painter.with_clip_rect(sheet);
+            clip.rect_filled(sheet, 4.0, style::PANEL);
+            clip.rect_stroke(sheet, 4.0, Stroke::new(1.5, style::FRAME), StrokeKind::Inside);
+            let text = format!("{path} was not found on disk. Re-index the project from the File menu.");
+            clip.text(sheet.center(), Align2::CENTER_CENTER, text, FontId::proportional(14.0), style::MUTED);
+            return;
+        };
         let Some(size) = self.page_font(b) else { return };
         let line_h = size * LINE_SPACING;
         let scroll = self.file_scroll.get(&b.node).copied().unwrap_or(0.0);
