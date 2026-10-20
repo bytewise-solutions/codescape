@@ -128,3 +128,18 @@ fn a_selection_marks_every_change_inside_it_reviewed() {
     marks.set_reviewed(&items, &inside, false);
     assert_eq!(marks.state(&items[0]), MarkState::Unseen);
 }
+
+#[test]
+fn progress_counts_reviewed_changed_since_and_unseen_changes() {
+    let b = side(&[("cart/cart.go", BASE)]);
+    let (t1, t2) = (side(&[("cart/cart.go", TARGET)]), side(&[("cart/cart.go", &TARGET.replace("x++", "x += 2"))]));
+    let list = |t: &Side| items(t.file.graph(), &compare(b.file.graph(), &b.dir, t.file.graph(), &t.dir), &analyse(t.file.graph(), &t.dir));
+    let (first, second) = (list(&t1), list(&t2));
+    let mut marks = ReviewMarks::default();
+    assert_eq!(marks.progress(&second, 0..second.len()), ReviewProgress { reviewed: 0, changed_since: 0, unseen: 3 });
+    marks.set_reviewed(&first, &[0, 1], true);
+    let all = marks.progress(&second, 0..second.len());
+    assert_eq!(all, ReviewProgress { reviewed: 1, changed_since: 1, unseen: 1 }, "Cart.Add changed again after its mark");
+    assert_eq!(all.total(), 3);
+    assert_eq!(marks.progress(&second, [1, 2]), ReviewProgress { reviewed: 1, changed_since: 0, unseen: 1 });
+}

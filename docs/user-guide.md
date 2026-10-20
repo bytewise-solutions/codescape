@@ -143,7 +143,9 @@ enough to read.
   from; a caller in the chain with alternatives is a menu to pick another. Click an arrow to open the code at that
   call, double-click it to tell the called method instead, double-click a lifeline to see that class on the map;
   **Back to map** or `Esc` returns. In Review mode new and changed calls are coloured as on the map.
-- **Reviewed marks.** Tick a change (or press `R`) once you have looked at it; `34 / 91 reviewed` tracks progress and
+- **Reviewed marks.** Tick a change (or press `R`) once you have looked at it; `34 / 91 reviewed` at the top of the
+  left panel tracks progress, with a bar of the reviewed changes (green), those changed since review (amber) and the
+  rest (grey). When the selection holds changes, a smaller bar below counts them (`In cart: 2 / 5`).
   **Hide reviewed** leaves the rest. A mark remembers the block's text: when the agent changes it again, the change
   comes back as `changed since review`. Marks are kept per project in the cache folder. **Mark reviewed** in the right
   panel (or `R`) marks every change inside the selection at once: a method, a class or file, or a whole package.

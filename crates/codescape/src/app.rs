@@ -16,7 +16,7 @@ use crate::panels::{EntryGroupView, group_entries};
 use crate::reading::{fill_view, leave_zoom, level_node, open_font, zoom_text};
 use crate::refs::{FileRefs, followable};
 use crate::review_view::{
-    CommitStep, ItemKind, Limits, MarkState, ReviewItem, ReviewMarks, Risk, by_risk, items_with as review_items, step as review_step, within,
+    CommitStep, ItemKind, Limits, MarkState, ReviewItem, ReviewMarks, ReviewProgress, Risk, by_risk, items_with as review_items, step as review_step, within,
 };
 use crate::search::{self, SearchIndex, member_at_line};
 use crate::settings_window::{self, SettingsForm};
@@ -1846,8 +1846,18 @@ impl Project {
         let list_h = ui.available_height() * 0.6;
         if let Some(rv) = &self.review {
             let visible = rv.visible();
-            ui.label(egui::RichText::new(format!("CHANGES · {} / {} reviewed", rv.reviewed(), rv.items.len())).small().color(style::ACCENT))
+            let all = rv.marks.progress(&rv.items, 0..rv.items.len());
+            ui.label(egui::RichText::new(format!("{} / {} reviewed", all.reviewed, all.total())).small().color(style::ACCENT))
                 .on_hover_text("N / P: next / previous change · R: mark the selection reviewed");
+            progress_bar(ui, all, 6.0);
+            if let Some(sel) = self.selected.filter(|&s| s != g.root()) {
+                let inside = within(g, &rv.items, sel);
+                if !inside.is_empty() {
+                    let part = rv.marks.progress(&rv.items, inside);
+                    ui.label(egui::RichText::new(format!("In {}: {} / {}", g.name(sel), part.reviewed, part.total())).small().color(style::MUTED));
+                    progress_bar(ui, part, 3.0);
+                }
+            }
             let (mut hide, mut grouped) = (rv.hide_reviewed, rv.by_package);
             ui.horizontal(|ui| {
                 ui.checkbox(&mut hide, egui::RichText::new("Hide reviewed").small());
@@ -3397,6 +3407,22 @@ impl Project {
             clip.text(pos([l.pos[0], l.pos[1] + l.size + 4.0]), Align2::LEFT_TOP, detail, FontId::proportional((l.size * 0.75).max(9.0)), style::MUTED);
         }
     }
+}
+
+fn progress_bar(ui: &mut egui::Ui, p: ReviewProgress, height: f32) {
+    let (rect, response) = ui.allocate_exact_size(egui::vec2(ui.available_width(), height), Sense::hover());
+    let painter = ui.painter();
+    painter.rect_filled(rect, height / 2.0, style::FRAME);
+    let total = p.total().max(1) as f32;
+    let mut x = rect.min.x;
+    for (n, colour) in [(p.reviewed, style::ADDED), (p.changed_since, style::ACCENT)] {
+        let w = rect.width() * n as f32 / total;
+        if n > 0 {
+            painter.rect_filled(egui::Rect::from_min_size(Pos2::new(x, rect.min.y), egui::vec2(w, height)), height / 2.0, colour);
+        }
+        x += w;
+    }
+    response.on_hover_text(format!("{} reviewed · {} changed since review · {} not looked at yet", p.reviewed, p.changed_since, p.unseen));
 }
 
 fn fold_buttons(ui: &mut egui::Ui) -> Option<bool> {

@@ -87,6 +87,19 @@ pub enum MarkState {
     ChangedSince,
 }
 
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct ReviewProgress {
+    pub reviewed: usize,
+    pub changed_since: usize,
+    pub unseen: usize,
+}
+
+impl ReviewProgress {
+    pub fn total(&self) -> usize {
+        self.reviewed + self.changed_since + self.unseen
+    }
+}
+
 #[derive(Clone, Debug, Default)]
 pub struct ReviewMarks {
     seen: HashMap<String, u64>,
@@ -111,6 +124,18 @@ impl ReviewMarks {
             Some(&h) if h == item.fingerprint => MarkState::Reviewed,
             Some(_) => MarkState::ChangedSince,
         }
+    }
+
+    pub fn progress(&self, items: &[ReviewItem], which: impl IntoIterator<Item = usize>) -> ReviewProgress {
+        let mut p = ReviewProgress::default();
+        for i in which {
+            match self.state(&items[i]) {
+                MarkState::Reviewed => p.reviewed += 1,
+                MarkState::ChangedSince => p.changed_since += 1,
+                MarkState::Unseen => p.unseen += 1,
+            }
+        }
+        p
     }
 
     pub fn all_reviewed(&self, items: &[ReviewItem], which: &[usize]) -> bool {
