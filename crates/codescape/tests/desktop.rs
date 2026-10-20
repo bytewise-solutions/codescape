@@ -69,3 +69,19 @@ fn the_exec_path_is_quoted_and_escaped() {
     ensure_entry(tmp.path(), &[], Path::new("/x/a\"b`c$d\\e.AppImage")).unwrap();
     assert!(entry_in(tmp.path()).contains(r#"Exec="/x/a\\"b\\`c\\$d\\\\e.AppImage" %f"#), "{}", entry_in(tmp.path()));
 }
+
+#[test]
+fn only_the_appimage_codescape_runs_from_is_trusted() {
+    use codescape::desktop::running_appimage;
+    let tmp = tempfile::tempdir().unwrap();
+    let image = tmp.path().join("CodeScape.AppImage");
+    std::fs::write(&image, "").unwrap();
+    let mount = tmp.path().join(".mount_CodeSc");
+    let exe = mount.join("usr/bin/codescape");
+    assert_eq!(running_appimage(Some(image.as_os_str()), Some(mount.as_os_str()), Some(&exe)), Some(image.clone()));
+    let other = tmp.path().join(".mount_IDE");
+    assert_eq!(running_appimage(Some(image.as_os_str()), Some(other.as_os_str()), Some(&exe)), None, "inherited from another AppImage");
+    assert_eq!(running_appimage(Some(image.as_os_str()), None, Some(&exe)), None);
+    assert_eq!(running_appimage(Some(tmp.path().join("gone.AppImage").as_os_str()), Some(mount.as_os_str()), Some(&exe)), None);
+    assert_eq!(running_appimage(None, Some(mount.as_os_str()), Some(&exe)), None);
+}

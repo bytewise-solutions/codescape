@@ -5,6 +5,13 @@ const ICON: &[u8] = include_bytes!("../../../packaging/icon/codescape.svg");
 const ENTRY: &str = "applications/codescape.desktop";
 const OURS: &str = "X-CodeScape-AppImage=true";
 
+pub fn running_appimage(appimage: Option<&OsStr>, appdir: Option<&OsStr>, exe: Option<&Path>) -> Option<PathBuf> {
+    let (image, mount) = (PathBuf::from(appimage?), Path::new(appdir?));
+    let exe = exe?;
+    let inside = exe.starts_with(mount) || mount.canonicalize().is_ok_and(|m| exe.starts_with(m));
+    (image.is_file() && !mount.as_os_str().is_empty() && inside).then_some(image)
+}
+
 pub fn data_dirs_from(var: Option<&OsStr>) -> Vec<PathBuf> {
     let dirs: Vec<PathBuf> = var.map(std::env::split_paths).into_iter().flatten().filter(|p| p.is_absolute()).collect();
     if dirs.is_empty() { vec![PathBuf::from("/usr/local/share"), PathBuf::from("/usr/share")] } else { dirs }
