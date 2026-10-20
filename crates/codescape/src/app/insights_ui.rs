@@ -2,6 +2,7 @@ use super::Project;
 use crate::insights::{Flag, FlagKind, Insights, InsightsKey, Row, compute, flags};
 use crate::style;
 use codescape_format::{ArchivedGraph, NodeId, NodeKind};
+use codescape_index::View;
 use codescape_index::churn::file_changes;
 use codescape_index::review::is_git;
 use egui::{CollapsingHeader, RichText};
@@ -174,7 +175,7 @@ impl Project {
         self.flags.get(key, || flags(g, &analysis, churn.as_deref().unwrap_or(&HashMap::new()), &opts, &limits, n));
     }
 
-    pub(super) fn insights_ui(&self, ui: &mut egui::Ui) -> Picked {
+    pub(super) fn insights_ui(&self, ui: &mut egui::Ui, fold: Option<bool>) -> Picked {
         let mut picked = Picked { node: None, selection: None };
         ui.add_space(12.0);
         ui.label(RichText::new("INSIGHTS").small().color(style::MUTED));
@@ -198,14 +199,16 @@ impl Project {
         for (si, section) in SECTIONS.iter().enumerate() {
             let rows = (section.rows)(insights);
             let hotspots = section.kinds == [FlagKind::Hotspot];
+            let dead = section.kinds.contains(&FlagKind::Unused);
             let note = match (&self.churn.data, hotspots) {
+                _ if dead && !self.settings.settings().view(View::Unused).value => Some("off: turn on View, Unused code"),
                 _ if hotspots && self.review.is_some() => Some("not in review"),
                 (None, true) => Some("loading…"),
                 (Some(None), true) => Some("needs git"),
                 _ => None,
             };
             let count = if note.is_some() { String::new() } else { format!(" ({})", rows.len()) };
-            CollapsingHeader::new(format!("{}{count}", section.title)).id_salt(("insight", si)).default_open(si == 0).show(ui, |ui| {
+            CollapsingHeader::new(format!("{}{count}", section.title)).id_salt(("insight", si)).default_open(si == 0).open(fold).show(ui, |ui| {
                 if let Some(note) = note {
                     ui.label(RichText::new(note).small().color(style::MUTED));
                     return;

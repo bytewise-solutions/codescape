@@ -503,6 +503,8 @@ struct Project {
     insights: crate::insights::InsightsCache,
     flags: crate::insights::FlagsCache,
     insights_selection: bool,
+    left_fold: Option<bool>,
+    right_fold: Option<bool>,
     unused_rows: Option<(usize, Vec<(Usage, String, NodeId)>)>,
     sequence: Option<sequence_ui::SequenceView>,
     calls: Option<std::rc::Rc<crate::sequence::CallIndex>>,
@@ -737,6 +739,8 @@ impl Project {
             insights: Default::default(),
             flags: Default::default(),
             insights_selection: false,
+            left_fold: None,
+            right_fold: None,
             unused_rows: None,
             sequence: None,
             calls: None,
@@ -1760,6 +1764,8 @@ impl Project {
         let mut review_toggle: Option<usize> = None;
         let mut review_switches: Option<(bool, bool)> = None;
         let mut insights = None;
+        let fold = self.left_fold.take();
+        let mut fold_next = None;
         if self.unused_rows.as_ref().map(|(at, _)| *at) != self.analysis.as_ref().map(|a| Arc::as_ptr(a) as usize) {
             self.unused_rows = self.analysis.as_ref().map(|a| {
                 let g = self.file.graph();
@@ -1893,11 +1899,16 @@ impl Project {
                 }
                 ui.add_space(12.0);
             }
-            ui.label(egui::RichText::new("ENTRY POINTS").small().color(style::MUTED));
+            ui.horizontal(|ui| {
+                ui.label(egui::RichText::new("ENTRY POINTS").small().color(style::MUTED));
+                fold_next = fold_buttons(ui);
+            });
             for (gi, group) in self.groups.iter().enumerate() {
-                egui::CollapsingHeader::new(format!("{} ({})", group.label, group.items.len())).id_salt(("group", gi)).default_open(!group.collapsed).show(
-                    ui,
-                    |ui| {
+                egui::CollapsingHeader::new(format!("{} ({})", group.label, group.items.len()))
+                    .id_salt(("group", gi))
+                    .default_open(!group.collapsed)
+                    .open(fold)
+                    .show(ui, |ui| {
                         for item in &group.items {
                             let i = item.entry as usize;
                             let mut text = g.entry_label(i).to_string();
@@ -1912,7 +1923,11 @@ impl Project {
                                 continue;
                             }
                             let id = ui.make_persistent_id(("entry", i));
-                            egui::collapsing_header::CollapsingState::load_with_default_open(ui.ctx(), id, false)
+                            let mut state = egui::collapsing_header::CollapsingState::load_with_default_open(ui.ctx(), id, false);
+                            if let Some(open) = fold {
+                                state.set_open(open);
+                            }
+                            state
                                 .show_header(ui, |ui| {
                                     if ui.selectable_label(selected, format!("{text}  ({})", item.children.len())).clicked() {
                                         select = Some(i);
@@ -1928,14 +1943,13 @@ impl Project {
                                     }
                                 });
                         }
-                    },
-                );
+                    });
             }
             ui.add_space(12.0);
             ui.label(egui::RichText::new("MODULES").small().color(style::MUTED));
             let hidden = self.cache.options().hidden;
             for m in g.children(g.root()).filter(|&m| !g.flags(m).intersects(hidden)) {
-                egui::CollapsingHeader::new(g.name(m)).id_salt(("mod", m)).default_open(false).show(ui, |ui| {
+                egui::CollapsingHeader::new(g.name(m)).id_salt(("mod", m)).default_open(false).open(fold).show(ui, |ui| {
                     if ui.small_button("show").clicked() {
                         fly = Some(m);
                     }
@@ -1946,8 +1960,12 @@ impl Project {
                     }
                 });
             }
-            insights = Some(self.insights_ui(ui));
+            insights = Some(self.insights_ui(ui, fold));
         });
+        if fold_next.is_some() {
+            self.left_fold = fold_next;
+            ui.ctx().request_repaint();
+        }
         if let Some(i) = insights {
             if let Some(s) = i.selection {
                 self.insights_selection = s;
@@ -1978,6 +1996,8 @@ impl Project {
 
     fn inspector(&mut self, ui: &mut egui::Ui) {
         self.refresh_flags();
+        let fold = self.right_fold.take();
+        let mut fold_next = None;
         let g = self.file.graph();
         let shown_state = self.selected.map(|n| {
             let opts = self.cache.options();
@@ -2014,16 +2034,16 @@ impl Project {
             let h = inspector::header(g, n);
             ui.horizontal(|ui| {
                 ui.label(egui::RichText::new(&h.kind).small().color(style::MUTED));
-                if self.focus.is_some() {
-                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                    if self.focus.is_some() {
                         if ui.small_button("Clear").on_hover_text("Esc").clicked() {
                             self.pending_clear = true;
                         }
                         if ui.small_button("Back").on_hover_text("Alt+Left").clicked() {
                             self.pending_back = true;
                         }
-                    });
-                }
+                    }
+                });
             });
             ui.label(egui::RichText::new(&h.name).size(18.0).color(style::TEXT));
             if !h.owners.is_empty() {
@@ -2067,6 +2087,7 @@ impl Project {
                     } else if ui.small_button("Hide").on_hover_text("Leave it off the map; undo in View, What's on the map").clicked() {
                         self.pending_hide = Some(map_panel::HideRequest::Block(path.clone()));
                     }
+                    fold_next = fold_buttons(ui);
                 });
             }
             if let Some(l) = insights_ui::flags_ui(ui, g, self.flags.current()) {
@@ -2125,6 +2146,7 @@ impl Project {
                         egui::CollapsingHeader::new(egui::RichText::new(format!("{}  ({})", group.label, group.items.len())).small().color(style::MUTED))
                             .id_salt((title, &group.label))
                             .default_open(group.items.len() <= LIST_LIMIT)
+                            .open(fold)
                             .show(ui, |ui| {
                                 for (m, label) in group.items.iter().take(LIST_LIMIT) {
                                     if ui.selectable_label(false, label).on_hover_text(full_path(g, *m)).clicked() {
@@ -2149,6 +2171,7 @@ impl Project {
                 egui::CollapsingHeader::new(egui::RichText::new("list").small().color(style::MUTED))
                     .id_salt(("fields", n))
                     .default_open(fields.len() <= 12)
+                    .open(fold)
                     .show(ui, |ui| {
                         for f in fields.iter().take(LIST_LIMIT) {
                             let vis = f.visibility.uml();
@@ -2165,6 +2188,7 @@ impl Project {
                 egui::CollapsingHeader::new(egui::RichText::new("list").small().color(style::MUTED))
                     .id_salt(("inside", n))
                     .default_open(kids.len() <= 12)
+                    .open(fold)
                     .show(ui, |ui| {
                         for (c, name) in kids.iter().take(LIST_LIMIT) {
                             if ui.selectable_label(false, name).clicked() {
@@ -2177,6 +2201,10 @@ impl Project {
                     });
             }
         });
+        if fold_next.is_some() {
+            self.right_fold = fold_next;
+            ui.ctx().request_repaint();
+        }
         if std::mem::take(&mut self.pending_refocus) {
             self.refocus();
         }
@@ -3281,4 +3309,17 @@ impl Project {
             clip.text(pos([l.pos[0], l.pos[1] + l.size + 4.0]), Align2::LEFT_TOP, detail, FontId::proportional((l.size * 0.75).max(9.0)), style::MUTED);
         }
     }
+}
+
+fn fold_buttons(ui: &mut egui::Ui) -> Option<bool> {
+    let mut fold = None;
+    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+        if ui.small_button("-").on_hover_text("Collapse all").clicked() {
+            fold = Some(false);
+        }
+        if ui.small_button("+").on_hover_text("Expand all").clicked() {
+            fold = Some(true);
+        }
+    });
+    fold
 }

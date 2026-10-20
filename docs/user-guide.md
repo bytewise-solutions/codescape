@@ -155,7 +155,7 @@ enough to read.
   in at least 3 commits within the hotspot period; `needs git` outside a repository, `not in review` in Review mode),
   most depended on, upward dependencies, dead code, untested public code and duplicates. **Whole project / Selection**
   limits them to the selected block (Selection is available once something is selected). Dead code and the unused
-  flags follow **View ▸ Unused code**. Thresholds are in the map panel's HINTS section.
+  flags follow **View ▸ Unused code**; with it off, Dead code says so. Thresholds are in the map panel's HINTS section.
 - **Flags in the inspector.** A selected block with flags gets a FLAGS section at the top of the right panel: each
   flag's short name coloured by kind, its full explanation below (complexity breakdown, the commits behind a
   hotspot, unused wording, duplicate places, an upward arrow's target), and the other duplicate places or the upward
@@ -220,6 +220,9 @@ moved to `codescape.toml` for the team from **File ▸ Project Settings…**.
 `Ctrl+B` hides or shows the left panel, `Ctrl+I` the right one and `F11` both. With the mouse: the small arrow at
 the bottom inner corner of a panel hides it, and the slim strip left at the window edge brings it back (View menu
 too).
+
+The `+` and `-` buttons at the top of the left panel (next to ENTRY POINTS) and in the right panel (next to Hide)
+expand or collapse every section of that panel at once.
 
 ## Screenshots without a person at the window
 
