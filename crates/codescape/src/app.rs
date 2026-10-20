@@ -902,6 +902,7 @@ impl Project {
         opts.details_in = self.details_in.clone();
         self.cache.set_options(opts);
         self.calls = None;
+        self.rebuild_sequence();
         self.form.error = self.settings.save_view().err().map(|e| format!("{e:#}"));
     }
 

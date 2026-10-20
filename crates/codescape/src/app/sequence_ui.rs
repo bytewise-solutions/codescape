@@ -31,10 +31,7 @@ enum Act {
 
 impl Project {
     fn calls(&mut self) -> Rc<CallIndex> {
-        if self.calls.is_none() {
-            self.calls = Some(Rc::new(CallIndex::new(self.file.graph(), self.cache.options())));
-        }
-        self.calls.clone().unwrap()
+        self.calls.get_or_insert_with(|| Rc::new(CallIndex::new(self.file.graph(), self.cache.options()))).clone()
     }
 
     pub(super) fn open_sequence(&mut self, focus: NodeId) {
@@ -55,7 +52,10 @@ impl Project {
         self.sequence = Some(SequenceView { query, diagram, whole });
     }
 
-    fn rebuild_sequence(&mut self) {
+    pub(super) fn rebuild_sequence(&mut self) {
+        if self.sequence.is_none() {
+            return;
+        }
         let calls = self.calls();
         if let Some(s) = &mut self.sequence {
             s.diagram = diagram(self.file.graph(), &calls, &s.query);
@@ -72,9 +72,12 @@ impl Project {
     }
 
     pub(super) fn sequence_ui(&mut self, ui: &mut egui::Ui) {
+        if self.sequence.is_none() {
+            return;
+        }
+        let calls = self.calls();
         let Some(view) = &self.sequence else { return };
         let g = self.file.graph();
-        let calls = self.calls.clone().unwrap();
         let mut act: Option<Act> = None;
         let q = &view.query;
         let d = &view.diagram;
