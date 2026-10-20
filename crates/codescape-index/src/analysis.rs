@@ -1,4 +1,4 @@
-use codescape_format::{ArchivedGraph, EdgeFlags, EdgeKind, NodeFlags, NodeId, NodeKind, Scope, SubKind, Visibility};
+use codescape_format::{ArchivedGraph, EdgeFlags, EdgeKind, Lang, NodeFlags, NodeId, NodeKind, Scope, SubKind, Visibility};
 use std::collections::{HashMap, HashSet};
 use std::path::Path;
 
@@ -73,6 +73,53 @@ fn overrides(g: &ArchivedGraph, member: NodeId) -> bool {
     false
 }
 
+const IMPLICIT: &[(Lang, &str, usize)] = &[
+    (Lang::Java, "equals", 1),
+    (Lang::Java, "hashCode", 0),
+    (Lang::Java, "toString", 0),
+    (Lang::Java, "clone", 0),
+    (Lang::Java, "finalize", 0),
+    (Lang::Go, "String", 0),
+    (Lang::Go, "Error", 0),
+    (Lang::TypeScript, "toString", 0),
+    (Lang::TypeScript, "toJSON", 1),
+    (Lang::TypeScript, "valueOf", 0),
+    (Lang::JavaScript, "toString", 0),
+    (Lang::JavaScript, "toJSON", 1),
+    (Lang::JavaScript, "valueOf", 0),
+];
+
+fn arity(text: &str, start_line: u32, name: &str) -> Option<usize> {
+    let head: String = text.lines().skip(start_line.saturating_sub(1) as usize).take(12).collect::<Vec<_>>().join("\n");
+    let at = head.find(&format!("{name}("))? + name.len() + 1;
+    let (mut depth, mut commas, mut any) = (0usize, 0usize, false);
+    for c in head[at..].chars() {
+        match c {
+            ')' if depth == 0 => return Some(if any { commas + 1 } else { 0 }),
+            '(' | '<' | '[' | '{' => depth += 1,
+            ')' | '>' | ']' | '}' => depth = depth.saturating_sub(1),
+            ',' if depth == 0 => commas += 1,
+            c if !c.is_whitespace() => any = true,
+            _ => {}
+        }
+    }
+    None
+}
+
+fn implicitly_called(g: &ArchivedGraph, root: &Path, n: NodeId) -> bool {
+    if g.kind(n) != NodeKind::Member || g.sub_kind(n) != SubKind::Method {
+        return false;
+    }
+    let (lang, name) = (g.lang(n), g.name(n));
+    let wanted: Vec<usize> = IMPLICIT.iter().filter(|&&(l, m, _)| l == lang && m == name).map(|&(_, _, a)| a).collect();
+    if wanted.is_empty() {
+        return false;
+    }
+    let Some(file) = g.file(n) else { return false };
+    let Ok(text) = std::fs::read_to_string(root.join(file)) else { return false };
+    arity(&text, g.span(n).0, name).is_some_and(|a| wanted.contains(&a))
+}
+
 pub fn analyse(g: &ArchivedGraph, root: &Path) -> Analysis {
     let count = g.node_count();
     let mut main_use = vec![false; count];
@@ -118,6 +165,7 @@ pub fn analyse(g: &ArchivedGraph, root: &Path) -> Analysis {
             || (is_constructor(g, n) && owner.is_some())
             || file_body(g, n)
             || overrides(g, n)
+            || implicitly_called(g, root, n)
         {
             continue;
         }

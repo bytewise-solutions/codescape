@@ -99,3 +99,60 @@ fn a_class_holding_an_entry_point_is_used() {
     assert_eq!(a.usage[named("run") as usize], Usage::Used);
     assert_ne!(a.usage[named("stale") as usize], Usage::Used, "other members are still judged on their own");
 }
+
+#[test]
+fn methods_the_runtime_calls_on_every_object_are_used() {
+    let tmp = tempfile::tempdir().unwrap();
+    let dir = tmp.path().join("proj");
+    std::fs::create_dir_all(dir.join("src/main/java/b")).unwrap();
+    std::fs::write(dir.join("settings.gradle"), "rootProject.name = 'proj'\n").unwrap();
+    std::fs::write(dir.join("build.gradle"), "apply plugin: 'java'\n").unwrap();
+    std::fs::write(
+        dir.join("src/main/java/b/Point.java"),
+        "package b;\n\npublic class Point {\n    @Override\n    public boolean equals(Object o) {\n        return o == this;\n    }\n\n    @Override\n    public int hashCode() {\n        return 1;\n    }\n\n    @Override\n    public String toString() {\n        return \"p\";\n    }\n\n}\n",
+    )
+    .unwrap();
+    std::fs::write(
+        dir.join("src/main/java/b/Main.java"),
+        "package b;\n\npublic class Main {\n    public static void main(String[] args) {\n        new Point();\n    }\n}\n",
+    )
+    .unwrap();
+    let cfg = ProjectConfig { index: Some(tmp.path().join("i.codescape")), ..Default::default() };
+    let file = IndexFile::open(&index_project(&dir, &cfg, &|_| {}).unwrap().path).unwrap();
+    let g = file.graph();
+    let a = analyse(g, &dir);
+    let of = |class: &str, name: &str| -> Vec<Usage> {
+        let c = (0..g.node_count() as NodeId).find(|&n| g.name(n) == class && g.kind(n) == NodeKind::Type).unwrap();
+        g.children(c).filter(|&m| g.name(m) == name).map(|m| a.usage[m as usize]).collect()
+    };
+    for m in ["equals", "hashCode", "toString"] {
+        assert_eq!(of("Point", m), [Usage::Used], "{m}");
+    }
+}
+
+#[test]
+fn helpers_named_like_object_methods_but_taking_other_arguments_are_still_unused() {
+    let tmp = tempfile::tempdir().unwrap();
+    let dir = tmp.path().join("proj");
+    std::fs::create_dir_all(dir.join("src/main/java/b")).unwrap();
+    std::fs::write(dir.join("settings.gradle"), "rootProject.name = 'proj'\n").unwrap();
+    std::fs::write(dir.join("build.gradle"), "apply plugin: 'java'\n").unwrap();
+    std::fs::write(
+        dir.join("src/main/java/b/Util.java"),
+        "package b;\n\npublic class Util {\n    public static boolean equals(Object a,\n            Object b) {\n        return a == b;\n    }\n}\n\nclass Text {\n    public String toString(int depth) {\n        return \"\";\n    }\n}\n",
+    )
+    .unwrap();
+    std::fs::write(
+        dir.join("src/main/java/b/Main.java"),
+        "package b;\n\npublic class Main {\n    public static void main(String[] args) {\n        new Util();\n        new Text();\n    }\n}\n",
+    )
+    .unwrap();
+    let cfg = ProjectConfig { index: Some(tmp.path().join("i.codescape")), ..Default::default() };
+    let file = IndexFile::open(&index_project(&dir, &cfg, &|_| {}).unwrap().path).unwrap();
+    let g = file.graph();
+    let a = analyse(g, &dir);
+    for name in ["equals", "toString"] {
+        let n = (0..g.node_count() as NodeId).find(|&n| g.name(n) == name).unwrap();
+        assert_ne!(a.usage[n as usize], Usage::Used, "{name}");
+    }
+}
