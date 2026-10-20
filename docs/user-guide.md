@@ -58,6 +58,7 @@ saved for every project in `~/.config/codescape/keys.toml` (only the ones you ch
 | `←` `→` `↑` `↓` | select the nearest box in that direction |
 | `Enter` / `Backspace` | zoom into the selected box / go up to its parent |
 | `Esc` | close the window on top; with none open, close the sequence diagram, else leave the open file, else clear the selection |
+| the same shortcut again | close what it opened: `F1`/`?`, `S`, jump, find, file structure, settings |
 | `1` `2` `3` | show neighbours / everything it reaches / everywhere it's used |
 | `+` `−` / `F` | zoom in / out / fit the whole project |
 | `Page Up` `Page Down` `Home` `End` | scroll the file under the pointer or the selected one |

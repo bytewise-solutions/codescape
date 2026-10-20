@@ -1309,11 +1309,13 @@ impl Project {
         let plain = |k: Key| ui.input(|i| i.key_pressed(k) && !i.modifiers.alt && !i.modifiers.command && !i.modifiers.ctrl);
         let typed = |c: &str| ui.input(|i| i.events.iter().any(|e| matches!(e, egui::Event::Text(t) if t == c)));
         if typed("?") || plain(Key::F1) {
-            self.shortcuts_open = true;
+            self.shortcuts_open = !self.shortcuts_open;
             return;
         }
         if plain(Key::S) {
-            if let Some(n) = self.selected {
+            if self.sequence.is_some() {
+                self.sequence = None;
+            } else if let Some(n) = self.selected {
                 self.open_sequence(n);
             }
             return;
@@ -1508,14 +1510,18 @@ impl Project {
         if let Some(forward) = step {
             self.step_find(forward);
         }
-        self.search_open |= jump;
-        if find {
+        self.search_open ^= jump;
+        if find && self.find.is_some() {
+            self.find = None;
+        } else if find {
             self.open_find();
         }
-        if structure {
+        if structure && self.structure.is_some() {
+            self.structure = None;
+        } else if structure {
             self.open_structure();
         }
-        self.settings_open |= settings;
+        self.settings_open ^= settings;
         if open {
             action = Some(Action::OpenFolder);
         }
