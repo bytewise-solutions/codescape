@@ -22,6 +22,7 @@ codescape-index.workspace = true
 codescape-layout.workspace = true
 eframe.workspace = true
 egui.workspace = true
+egui_extras.workspace = true
 rfd.workspace = true
 nucleo-matcher.workspace = true
 png.workspace = true

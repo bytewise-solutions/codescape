@@ -66,7 +66,6 @@ pub struct CodescapeApp {
     shot: Option<Shot>,
     keys: Keymap,
     title: String,
-    logo: Option<egui::TextureHandle>,
 }
 
 pub fn window_title(project: Option<&Path>) -> String {
@@ -111,6 +110,7 @@ impl CodescapeApp {
     pub fn new(cc: &eframe::CreationContext<'_>, dir: Option<PathBuf>, config: Option<PathBuf>, shot: Option<ShotPlan>) -> CodescapeApp {
         cc.egui_ctx.set_visuals(style::visuals());
         cc.egui_ctx.global_style_mut(|s| s.text_styles = style::text_styles());
+        egui_extras::install_image_loaders(&cc.egui_ctx);
         let mut app = CodescapeApp {
             state: State::Start { error: None },
             config,
@@ -118,7 +118,6 @@ impl CodescapeApp {
             shot: shot.map(Shot::new),
             keys: load_keys(),
             title: window_title(None),
-            logo: None,
         };
         if let Some(d) = dir {
             app.open(d);
@@ -249,12 +248,7 @@ impl CodescapeApp {
         egui::CentralPanel::default().show(ui, |ui| {
             ui.add_space(80.0);
             ui.vertical_centered(|ui| {
-                let logo = self.logo.get_or_insert_with(|| {
-                    let icon = eframe::icon_data::from_png_bytes(include_bytes!("../../../packaging/icon/codescape.png")).expect("the app icon is a valid PNG");
-                    let image = egui::ColorImage::from_rgba_unmultiplied([icon.width as usize, icon.height as usize], &icon.rgba);
-                    ui.ctx().load_texture("logo", image, egui::TextureOptions::LINEAR)
-                });
-                ui.add(egui::Image::new(&*logo).fit_to_exact_size(egui::vec2(96.0, 96.0)));
+                ui.add(egui::Image::new(egui::include_image!("../../../packaging/icon/codescape.svg")).fit_to_exact_size(egui::vec2(96.0, 96.0)));
                 ui.add_space(8.0);
                 let mut wordmark = egui::text::LayoutJob::default();
                 let part = |color| egui::TextFormat { font_id: FontId::proportional(46.0), color, ..Default::default() };
