@@ -1,6 +1,6 @@
-# Codescape user guide
+# CodeScape user guide
 
-How Codescape finds a project, what the map shows, and how to move around it. For settings and rule packs
+How CodeScape finds a project, what the map shows, and how to move around it. For settings and rule packs
 see [configuration.md](configuration.md).
 
 ## How a project is read
@@ -22,7 +22,7 @@ Point it at the project folder. Every module under it is discovered and linked b
 The status bar's `calls X% resolved · Y% guessed` covers calls into your own code. Calls on library values (the JDK,
 Go's standard library, npm packages, Rust's `std`, and chains that start from one) are counted apart; point at the
 figure for the four counts. The version you are running shows at the right end of the status bar and in the window
-title (`Codescape 0.2.1 — shop`).
+title (`CodeScape 0.2.1 — shop`).
 
 Nothing is written into the project. The index lives in the user cache folder
 (`~/.cache/codescape/<hash>.codescape` on Linux) and is rebuilt when sources, detection rules or index settings

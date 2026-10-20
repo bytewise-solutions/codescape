@@ -1,10 +1,10 @@
-# Codescape
+# CodeScape
 
 [![CI](https://github.com/bytewise-solutions/codescape/actions/workflows/ci.yml/badge.svg)](https://github.com/bytewise-solutions/codescape/actions/workflows/ci.yml)
 
 **See a whole codebase as one zoomable map, and review what changed on it.**
 
-Codescape reads a Java, Go, TypeScript/JavaScript or Rust project and draws it as a layered map: entry points on
+CodeScape reads a Java, Go, TypeScript/JavaScript or Rust project and draws it as a layered map: entry points on
 top, modules below them by dependency, then packages, types and methods as you zoom in, down to the source itself.
 Arrows that point upward, a lower layer depending on a higher one, are drawn red, so you see at a glance whether a
 project is layered cleanly.
@@ -60,12 +60,12 @@ The screenshots show [ripgrep](https://github.com/BurntSushi/ripgrep) (MIT / Unl
 
 Download the file for your system from the [releases page](https://github.com/bytewise-solutions/codescape/releases):
 
-- **Linux** (x86-64): `Codescape-<version>-x86_64.AppImage`. Make it executable (`chmod +x`) and run it. If it
+- **Linux** (x86-64): `CodeScape-<version>-x86_64.AppImage`. Make it executable (`chmod +x`) and run it. If it
   complains about FUSE, install `libfuse2` or start it with `--appimage-extract-and-run`.
 - **Windows** (x86-64): `codescape-<version>-x86_64.exe`. Run it directly; there is nothing to install.
-- **macOS** (Apple Silicon and Intel): `Codescape-<version>-macos.dmg`. Drag Codescape to Applications. The app is not
+- **macOS** (Apple Silicon and Intel): `CodeScape-<version>-macos.dmg`. Drag CodeScape to Applications. The app is not
   signed yet, so the first time right-click it ▸ **Open** and confirm, or run
-  `xattr -d com.apple.quarantine /Applications/Codescape.app`.
+  `xattr -d com.apple.quarantine /Applications/CodeScape.app`.
 
 `SHA256SUMS` on the same page lists each file's checksum.
 
@@ -75,12 +75,15 @@ grammars.
 ```sh
 git clone git@github.com:bytewise-solutions/codescape.git
 cd codescape
-cargo build --release
+make build
 ```
 
 This gives two binaries in `target/release`: `codescape`, the viewer, and `codescape-index`, the indexer on the
 command line. The viewer draws with wgpu (Vulkan, Metal or DirectX 12), so it needs a GPU driver or a software one
 such as Mesa's lavapipe. On Linux it runs on Wayland or X11. Review mode needs `git` and `tar` on the `PATH`.
+On Linux, `make install` puts both binaries in `~/.local/bin` with a desktop entry and the icon, so CodeScape shows up
+in the application menu and Wayland desktops give its window the right icon (`make uninstall` removes them; set
+`PREFIX` to install elsewhere).
 
 ## Quick start
 
@@ -122,7 +125,7 @@ CI uses it to check that the app renders.
 Nothing is required. A `codescape.toml` in the project (shared with the team) or your own settings in
 `~/.config/codescape/` can leave folders out, mark test code, define filters and categories, and turn rule packs
 on or off; **File ▸ Project Settings…** edits them and shows which layer each value comes from. Rule packs teach
-Codescape about frameworks. Both are described in [docs/configuration.md](docs/configuration.md).
+CodeScape about frameworks. Both are described in [docs/configuration.md](docs/configuration.md).
 
 ## How it works
 
@@ -161,7 +164,8 @@ the test suite, a headless render of this repository's map and of a sequence dia
 builds on macOS and Windows.
 
 [Releases](.github/workflows/release.yml) are cut by pushing a tag that matches the workspace version in
-`Cargo.toml`: bump `version`, commit, then `git tag v0.2.0 && git push origin v0.2.0`. The workflow runs the tests,
+`Cargo.toml`. From an up-to-date `master`, `make release` (or `make release type=patch`, `dry-run=true` to preview)
+runs the checks, bumps the version, commits, tags and pushes; the workflow then runs the tests,
 builds the AppImage, the Windows executable and the macOS disk image, and publishes them with `SHA256SUMS` and the
 licences of every bundled crate (`THIRD-PARTY-LICENSES.txt`, from `cargo about`) as a GitHub release. Run it by hand from the Actions tab to build the same files as artifacts without publishing.
 

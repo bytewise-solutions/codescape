@@ -1,6 +1,6 @@
-# Configuring Codescape
+# Configuring CodeScape
 
-Everything here is optional: Codescape works on a project without any file of its own.
+Everything here is optional: CodeScape works on a project without any file of its own.
 
 ## Project settings
 
@@ -69,7 +69,7 @@ writes nothing into the project unless you press that last button.
 ## Rule packs
 
 Framework knowledge (which methods a framework calls back, what registers an HTTP route, how things are coloured)
-lives in **rule packs**, not in Codescape's code. The built-in packs in `rules/` use exactly the format you would
+lives in **rule packs**, not in CodeScape's code. The built-in packs in `rules/` use exactly the format you would
 write yourself: `java-core`, `libgdx`, `android`, `spring-boot`, `dagger`, `go-core`, `fiber`, `rabbitmq-amqp091`,
 `google-wire`, `ts-core`, `angular`, `express`, `rust-core`, `layers`, `significance`, `default-visuals`.
 

@@ -82,5 +82,5 @@ fn main() -> eframe::Result {
         links: args.links,
         flag_hover: args.flag_hover,
     });
-    eframe::run_native("Codescape", options, Box::new(move |cc| Ok(Box::new(codescape::app::CodescapeApp::new(cc, args.dir, args.config, shot)))))
+    eframe::run_native("CodeScape", options, Box::new(move |cc| Ok(Box::new(codescape::app::CodescapeApp::new(cc, args.dir, args.config, shot)))))
 }

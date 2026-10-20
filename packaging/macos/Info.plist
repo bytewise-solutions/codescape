@@ -2,8 +2,8 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
-  <key>CFBundleName</key><string>Codescape</string>
-  <key>CFBundleDisplayName</key><string>Codescape</string>
+  <key>CFBundleName</key><string>CodeScape</string>
+  <key>CFBundleDisplayName</key><string>CodeScape</string>
   <key>CFBundleIdentifier</key><string>com.bytewise-solutions.codescape</string>
   <key>CFBundleExecutable</key><string>codescape</string>
   <key>CFBundleIconFile</key><string>codescape</string>

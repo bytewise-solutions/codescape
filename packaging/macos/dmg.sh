@@ -3,7 +3,7 @@ set -euo pipefail
 bin=$1 tag=$2 out=$3
 here=$(cd "$(dirname "$0")" && pwd)
 work=$(mktemp -d)
-app="$work/dmg/Codescape.app"
+app="$work/dmg/CodeScape.app"
 mkdir -p "$app/Contents/MacOS" "$app/Contents/Resources"
 install -m755 "$bin" "$app/Contents/MacOS/codescape"
 sed "s/VERSION/${tag#v}/g" "$here/Info.plist" > "$app/Contents/Info.plist"
@@ -16,4 +16,4 @@ done
 iconutil -c icns "$iconset" -o "$app/Contents/Resources/codescape.icns"
 ln -s /Applications "$work/dmg/Applications"
 mkdir -p "$out"
-hdiutil create -volname Codescape -srcfolder "$work/dmg" -ov -format UDZO "$out/Codescape-$tag-macos.dmg"
+hdiutil create -volname CodeScape -srcfolder "$work/dmg" -ov -format UDZO "$out/CodeScape-$tag-macos.dmg"
