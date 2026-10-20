@@ -234,3 +234,23 @@ fn the_list_scope_follows_the_selection_until_show_all_and_the_list_keeps_it_whi
     scope.follow(tg, None);
     assert_eq!(scope.node, None, "no selection, the whole list");
 }
+
+#[test]
+fn a_box_counts_the_changes_inside_it_left_to_review() {
+    let (b, t) = (side(&[("cart/cart.go", BASE)]), side(&[("cart/cart.go", TARGET)]));
+    let tg = t.file.graph();
+    let items = items(tg, &compare(b.file.graph(), &b.dir, tg, &t.dir), &analyse(tg, &t.dir));
+    let named = |name: &str| (0..tg.node_count() as NodeId).find(|&n| tg.name(n) == name).unwrap();
+    let mut marks = ReviewMarks::default();
+    let counts = box_counts(tg, &items, &marks);
+    for n in 0..tg.node_count() as NodeId {
+        let c = counts.get(&n).copied().unwrap_or_default();
+        assert_eq!(c.to_review() + c.reviewed, within(tg, &items, n).len(), "the same changes as the list, in {}", tg.name(n));
+    }
+    assert_eq!(counts[&named("cart")], BoxCounts { new: 1, changed: 1, removed: 1, reviewed: 0 });
+    marks.set_reviewed(&items, &within(tg, &items, named("Add")), true);
+    let counts = box_counts(tg, &items, &marks);
+    assert_eq!(counts[&named("Cart")], BoxCounts { new: 0, changed: 0, removed: 1, reviewed: 1 });
+    assert_eq!(counts[&named("Cart")].to_review(), 1);
+    assert_eq!(counts[&named("Cart")].summary(), "0 new · 0 changed · 1 removed · 1 reviewed");
+}

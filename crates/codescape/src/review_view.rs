@@ -372,3 +372,40 @@ impl ReviewScope {
         self.node = None;
     }
 }
+
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct BoxCounts {
+    pub new: usize,
+    pub changed: usize,
+    pub removed: usize,
+    pub reviewed: usize,
+}
+
+impl BoxCounts {
+    pub fn to_review(&self) -> usize {
+        self.new + self.changed + self.removed
+    }
+
+    pub fn summary(&self) -> String {
+        format!("{} new · {} changed · {} removed · {} reviewed", self.new, self.changed, self.removed, self.reviewed)
+    }
+}
+
+pub fn box_counts(g: &ArchivedGraph, items: &[ReviewItem], marks: &ReviewMarks) -> HashMap<NodeId, BoxCounts> {
+    let mut out: HashMap<NodeId, BoxCounts> = HashMap::new();
+    for item in items {
+        let reviewed = marks.state(item) == MarkState::Reviewed;
+        let mut at = item.node.or(item.parent);
+        while let Some(n) = at {
+            let c = out.entry(n).or_default();
+            match (reviewed, item.kind) {
+                (true, _) => c.reviewed += 1,
+                (false, ItemKind::New) => c.new += 1,
+                (false, ItemKind::Changed) => c.changed += 1,
+                (false, ItemKind::Removed) => c.removed += 1,
+            }
+            at = g.parent(n);
+        }
+    }
+    out
+}

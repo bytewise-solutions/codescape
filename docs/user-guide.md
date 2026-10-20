@@ -127,9 +127,10 @@ enough to read.
   `git archive` into the cache folder and indexed once; neither your checkout nor the repository is touched (no
   worktree, nothing in `.git`). Versions unused for 14 days are deleted when a review starts, and **Review ▸ Clear
   cached versions** deletes them all. Blocks are matched by their
-  names: new ones are outlined green with `NEW`, changed ones amber with `+added −removed` lines, the rest dimmed.
-  Open boxes add up what changed inside them (`2 new · 3 changed · 1 removed`), card rows are tinted with their line
-  counts and any complexity increase, and arrows the change introduced are drawn green. The left panel lists every
+  names: new ones are outlined green, changed ones amber, the rest dimmed. Each box counts the changes of the list
+  inside it still to review (`3 to review`, green when one of them is new, amber otherwise, just the number on a narrow
+  card); once all are reviewed it says `reviewed` (nothing with **Hide reviewed** on). Hover the count for
+  `1 new · 1 changed · 1 removed · 2 reviewed`. Card rows are tinted with their line counts and any complexity increase, and arrows the change introduced are drawn green. The left panel lists every
   change, riskiest first. The list follows the selection: select a package, file or class on the map and it lists
   only the changes inside (a selected method lists its whole class or file, so its neighbours stay), and `N` / `P`
   step through those; `Esc` brings back the full list. **show all** next to `In <name>` lists everything while

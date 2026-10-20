@@ -16,7 +16,7 @@ use crate::panels::{EntryGroupView, group_entries};
 use crate::reading::{fill_view, leave_zoom, level_node, open_font, zoom_text};
 use crate::refs::{FileRefs, followable};
 use crate::review_view::{
-    CommitStep, ItemKind, Limits, MarkState, ReviewItem, ReviewMarks, ReviewProgress, ReviewScope, Risk, by_risk, current, flag_upward,
+    BoxCounts, CommitStep, ItemKind, Limits, MarkState, ReviewItem, ReviewMarks, ReviewProgress, ReviewScope, Risk, box_counts, by_risk, current, flag_upward,
     items_with as review_items, mark_label, scroll_to_row, step as review_step, within,
 };
 use crate::search::{self, SearchIndex, member_at_line};
@@ -31,7 +31,7 @@ use crate::{minimap, style};
 use codescape_format::*;
 use codescape_index::analysis::{Analysis, Usage, analyse};
 use codescape_index::review::{
-    Change, Counts, Review, Status, base_for, branches, clean_versions, commits, compare, current_branch, has_uncommitted, index_revision, is_git,
+    Change, Review, Status, base_for, branches, clean_versions, commits, compare, current_branch, has_uncommitted, index_revision, is_git,
 };
 use codescape_index::{
     Key as SettingKey, Progress, ProjectConfig, SettingsPaths, SettingsStore, Threshold, View, index_path, index_project, needs_reindex, project_packs,
@@ -407,6 +407,7 @@ struct ReviewState {
     marks: ReviewMarks,
     marks_path: PathBuf,
     states: HashMap<NodeId, MarkState>,
+    counts: HashMap<NodeId, BoxCounts>,
     hide_reviewed: bool,
     by_package: bool,
     followed: Option<String>,
@@ -428,8 +429,9 @@ impl ReviewState {
         self.items.iter().filter(|i| self.marks.state(i) == MarkState::Reviewed).count()
     }
 
-    fn refresh(&mut self) {
+    fn refresh(&mut self, g: &ArchivedGraph) {
         self.states = self.items.iter().filter_map(|i| Some((i.node?, self.marks.state(i)))).collect();
+        self.counts = box_counts(g, &self.items, &self.marks);
     }
 
     fn reorder(&mut self) {
@@ -441,9 +443,9 @@ impl ReviewState {
         self.cursor = current.and_then(|k| self.items.iter().position(|i| i.key == k));
     }
 
-    fn toggle(&mut self, i: usize) -> Option<String> {
+    fn toggle(&mut self, g: &ArchivedGraph, i: usize) -> Option<String> {
         self.marks.toggle(&self.items[i]);
-        self.refresh();
+        self.refresh(g);
         self.marks.save(&self.marks_path).err().map(|e| format!("saving review marks: {e}"))
     }
 
@@ -451,7 +453,7 @@ impl ReviewState {
         let inside = within(g, &self.items, selection);
         let reviewed = !self.marks.all_reviewed(&self.items, &inside);
         self.marks.set_reviewed(&self.items, &inside, reviewed);
-        self.refresh();
+        self.refresh(g);
         self.marks.save(&self.marks_path).err().map(|e| format!("saving review marks: {e}"))
     }
 }
@@ -534,6 +536,7 @@ struct Project {
     show_links: bool,
     file_marks: crate::insights::FileMarks,
     flag_tip: std::cell::RefCell<Option<(Pos2, Vec<crate::insights::Flag>)>>,
+    badge_tip: std::cell::RefCell<Option<(Pos2, String)>>,
     force_flag_tip: bool,
     scripted: bool,
     scroll_drag: Option<NodeId>,
@@ -599,18 +602,11 @@ fn pos(p: [f32; 2]) -> Pos2 {
 const LIST_LIMIT: usize = 60;
 const LEGEND_ROW: f32 = 14.0;
 
-fn review_badge(c: &Change, open: bool) -> Option<(String, Color32)> {
-    let i = c.inside;
-    if (open || c.status != Status::New) && i != Counts::default() {
-        let parts: Vec<String> =
-            [(i.new, "new"), (i.changed, "changed"), (i.removed, "removed")].iter().filter(|(n, _)| *n > 0).map(|(n, w)| format!("{n} {w}")).collect();
-        let color = if i.new > 0 { style::ADDED } else { style::EDGE_SIDEWAYS };
-        return Some((parts.join(" · "), color));
-    }
-    match c.status {
-        Status::New => Some(("NEW".into(), style::ADDED)),
-        Status::Changed => Some((format!("+{} −{}", c.added, c.removed), style::EDGE_SIDEWAYS)),
-        Status::Unchanged => None,
+fn review_badge(c: BoxCounts, hide_reviewed: bool) -> Option<(String, Color32)> {
+    match c.to_review() {
+        0 if c.reviewed > 0 && !hide_reviewed => Some(("reviewed".into(), style::MUTED)),
+        0 => None,
+        n => Some((format!("{n} to review"), if c.new > 0 { style::ADDED } else { style::EDGE_SIDEWAYS })),
     }
 }
 
@@ -775,6 +771,7 @@ impl Project {
             show_links: false,
             file_marks: Default::default(),
             flag_tip: Default::default(),
+            badge_tip: Default::default(),
             force_flag_tip: false,
             scripted: false,
             scroll_drag: None,
@@ -1245,6 +1242,7 @@ impl Project {
                     marks,
                     marks_path,
                     states: HashMap::new(),
+                    counts: HashMap::new(),
                     hide_reviewed,
                     by_package,
                     followed: None,
@@ -1253,7 +1251,7 @@ impl Project {
                     scope: ReviewScope::default(),
                 };
                 rv.reorder();
-                rv.refresh();
+                rv.refresh(g);
                 self.analysis = Some(Arc::new(done.analysis));
                 self.review = Some(rv);
             }
@@ -1448,7 +1446,7 @@ impl Project {
                 if let Some(n) = self.selected.filter(|&n| !within(g, &rv.items, n).is_empty()) {
                     self.review_error = rv.toggle_within(g, n);
                 } else if let Some(c) = rv.cursor {
-                    self.review_error = rv.toggle(c);
+                    self.review_error = rv.toggle(g, c);
                 }
                 return;
             }
@@ -2149,7 +2147,7 @@ impl Project {
             self.goto_review_item(i);
         }
         if let (Some(i), Some(rv)) = (review_toggle, self.review.as_mut()) {
-            self.review_error = rv.toggle(i);
+            self.review_error = rv.toggle(self.file.graph(), i);
         }
         if let (true, Some(rv)) = (show_all, self.review.as_mut()) {
             rv.scope.show_all();
@@ -2659,6 +2657,11 @@ impl Project {
         }
         self.paint(&painter);
         self.show_flag_tip(ui);
+        if let Some((at, text)) = self.badge_tip.take() {
+            egui::Tooltip::always_open(ui.ctx().clone(), ui.layer_id(), ui.scope_id().with("badge-tip"), egui::PopupAnchor::Position(at)).show(|ui| {
+                ui.label(text);
+            });
+        }
         let root = self.cache.shared(g, g.root());
         if self.reading.is_none() {
             minimap::draw(&painter, &root, &self.cam, self.view);
@@ -2768,7 +2771,8 @@ impl Project {
             Mark::None => {}
         }
         let change = self.review.as_ref().map(|rv| rv.review.change(b.node));
-        let reviewed = self.review.as_ref().is_some_and(|rv| rv.states.get(&b.node) == Some(&MarkState::Reviewed));
+        let counts = self.review.as_ref().map(|rv| (rv.counts.get(&b.node).copied().unwrap_or_default(), rv.hide_reviewed));
+        let reviewed = counts.is_some_and(|(c, _)| c.to_review() == 0 && c.reviewed > 0);
         let unused = self.unused(b.node);
         if unused.is_some() {
             stroke = Stroke::new(1.5, style::EDGE_UP.gamma_multiply(0.8));
@@ -2806,12 +2810,15 @@ impl Project {
         if self.app_counts.contains_key(&b.node) && b.rect.w > 24.0 {
             painter.circle_filled(Pos2::new(b.rect.right() - 9.0, b.rect.y + 9.0), 4.0, style::ENTRY);
         }
-        let badge = if reviewed { Some(("reviewed".to_string(), style::MUTED)) } else { change.and_then(|c| review_badge(c, b.open)) };
+        let badge = counts.and_then(|(c, hide)| review_badge(c, hide));
         let badge = badge.or_else(|| unused.map(|u| (unused_short(u).to_string(), style::EDGE_UP)));
-        if let Some((text, color)) = badge.filter(|_| b.rect.w > 60.0 && b.rect.h > 22.0) {
+        if let Some((mut text, color)) = badge.filter(|_| b.rect.w > 60.0 && b.rect.h > 22.0) {
+            let card = !(b.rows.is_empty() && b.field_rows.is_empty());
+            if card && let Some(n) = text.strip_suffix(" to review").filter(|_| text.len() as f32 * 6.0 > b.rect.w * 0.25) {
+                text = n.to_string();
+            }
             let galley = painter.layout_no_wrap(text, FontId::proportional(10.5), style::BG);
             let size = galley.size() + egui::vec2(10.0, 4.0);
-            let card = !(b.rows.is_empty() && b.field_rows.is_empty());
             let chip = if card {
                 egui::Rect::from_min_size(r.left_top() + egui::vec2(5.0, 5.0), size)
             } else {
@@ -2820,6 +2827,9 @@ impl Project {
             if chip.left() > r.left() {
                 painter.rect_filled(chip, 7.0, color);
                 painter.galley(chip.center() - galley.size() / 2.0, galley, style::BG);
+                if let Some((c, _)) = counts.filter(|_| self.pointer_in(chip)) {
+                    *self.badge_tip.borrow_mut() = Some((chip.left_bottom(), c.summary()));
+                }
             }
         }
     }
