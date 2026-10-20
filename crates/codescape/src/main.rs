@@ -54,7 +54,8 @@ fn main() -> eframe::Result {
     let args = Args::parse();
     #[cfg(target_os = "linux")]
     if let (Some(appimage), Some(data)) = (std::env::var_os("APPIMAGE"), dirs::data_dir()) {
-        let _ = codescape::desktop::ensure_entry(&data, std::path::Path::new(&appimage));
+        let system = codescape::desktop::data_dirs_from(std::env::var_os("XDG_DATA_DIRS").as_deref());
+        let _ = codescape::desktop::ensure_entry(&data, &system, std::path::Path::new(&appimage));
     }
     let options = eframe::NativeOptions {
         viewport: egui::ViewportBuilder::default()
