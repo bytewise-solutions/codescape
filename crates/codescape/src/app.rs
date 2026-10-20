@@ -610,6 +610,7 @@ fn pos(p: [f32; 2]) -> Pos2 {
 }
 
 const LIST_LIMIT: usize = 60;
+const EXIT_REVIEW_W: f32 = 110.0;
 const LEGEND_ROW: f32 = 14.0;
 
 fn review_badge(c: BoxCounts, hide_reviewed: bool) -> Option<(String, Color32)> {
@@ -1342,18 +1343,21 @@ impl Project {
                         bar.step -= 1;
                         rerun = true;
                     }
-                    let step = &bar.steps[bar.step];
-                    let sha = match step {
-                        CommitStep::Commit(c) => c.sha[..7].to_string(),
-                        CommitStep::Uncommitted => String::new(),
-                    };
                     ui.label(egui::RichText::new(format!("{}/{n}", bar.step + 1)).strong());
-                    ui.label(egui::RichText::new(sha).monospace().color(style::MUTED));
-                    ui.label(fit_label(step.label(), 260.0, 13.0));
                     if ui.add_enabled(bar.step + 1 < n, egui::Button::new(">")).on_hover_text("Next commit (])").clicked() {
                         bar.step += 1;
                         rerun = true;
                     }
+                    let step = &bar.steps[bar.step];
+                    let (sha, full) = match step {
+                        CommitStep::Commit(c) => (c.sha[..7].to_string(), format!("{}\n{}", c.sha, c.subject)),
+                        CommitStep::Uncommitted => (String::new(), step.label().to_string()),
+                    };
+                    ui.label(egui::RichText::new(sha).monospace().color(style::MUTED));
+                    let room = (ui.available_width() - EXIT_REVIEW_W).max(0.0);
+                    ui.allocate_ui(egui::vec2(room, ui.available_height()), |ui| {
+                        ui.add(egui::Label::new(step.label()).truncate().show_tooltip_when_elided(false)).on_hover_text(full);
+                    });
                 }
             }
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
@@ -1839,54 +1843,55 @@ impl Project {
                     ui.label(egui::RichText::new(format!("Comparing with {shown}…")).color(style::ACCENT));
                     ui.separator();
                 }
+                let mut items: Vec<(String, Color32, Option<String>)> = Vec::new();
                 if let Some(e) = &self.review_error {
-                    ui.colored_label(style::EDGE_UP, format!("Review failed: {e}"));
-                    ui.separator();
+                    items.push((format!("Review failed: {e}"), style::EDGE_UP, None));
                 }
                 if let Some(rv) = &self.review {
                     let count = |k: ItemKind| rv.items.iter().filter(|i| i.kind == k).count();
                     let (new, changed, gone) = (count(ItemKind::New), count(ItemKind::Changed), count(ItemKind::Removed));
                     let removed = if gone > 0 { format!(" · {gone} removed") } else { String::new() };
-                    ui.label(
-                        egui::RichText::new(format!(
-                            "{} · {} new · {} changed{removed} · {} / {} reviewed",
-                            rv.label,
-                            new,
-                            changed,
-                            rv.reviewed(),
-                            rv.items.len()
-                        ))
-                        .strong()
-                        .color(style::ACCENT),
-                    );
-                    ui.separator();
+                    let text = format!("{} · {new} new · {changed} changed{removed} · {} / {} reviewed", rv.label, rv.reviewed(), rv.items.len());
+                    items.push((text, style::ACCENT, None));
                 }
-                ui.label(egui::RichText::new(format!("zoom {:.0}% · inside {level}", self.cam.zoom * 100.0)).color(style::MUTED));
-                ui.separator();
+                items.push((format!("zoom {:.0}% · inside {level}", self.cam.zoom * 100.0), style::MUTED, None));
                 let t = &self.totals;
-                ui.label(
-                    egui::RichText::new(format!("{} modules · {} packages · {} types · {:.0}k loc", t.modules, t.packages, t.types, t.lines as f32 / 1000.0))
-                        .color(style::MUTED),
-                );
-                ui.separator();
-                ui.label(egui::RichText::new(format!("{} apps · {} dev tools", t.apps, t.tools)).color(style::MUTED));
-                ui.separator();
-                ui.label(
-                    egui::RichText::new(format!("calls {:.0}% resolved · {:.0}% guessed", r as f32 * 100.0 / total, gu as f32 * 100.0 / total))
-                        .color(style::MUTED),
-                )
-                .on_hover_text(format!("Calls in your code: {r} resolved, {gu} guessed, {u} unresolved\n{ext} library calls (not counted in the percentages)"));
+                items.push((
+                    format!("{} modules · {} packages · {} types · {:.0}k loc", t.modules, t.packages, t.types, t.lines as f32 / 1000.0),
+                    style::MUTED,
+                    None,
+                ));
+                items.push((format!("{} apps · {} dev tools", t.apps, t.tools), style::MUTED, None));
+                let calls = format!("Calls in your code: {r} resolved, {gu} guessed, {u} unresolved\n{ext} library calls (not counted in the percentages)");
+                items.push((format!("calls {:.0}% resolved · {:.0}% guessed", r as f32 * 100.0 / total, gu as f32 * 100.0 / total), style::MUTED, Some(calls)));
                 if up > 0 {
-                    ui.separator();
-                    ui.colored_label(style::EDGE_UP, format!("{up} upward module dependencies"));
+                    items.push((format!("{up} upward module dependencies"), style::EDGE_UP, None));
                 }
                 let skipped: Vec<String> = g.skipped_roots().map(|(_, p)| p.to_string()).collect();
                 if !skipped.is_empty() {
-                    ui.separator();
-                    ui.label(egui::RichText::new(format!("not indexed: {}", skipped.join(", "))).color(style::MUTED));
+                    items.push((format!("not indexed: {}", skipped.join(", ")), style::MUTED, None));
                 }
-                ui.separator();
-                ui.label(egui::RichText::new(format!("{:.1} ms · {} boxes", self.scene_ms, self.scene.stats.drawn)).color(style::MUTED));
+                items.push((format!("{:.1} ms · {} boxes", self.scene_ms, self.scene.stats.drawn), style::MUTED, None));
+                let visible = ui.clip_rect();
+                let mut cut: Vec<&str> = Vec::new();
+                let mut cut_from = visible.right();
+                for (k, (text, color, hover)) in items.iter().enumerate() {
+                    if k > 0 {
+                        ui.separator();
+                    }
+                    let r = ui.label(egui::RichText::new(text).color(*color));
+                    if !visible.contains_rect(r.rect) {
+                        cut.push(text);
+                        cut_from = cut_from.min(r.rect.left().max(visible.left()));
+                    }
+                    if let Some(h) = hover {
+                        r.on_hover_text(h);
+                    }
+                }
+                if !cut.is_empty() {
+                    let rest = egui::Rect::from_min_max(Pos2::new(cut_from, visible.top()), visible.right_bottom());
+                    ui.interact(rest, ui.scope_id().with("status-cut"), Sense::hover()).on_hover_text(cut.join("\n"));
+                }
             });
         });
     }
@@ -2029,7 +2034,8 @@ impl Project {
                         if ui.checkbox(&mut done, "").on_hover_text("Reviewed (R)").changed() {
                             review_toggle = Some(i);
                         }
-                        let hover = if rv.by_package { item.detail.clone() } else { format!("{}\n{}", item.group, item.detail) };
+                        let hover =
+                            if rv.by_package { format!("{}\n{}", item.label, item.detail) } else { format!("{}\n{}\n{}", item.label, item.group, item.detail) };
                         if ui.selectable_label(cur == Some(i), egui::RichText::new(&item.label).color(color)).on_hover_text(hover).clicked() {
                             review_pick = Some(i);
                         }
