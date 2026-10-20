@@ -319,3 +319,19 @@ fn only_a_review_chip_explains_its_counts_on_hover() {
     assert_eq!((text.as_str(), tip), ("2 to review", Some(some)));
     assert!(box_chip(None, None).is_none());
 }
+
+#[test]
+fn a_new_go_type_covers_the_methods_declared_after_it() {
+    const HUGE: &str = "package cart\n\ntype Huge struct{}\n\nfunc (h *Huge) A() int {\n\treturn 1\n}\n\nfunc (h *Huge) B() int {\n\treturn 2\n}\n";
+    let b = side(&[("cart/cart.go", BASE)]);
+    let huge = |src: &str| {
+        let t = side(&[("cart/cart.go", BASE), ("cart/huge.go", src)]);
+        let tg = t.file.graph();
+        let all = items(tg, &compare(b.file.graph(), &b.dir, tg, &t.dir), &analyse(tg, &t.dir));
+        all.into_iter().find(|i| i.label == "Huge").unwrap()
+    };
+    let before = huge(HUGE);
+    assert_eq!(before.detail, "+7 lines", "the struct line and both methods");
+    let after = huge(&HUGE.replace("return 2", "return 3"));
+    assert_ne!(before.fingerprint, after.fingerprint, "editing a method brings the type back");
+}

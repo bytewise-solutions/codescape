@@ -89,6 +89,25 @@ impl Source<'_> {
         self.files.entry(path.clone()).or_insert_with(|| std::fs::read_to_string(&path).map(|s| s.lines().map(str::to_string).collect()).unwrap_or_default())
     }
 
+    fn extent(&mut self, n: NodeId) -> Vec<String> {
+        let mut spans = std::collections::BTreeSet::new();
+        let mut todo = vec![n];
+        while let Some(m) = todo.pop() {
+            let (start, end) = self.g.span(m);
+            if let Some(file) = self.g.file(m).filter(|_| start >= 1 && end >= start) {
+                spans.extend((start..=end).map(|l| (file, l)));
+            }
+            todo.extend(self.g.children(m));
+        }
+        let mut out = Vec::new();
+        for (file, l) in spans {
+            if let Some(line) = self.file(file).get(l as usize - 1).map(|l| l.trim()).filter(|l| !l.is_empty()) {
+                out.push(line.to_string());
+            }
+        }
+        out
+    }
+
     fn lines(&mut self, n: NodeId) -> Vec<String> {
         let (start, end) = self.g.span(n);
         let Some(file) = self.g.file(n).filter(|_| start >= 1 && end >= start) else { return Vec::new() };
@@ -175,7 +194,7 @@ pub fn compare(base: &ArchivedGraph, base_root: &Path, target: &ArchivedGraph, t
         let c = &mut changes[n as usize];
         match base_keys.get(&key(target, n)) {
             None => {
-                let lines = after.lines(n);
+                let lines = if target.kind(n) == NodeKind::Type { after.extent(n) } else { after.lines(n) };
                 c.status = Status::New;
                 c.added = lines.len() as u32;
                 c.fingerprint = fingerprint(&lines);
