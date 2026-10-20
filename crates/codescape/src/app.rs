@@ -19,7 +19,9 @@ use crate::review_view::{CommitStep, ItemKind, Limits, MarkState, ReviewItem, Re
 use crate::search::{self, SearchIndex, member_at_line};
 use crate::settings_window::{self, SettingsForm};
 use crate::shot::{Shot, ShotPlan, ShotStep};
-use crate::source::{LINE_SPACING, SourceCache, Token, advance, file_font, highlight, hscroll_by, initial_scroll, merge_spans, scroll_at, scroll_by, thumb};
+use crate::source::{
+    LINE_SPACING, SourceCache, Token, advance, file_font, highlight, hscroll_by, initial_scroll, merge_spans, page_scroll, scroll_at, scroll_by, thumb,
+};
 use crate::view::{block_path, map_options, toggle, view_items};
 use crate::window_stack::{Escape, WindowStack, escape};
 use crate::{minimap, style};
@@ -2449,15 +2451,10 @@ impl Project {
         for (n, y, line_h) in shown {
             let start = g.span(n).0;
             let view_y = self.view.y;
-            let opening = match self.goto_line {
-                Some((t, line)) if t == n => line.saturating_sub(4) as f32,
-                _ => initial_scroll(start, y, view_y, line_h),
-            };
-            if self.target.is_some() {
-                self.file_scroll.insert(n, opening);
-            } else {
-                self.file_scroll.entry(n).or_insert(opening);
-            }
+            let jump = self.goto_line.filter(|(t, _)| *t == n).map(|(_, line)| line.saturating_sub(4) as f32);
+            let opening = jump.unwrap_or_else(|| initial_scroll(start, y, view_y, line_h));
+            let scroll = page_scroll(self.file_scroll.get(&n).copied(), opening, self.target.is_some(), jump.is_some());
+            self.file_scroll.insert(n, scroll);
         }
         if self.target.is_none() && self.goto_line.is_some_and(|(t, _)| self.file_scroll.contains_key(&t)) {
             self.goto_line = None;

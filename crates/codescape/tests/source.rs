@@ -90,3 +90,11 @@ fn sideways_scrolling_stops_once_the_longest_line_is_in_view() {
     assert_eq!(hscroll_by(390.0, -100.0, 200, 5.0, 600.0), 400.0 + 5.0 * 4.0, "stops with the longest line's end visible, plus a margin");
     assert_eq!(hscroll_by(0.0, -100.0, 50, 5.0, 600.0), 0.0, "short lines do not scroll");
 }
+
+#[test]
+fn a_jump_within_the_open_file_scrolls_even_when_the_camera_is_already_there() {
+    assert_eq!(page_scroll(Some(80.0), 20.0, false, true), 20.0, "same file, camera already in place");
+    assert_eq!(page_scroll(Some(80.0), 20.0, true, false), 20.0, "flying to the file");
+    assert_eq!(page_scroll(Some(80.0), 20.0, false, false), 80.0, "the reader's own scroll is kept");
+    assert_eq!(page_scroll(None, 20.0, false, false), 20.0, "a newly shown page starts at its opening line");
+}

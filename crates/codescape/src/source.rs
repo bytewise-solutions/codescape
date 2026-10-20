@@ -331,6 +331,13 @@ pub fn initial_scroll(start_line: u32, box_y: f32, view_y: f32, line_h: f32) -> 
     (start_line.saturating_sub(1) as f32 - (box_y - view_y) / line_h).max(0.0)
 }
 
+pub fn page_scroll(current: Option<f32>, opening: f32, flying: bool, jumping_here: bool) -> f32 {
+    match current {
+        Some(c) if !flying && !jumping_here => c,
+        _ => opening,
+    }
+}
+
 pub fn max_scroll(total: usize, visible: usize) -> f32 {
     (total as f32 - visible as f32 + END_MARGIN_LINES).max(0.0)
 }
