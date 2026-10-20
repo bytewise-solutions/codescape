@@ -428,7 +428,7 @@ dependencies = [
 
 [[package]]
 name = "codescape"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "anyhow",
  "clap",
@@ -451,7 +451,7 @@ dependencies = [
 
 [[package]]
 name = "codescape-build"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "anyhow",
  "codescape-format",
@@ -465,7 +465,7 @@ dependencies = [
 
 [[package]]
 name = "codescape-facts"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "codescape-format",
  "tree-sitter",
@@ -473,7 +473,7 @@ dependencies = [
 
 [[package]]
 name = "codescape-format"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "blake3",
  "memmap2",
@@ -484,7 +484,7 @@ dependencies = [
 
 [[package]]
 name = "codescape-go"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "codescape-build",
  "codescape-facts",
@@ -498,7 +498,7 @@ dependencies = [
 
 [[package]]
 name = "codescape-index"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "anyhow",
  "blake3",
@@ -523,7 +523,7 @@ dependencies = [
 
 [[package]]
 name = "codescape-java"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "codescape-build",
  "codescape-facts",
@@ -537,7 +537,7 @@ dependencies = [
 
 [[package]]
 name = "codescape-layout"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "codescape-format",
  "codescape-rules",
@@ -547,7 +547,7 @@ dependencies = [
 
 [[package]]
 name = "codescape-rules"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "anyhow",
  "blake3",
@@ -570,7 +570,7 @@ dependencies = [
 
 [[package]]
 name = "codescape-rust"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "codescape-build",
  "codescape-facts",
@@ -584,7 +584,7 @@ dependencies = [
 
 [[package]]
 name = "codescape-synth"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "anyhow",
  "clap",
@@ -592,7 +592,7 @@ dependencies = [
 
 [[package]]
 name = "codescape-ts"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "codescape-build",
  "codescape-facts",
