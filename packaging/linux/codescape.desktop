@@ -4,5 +4,6 @@ Name=CodeScape
 Comment=See a codebase as one zoomable map, and review what changed on it
 Exec=codescape %f
 Icon=codescape
+StartupWMClass=codescape
 Terminal=false
 Categories=Development;
