@@ -54,7 +54,7 @@ fn main() -> eframe::Result {
     let args = Args::parse();
     let options = eframe::NativeOptions {
         viewport: egui::ViewportBuilder::default()
-            .with_title("Codescape")
+            .with_title(codescape::app::window_title(None))
             .with_app_id("codescape")
             .with_inner_size([1440.0, 900.0])
             .with_icon(eframe::icon_data::from_png_bytes(include_bytes!("../../../packaging/icon/codescape.png")).expect("the app icon is a valid PNG")),

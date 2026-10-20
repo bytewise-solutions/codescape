@@ -65,6 +65,15 @@ pub struct CodescapeApp {
     recent: Vec<PathBuf>,
     shot: Option<Shot>,
     keys: Keymap,
+    title: String,
+}
+
+pub fn window_title(project: Option<&Path>) -> String {
+    let version = env!("CARGO_PKG_VERSION");
+    match project.and_then(Path::file_name) {
+        Some(name) => format!("Codescape {version} — {}", name.to_string_lossy()),
+        None => format!("Codescape {version}"),
+    }
 }
 
 fn recent_file() -> Option<PathBuf> {
@@ -94,7 +103,14 @@ impl CodescapeApp {
     pub fn new(cc: &eframe::CreationContext<'_>, dir: Option<PathBuf>, config: Option<PathBuf>, shot: Option<ShotPlan>) -> CodescapeApp {
         cc.egui_ctx.set_visuals(style::visuals());
         cc.egui_ctx.global_style_mut(|s| s.text_styles = style::text_styles());
-        let mut app = CodescapeApp { state: State::Start { error: None }, config, recent: load_recent(), shot: shot.map(Shot::new), keys: load_keys() };
+        let mut app = CodescapeApp {
+            state: State::Start { error: None },
+            config,
+            recent: load_recent(),
+            shot: shot.map(Shot::new),
+            keys: load_keys(),
+            title: window_title(None),
+        };
         if let Some(d) = dir {
             app.open(d);
         }
@@ -330,6 +346,15 @@ impl eframe::App for CodescapeApp {
                     self.act(a);
                 }
             }
+        }
+        let title = match &self.state {
+            State::Start { .. } => window_title(None),
+            State::Indexing { dir, .. } => window_title(Some(dir)),
+            State::Open(p) => window_title(Some(&p.origin().0)),
+        };
+        if title != self.title {
+            ui.ctx().send_viewport_cmd(egui::ViewportCommand::Title(title.clone()));
+            self.title = title;
         }
     }
 }
@@ -1774,6 +1799,8 @@ impl Project {
         let level = level_node(g, &self.scene, self.reading, self.view.center()).map(|n| format!("{:?}", g.kind(n))).unwrap_or_else(|| "Project".into());
         let up = self.cache.get(g.root()).map_or(0, |l| l.up_edges());
         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+            ui.label(egui::RichText::new(concat!("v", env!("CARGO_PKG_VERSION"))).color(style::MUTED));
+            ui.add_space(8.0);
             if ui.link(egui::RichText::new("? shortcuts").color(style::MUTED)).clicked() {
                 self.shortcuts_open = true;
             }

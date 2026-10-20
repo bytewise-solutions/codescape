@@ -16,5 +16,6 @@ mod search;
 mod sequence;
 mod source;
 mod style;
+mod title;
 mod view;
 mod window_stack;
