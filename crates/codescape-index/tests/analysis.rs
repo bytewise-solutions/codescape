@@ -182,3 +182,25 @@ fn a_method_marked_as_an_override_is_used_even_without_a_declared_supertype() {
     assert_eq!(a.usage[named("handle") as usize], Usage::Used);
     assert_ne!(a.usage[named("stale") as usize], Usage::Used);
 }
+
+#[test]
+fn methods_javascript_calls_on_every_object_are_used() {
+    let tmp = tempfile::tempdir().unwrap();
+    let dir = tmp.path().join("proj");
+    std::fs::create_dir_all(dir.join("src")).unwrap();
+    std::fs::write(dir.join("package.json"), "{\"name\": \"proj\", \"main\": \"src/index.ts\"}\n").unwrap();
+    std::fs::write(
+        dir.join("src/money.ts"),
+        "export class Money {\n  constructor(private v: number) {}\n  toJSON() {\n    return this.v;\n  }\n  toString() {\n    return String(this.v);\n  }\n  stale() {\n    return 1;\n  }\n}\n",
+    )
+    .unwrap();
+    std::fs::write(dir.join("src/index.ts"), "import { Money } from \"./money\";\nconsole.log(JSON.stringify(new Money(1)));\n").unwrap();
+    let cfg = ProjectConfig { index: Some(tmp.path().join("i.codescape")), ..Default::default() };
+    let file = IndexFile::open(&index_project(&dir, &cfg, &|_| {}).unwrap().path).unwrap();
+    let g = file.graph();
+    let a = analyse(g, &dir);
+    let named = |name: &str| (0..g.node_count() as NodeId).find(|&n| g.name(n) == name).unwrap_or_else(|| panic!("no {name}"));
+    assert_eq!(a.usage[named("toJSON") as usize], Usage::Used);
+    assert_eq!(a.usage[named("toString") as usize], Usage::Used);
+    assert_ne!(a.usage[named("stale") as usize], Usage::Used);
+}

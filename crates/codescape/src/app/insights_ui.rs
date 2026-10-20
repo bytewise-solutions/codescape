@@ -10,6 +10,8 @@ use std::collections::HashMap;
 use std::sync::Arc;
 use std::sync::mpsc::{Receiver, TryRecvError, channel};
 
+const SCROLL_FROM: usize = 40;
+
 pub(super) struct ChurnState {
     days: u32,
     data: Option<Option<Arc<HashMap<String, u32>>>>,
@@ -215,28 +217,46 @@ impl Project {
                 if rows.is_empty() {
                     ui.label(RichText::new("nothing found").small().color(style::MUTED));
                 }
-                for row in rows {
-                    ui.vertical(|ui| {
-                        ui.spacing_mut().item_spacing.y = 0.0;
-                        let name = match g.parent(row.node).filter(|&p| g.kind(row.node) == NodeKind::Member && g.kind(p) == NodeKind::Type) {
-                            Some(t) => format!("{}.{}", g.name(t), g.name(row.node)),
-                            None => g.name(row.node).to_string(),
-                        };
-                        if ui
-                            .selectable_label(self.selected == Some(row.node), name)
-                            .on_hover_ui(|ui| {
-                                ui.label(self.row_hover(section, row));
-                            })
-                            .clicked()
-                        {
-                            picked.node = Some(row.node);
-                        }
-                        ui.horizontal(|ui| {
-                            ui.add_space(6.0);
-                            ui.label(RichText::new(&row.reason).small().color(style::MUTED));
-                        });
+                let row_h = ui.text_style_height(&egui::TextStyle::Body) + ui.text_style_height(&egui::TextStyle::Small) + 6.0;
+                let mut draw = |ui: &mut egui::Ui, row: &Row| {
+                    let (rect, _) = ui.allocate_exact_size(egui::vec2(ui.available_width(), row_h), egui::Sense::hover());
+                    let mut ui = ui.new_child(egui::UiBuilder::new().max_rect(rect).layout(egui::Layout::top_down(egui::Align::Min)));
+                    ui.spacing_mut().item_spacing.y = 0.0;
+                    ui.style_mut().wrap_mode = Some(egui::TextWrapMode::Truncate);
+                    let name = match g.parent(row.node).filter(|&p| g.kind(row.node) == NodeKind::Member && g.kind(p) == NodeKind::Type) {
+                        Some(t) => format!("{}.{}", g.name(t), g.name(row.node)),
+                        None => g.name(row.node).to_string(),
+                    };
+                    if ui
+                        .selectable_label(self.selected == Some(row.node), name)
+                        .on_hover_ui(|ui| {
+                            ui.label(self.row_hover(section, row));
+                        })
+                        .clicked()
+                    {
+                        picked.node = Some(row.node);
+                    }
+                    ui.horizontal(|ui| {
+                        ui.add_space(6.0);
+                        ui.label(RichText::new(&row.reason).small().color(style::MUTED));
                     });
+                };
+                if rows.len() <= SCROLL_FROM {
+                    for row in rows {
+                        draw(ui, row);
+                    }
+                    return;
                 }
+                egui::ScrollArea::vertical().id_salt(("insight-rows", si)).max_height(row_h * SCROLL_FROM as f32 / 2.0).show_rows(
+                    ui,
+                    row_h,
+                    rows.len(),
+                    |ui, range| {
+                        for row in &rows[range] {
+                            draw(ui, row);
+                        }
+                    },
+                );
             });
         }
         picked

@@ -150,7 +150,7 @@ enough to read.
   own lines, and lists them under Insights ▸ Unused code: `unused`, `no caller in the project` (public, so possibly API used by
   others) or `only tests use it`. Entry points, tests, generated code, constructors, methods implementing a
   supertype's or marked as overrides (Java `@Override`, TS `override`), and the methods the runtime calls itself (Java `equals(Object)`, `hashCode()`, `toString()`, `clone()`,
-  `finalize()`; Go `String()` and `Error()`; TS/JS `toString()`, `valueOf()`, `toJSON(key)`) are never listed. Code reached by reflection or a framework can still show up, so read it as a hint.
+  `finalize()`; Go `String()` and `Error()`; TS/JS `toString()`, `valueOf()`, `toJSON()`) are never listed. Code reached by reflection or a framework can still show up, so read it as a hint.
   `codescape-index <dir> --unused` prints the same list.
 - **Insights.** At the top of the left panel, collapsible sections list areas of interest, each row a name and a short reason (hover for
   the full explanation, click to fly there; a method opens its code): most complex, hotspots (complex code changed
@@ -201,7 +201,8 @@ enough to read.
 - **Hints:** complexity hints and their two levels, unused code, how many callers make a change risky, how long
   compared versions are kept, and how many tokens a copy needs to count as duplicated code (50, at least 10;
   identifiers and literals are ignored, so a copy with renamed variables still counts; test and generated code are
-  left out; changing it re-indexes the project about a second after the last change), and how many days of git history count when ranking hotspots (365).
+  left out; changing it re-indexes the project about a second after the last change, or after
+  leaving Review), and how many days of git history count when ranking hotspots (365).
 - **Hidden by you:** right-click any box ▸ **Hide this**, **Hide package …** or **Hide every name ending in …**
   (`…Exception`, `…Dto`), or type a pattern in the panel. Each entry says which settings file holds it and has
   **show again**.
@@ -223,7 +224,7 @@ moved to `codescape.toml` for the team from **File ▸ Project Settings…**.
 the bottom inner corner of a panel hides it, and the slim strip left at the window edge brings it back (View menu
 too).
 
-The `+` and `-` buttons at the top of the left panel (next to ENTRY POINTS) and in the right panel (next to Hide)
+The `+` and `-` buttons at the top of the left panel (next to INSIGHTS) and in the right panel (next to Hide)
 expand or collapse every section of that panel at once.
 
 **View ▸ Panel text** sets the size of the side panels' text (80–200 %), remembered for every project in

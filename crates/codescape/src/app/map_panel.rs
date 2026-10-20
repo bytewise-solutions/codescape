@@ -134,6 +134,7 @@ impl Project {
             .anchor(egui::Align2::RIGHT_TOP, [-20.0, 70.0])
             .show(ctx, |ui| {
                 let s = self.settings.settings();
+                let reviewing = self.review.is_some() || self.review_bar.is_some();
                 let mut switch = |ui: &mut egui::Ui, v: View, count: Option<usize>| {
                     let mut on = s.view(v).value;
                     let label = match count {
@@ -177,7 +178,8 @@ impl Project {
                                 levels.push((t, value));
                             }
                             if t == Threshold::DuplicateTokens {
-                                ui.label(egui::RichText::new("re-indexes").small().color(style::MUTED));
+                                let note = if reviewing { "applies after the review" } else { "re-indexes" };
+                                ui.label(egui::RichText::new(note).small().color(style::MUTED));
                             }
                         });
                     }
@@ -248,7 +250,12 @@ impl Project {
             for (t, v) in levels {
                 self.settings.set_threshold(t, v);
                 if t == Threshold::DuplicateTokens {
-                    self.reindex_at = Some(std::time::Instant::now() + std::time::Duration::from_secs(1));
+                    let at = std::time::Instant::now() + std::time::Duration::from_secs(1);
+                    if self.review.is_some() || self.review_bar.is_some() {
+                        self.reindex_after_review = true;
+                    } else {
+                        self.reindex_at = Some(at);
+                    }
                 }
             }
             self.apply_display();

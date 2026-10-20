@@ -74,4 +74,5 @@ fn panel_text_size_is_remembered_and_kept_in_range() {
     assert_eq!(Prefs::parse(&p.to_toml()).panel_text, 1.4);
     assert_eq!(Prefs::parse("panel_text = 9.0").panel_text, 2.0);
     assert_eq!(Prefs::parse("panel_text = 0.1").panel_text, 0.8);
+    assert_eq!(Prefs::parse("panel_text = nan").panel_text, 1.0);
 }

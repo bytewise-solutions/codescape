@@ -82,9 +82,11 @@ const IMPLICIT: &[(Lang, &str, usize)] = &[
     (Lang::Go, "String", 0),
     (Lang::Go, "Error", 0),
     (Lang::TypeScript, "toString", 0),
+    (Lang::TypeScript, "toJSON", 0),
     (Lang::TypeScript, "toJSON", 1),
     (Lang::TypeScript, "valueOf", 0),
     (Lang::JavaScript, "toString", 0),
+    (Lang::JavaScript, "toJSON", 0),
     (Lang::JavaScript, "toJSON", 1),
     (Lang::JavaScript, "valueOf", 0),
 ];
@@ -121,7 +123,7 @@ fn marked_override(lang: Lang, declaration: &str) -> bool {
     }
 }
 
-fn implicitly_called(g: &ArchivedGraph, root: &Path, n: NodeId) -> bool {
+fn implicitly_called(g: &ArchivedGraph, root: &Path, n: NodeId, sources: &mut HashMap<String, Option<String>>) -> bool {
     if g.kind(n) != NodeKind::Member || g.sub_kind(n) != SubKind::Method {
         return false;
     }
@@ -131,9 +133,9 @@ fn implicitly_called(g: &ArchivedGraph, root: &Path, n: NodeId) -> bool {
         return false;
     }
     let Some(file) = g.file(n) else { return false };
-    let Ok(text) = std::fs::read_to_string(root.join(file)) else { return false };
+    let Some(text) = sources.entry(file.to_string()).or_insert_with(|| std::fs::read_to_string(root.join(file)).ok()) else { return false };
     let start = g.span(n).0;
-    declaration(&text, start, name).is_some_and(|d| marked_override(lang, &d)) || arity(&text, start, name).is_some_and(|a| wanted.contains(&a))
+    declaration(text, start, name).is_some_and(|d| marked_override(lang, &d)) || arity(text, start, name).is_some_and(|a| wanted.contains(&a))
 }
 
 pub fn analyse(g: &ArchivedGraph, root: &Path) -> Analysis {
@@ -172,6 +174,7 @@ pub fn analyse(g: &ArchivedGraph, root: &Path) -> Analysis {
         }
     }
     let mut usage = vec![Usage::Used; count];
+    let mut sources = HashMap::new();
     for n in 0..count as NodeId {
         if !matches!(g.kind(n), NodeKind::Type | NodeKind::Member) || set_aside(g, n) || main_use[n as usize] || entered(n) || holds_entry[n as usize] {
             continue;
@@ -181,7 +184,7 @@ pub fn analyse(g: &ArchivedGraph, root: &Path) -> Analysis {
             || (is_constructor(g, n) && owner.is_some())
             || file_body(g, n)
             || overrides(g, n)
-            || implicitly_called(g, root, n)
+            || implicitly_called(g, root, n, &mut sources)
         {
             continue;
         }

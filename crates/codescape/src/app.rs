@@ -479,6 +479,7 @@ struct Project {
     scene_ms: f32,
     last_frame: Instant,
     reindex_at: Option<Instant>,
+    reindex_after_review: bool,
     source: std::cell::RefCell<SourceCache>,
     reading: Option<(NodeId, f32)>,
     file_scroll: HashMap<NodeId, f32>,
@@ -719,6 +720,7 @@ impl Project {
             scene_ms: 0.0,
             last_frame: Instant::now(),
             reindex_at: None,
+            reindex_after_review: false,
             source,
             reading: None,
             file_scroll: HashMap::new(),
@@ -942,8 +944,9 @@ impl Project {
                 ui.label("Panel text");
                 let mut size = self.prefs.panel_text;
                 let slider = egui::Slider::new(&mut size, crate::panels::PANEL_TEXT).step_by(0.1).custom_formatter(|v, _| format!("{:.0}%", v * 100.0));
-                if ui.add(slider).changed() {
-                    self.prefs.panel_text = size;
+                let resp = ui.add(slider);
+                self.prefs.panel_text = size;
+                if resp.drag_stopped() || (resp.changed() && !resp.dragged()) {
                     self.prefs.save();
                 }
             });
@@ -1039,6 +1042,9 @@ impl Project {
             && let Err(e) = self.show_version(dir, index)
         {
             self.review_error = Some(e);
+        }
+        if std::mem::take(&mut self.reindex_after_review) {
+            self.reindex_at = Some(Instant::now());
         }
     }
 

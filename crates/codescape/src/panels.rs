@@ -60,7 +60,8 @@ impl Default for Prefs {
 impl Prefs {
     pub fn parse(text: &str) -> Prefs {
         let p: Prefs = toml::from_str(text).unwrap_or_default();
-        Prefs { panel_text: p.panel_text.clamp(*PANEL_TEXT.start(), *PANEL_TEXT.end()) }
+        let size = if p.panel_text.is_finite() { p.panel_text } else { Prefs::default().panel_text };
+        Prefs { panel_text: size.clamp(*PANEL_TEXT.start(), *PANEL_TEXT.end()) }
     }
 
     pub fn to_toml(&self) -> String {
