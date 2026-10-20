@@ -905,9 +905,33 @@ impl Project {
         let mut opts = map_options(self.file.graph(), self.settings.settings(), &self.visual);
         opts.details_in = self.details_in.clone();
         self.cache.set_options(opts);
+        self.keep_reading();
         self.calls = None;
         self.rebuild_sequence();
         self.form.error = self.settings.save_view().err().map(|e| format!("{e:#}"));
+    }
+
+    fn keep_reading(&mut self) {
+        let g = self.file.graph();
+        let mut lost = false;
+        if let Some((n, _)) = self.reading {
+            match world_rect(g, &mut self.cache, n) {
+                Some(r) => self.cam = Camera::reading(r, self.view),
+                None => {
+                    self.reading = None;
+                    lost = true;
+                }
+            }
+        }
+        if let Some((t, _)) = self.goto_line.filter(|_| self.target.is_some()) {
+            self.target = world_rect(g, &mut self.cache, t).map(|r| Camera::reading(r, self.view));
+            if self.target.is_none() {
+                self.goto_line = None;
+            }
+        }
+        if lost && self.target.is_none() {
+            self.needs_fit = true;
+        }
     }
 
     fn view_menu(&mut self, ui: &mut egui::Ui) {
