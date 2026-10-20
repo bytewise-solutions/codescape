@@ -45,7 +45,7 @@ blake3 = "1.8.7"
 anyhow = "1.0.104"
 thiserror = "2.0.21"
 tempfile = "3.27.0"
-eframe = { version = "0.37.0", default-features = false, features = ["wgpu", "default_fonts", "wayland", "x11"] }
+eframe = { version = "0.37.0", default-features = false, features = ["wgpu", "default_fonts", "wayland", "x11", "clipboard"] }
 egui = "0.37.0"
 rfd = "0.17.2"
 nucleo-matcher = "0.3.1"
