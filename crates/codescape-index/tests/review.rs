@@ -262,3 +262,25 @@ fn reviews_exporting_the_same_commit_at_once_all_succeed() {
     });
     assert!(results.is_empty(), "{results:?}");
 }
+
+#[test]
+fn a_project_at_the_repository_root_keeps_its_module_name_when_compared() {
+    let tmp = tempfile::tempdir().unwrap();
+    let repo = tmp.path().join("shop");
+    std::fs::create_dir_all(repo.join("cart")).unwrap();
+    std::fs::write(repo.join("go.mod"), "module example.com/shop\n\ngo 1.22\n").unwrap();
+    std::fs::write(repo.join("cart/cart.go"), BASE_CART).unwrap();
+    git(&repo, &["init", "-q", "-b", "main"]);
+    git(&repo, &["add", "."]);
+    git(&repo, &["commit", "-q", "-m", "base"]);
+    std::fs::write(repo.join("cart/extra.go"), "package cart\n\nfunc Extra() {}\n").unwrap();
+    let base = index_revision(&repo, "main", &ProjectConfig::default(), &tmp.path().join("cache"), &|_| {}).unwrap();
+    let target_cfg = ProjectConfig { index: Some(tmp.path().join("target.codescape")), ..Default::default() };
+    let target = index_project(&repo, &target_cfg, &|_| {}).unwrap();
+    let (bf, tf) = (IndexFile::open(&base.index).unwrap(), IndexFile::open(&target.path).unwrap());
+    let r = compare(bf.graph(), &base.dir, tf.graph(), &repo);
+    let tg = tf.graph();
+    assert_eq!(r.change(node(tg, &["shop", "cart", "Extra"])).status, Status::New);
+    assert_eq!(r.change(node(tg, &["shop", "cart", "Cart"])).status, Status::Unchanged, "same module name on both sides");
+    assert!(r.removed.is_empty(), "{:?}", r.removed.iter().map(|x| &x.path).collect::<Vec<_>>());
+}

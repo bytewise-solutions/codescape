@@ -391,11 +391,12 @@ pub fn index_revision(
     let rel = project.strip_prefix(&root)?.to_path_buf();
     let key = format!("{}-{}", crate::project_key(&project), &sha[..12]);
     let version = cache_root.join("versions").join(&key);
-    if !version.exists() {
-        std::fs::create_dir_all(cache_root.join("versions"))?;
-        export(&root, &sha, &rel, &version)?;
+    let checkout = version.join(root.file_name().unwrap_or_else(|| "repo".as_ref()));
+    if !checkout.exists() {
+        std::fs::create_dir_all(&version)?;
+        export(&root, &sha, &rel, &checkout)?;
     }
-    let dir = version.join(rel);
+    let dir = checkout.join(rel);
     let index = cache_root.join(format!("{key}.codescape"));
     let cfg = crate::ProjectConfig { index: Some(index.clone()), ..cfg.clone() };
     let packs = crate::project_packs(&dir, &cfg)?;
