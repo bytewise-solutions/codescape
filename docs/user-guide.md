@@ -159,8 +159,8 @@ enough to read.
   rest (grey). While the list is narrowed to a selection, a smaller bar below counts its changes (`In cart: 2 / 5`).
   **Hide reviewed** leaves the rest. A mark remembers the block's text: when the agent changes it again, the change
   comes back as `changed since review`. Marks are kept per project in the cache folder. The list,
-  the progress and the box counts follow the map's switches: with **View ▸ Tests** off, changes to tests and mocks are
-  left out of the review. **Mark reviewed** at the top of the
+  the progress and the box counts follow the map's switches: with **View ▸ Tests** off, changes to tests and mocks
+  (removed ones included) are left out of the review, and so is every change inside a box you hid. **Mark reviewed** at the top of the
   right panel, under the name (or `R`), marks every change inside the selection at once: a method, a class or file, or a whole package.
   Right-click a box or a method row on the map for the same action on it (**Unmark reviewed** once all are marked).
 - **Unused code.** **View ▸ Unused code** marks blocks nothing in main code calls, creates or names outside their

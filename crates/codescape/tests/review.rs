@@ -269,3 +269,40 @@ fn test_and_mock_changes_follow_the_tests_switch() {
     let shown = codescape_layout::LayoutOptions { show_tests: true, ..Default::default() };
     assert_eq!(shown_items(tg, &all, &shown).len(), all.len());
 }
+
+#[test]
+fn methods_of_a_mock_type_hide_with_it_outside_test_files() {
+    const STORE0: &str = "package store\n\ntype MockStore struct{}\n\nfunc (m *MockStore) Get() int {\n\treturn 1\n}\n";
+    const STORE1: &str = "package store\n\ntype MockStore struct{}\n\nfunc (m *MockStore) Get() int {\n\tif true {\n\t\treturn 2\n\t}\n\treturn 1\n}\n";
+    let (b, t) = (side(&[("store/fakes.go", STORE0)]), side(&[("store/fakes.go", STORE1)]));
+    let tg = t.file.graph();
+    let all = items(tg, &compare(b.file.graph(), &b.dir, tg, &t.dir), &analyse(tg, &t.dir));
+    assert_eq!(all.iter().map(|i| i.label.as_str()).collect::<Vec<_>>(), ["MockStore.Get"]);
+    let shown: Vec<_> = shown_items(tg, &all, &codescape_layout::LayoutOptions::default()).iter().map(|i| i.label.clone()).collect();
+    assert!(shown.is_empty(), "{shown:?}");
+}
+
+#[test]
+fn changes_inside_a_hidden_box_leave_the_list() {
+    let (b, t) = (side(&[("cart/cart.go", BASE)]), side(&[("cart/cart.go", TARGET)]));
+    let tg = t.file.graph();
+    let all = items(tg, &compare(b.file.graph(), &b.dir, tg, &t.dir), &analyse(tg, &t.dir));
+    let cart = (0..tg.node_count() as NodeId).find(|&n| tg.name(n) == "cart").unwrap();
+    let mut opts = codescape_layout::LayoutOptions::default();
+    opts.hidden_nodes.insert(cart);
+    let shown: Vec<_> = shown_items(tg, &all, &opts).iter().map(|i| i.label.clone()).collect();
+    assert!(shown.is_empty(), "{shown:?}");
+}
+
+#[test]
+fn removed_tests_follow_the_tests_switch() {
+    const T: &str = "package cart\n\nimport \"testing\"\n\nfunc TestAdd(t *testing.T) {}\n";
+    let (b, t) = (side(&[("cart/cart.go", BASE), ("cart/cart_test.go", T)]), side(&[("cart/cart.go", BASE)]));
+    let tg = t.file.graph();
+    let all = items(tg, &compare(b.file.graph(), &b.dir, tg, &t.dir), &analyse(tg, &t.dir));
+    assert_eq!(all.iter().map(|i| (i.label.as_str(), i.kind)).collect::<Vec<_>>(), [("TestAdd", ItemKind::Removed)]);
+    let shown: Vec<_> = shown_items(tg, &all, &codescape_layout::LayoutOptions::default()).iter().map(|i| i.label.clone()).collect();
+    assert!(shown.is_empty(), "{shown:?}");
+    let tests_on = codescape_layout::LayoutOptions { show_tests: true, ..Default::default() };
+    assert_eq!(shown_items(tg, &all, &tests_on).len(), 1);
+}

@@ -1,4 +1,4 @@
-use codescape_format::{ArchivedGraph, NodeId, NodeKind, Visibility};
+use codescape_format::{ArchivedGraph, NodeFlags, NodeId, NodeKind, Visibility};
 use codescape_index::analysis::{Analysis, Usage};
 use codescape_index::review::{Change, Review, Status};
 use std::collections::HashMap;
@@ -198,10 +198,13 @@ pub struct ReviewItem {
     pub key: String,
     pub fingerprint: u64,
     pub risks: Vec<Risk>,
+    pub base_flags: NodeFlags,
 }
 
 pub fn shown_items(g: &ArchivedGraph, items: &[ReviewItem], opts: &codescape_layout::LayoutOptions) -> Vec<ReviewItem> {
-    items.iter().filter(|i| i.node.or(i.parent).is_none_or(|n| !opts.hides_beyond_details(g, n))).cloned().collect()
+    let hidden = opts.effective_hidden().0 & !NodeFlags::DETAIL.0;
+    let on_map = |n: NodeId| !g.path(n).into_iter().any(|p| opts.hides_beyond_details(g, p));
+    items.iter().filter(|i| i.base_flags.0 & hidden == 0 && i.node.or(i.parent).is_none_or(on_map)).cloned().collect()
 }
 
 pub fn within(g: &ArchivedGraph, items: &[ReviewItem], selection: NodeId) -> Vec<usize> {
@@ -245,6 +248,7 @@ pub fn items_with(g: &ArchivedGraph, r: &Review, a: &Analysis, limits: Limits) -
             key: key_of(g, n),
             fingerprint: c.fingerprint,
             risks: risks(g, n, c, a, limits),
+            base_flags: NodeFlags::NONE,
         };
         match c.status {
             Status::New if !under_new(g, r, n) => out.push(item(ItemKind::New, format!("+{} lines", c.added))),
@@ -279,6 +283,7 @@ pub fn items_with(g: &ArchivedGraph, r: &Review, a: &Analysis, limits: Limits) -
             key: format!("removed:{}", rm.path),
             fingerprint: 1,
             risks: Vec::new(),
+            base_flags: rm.flags,
         });
     }
     out.sort_by(|a, b| (&a.group, &a.label).cmp(&(&b.group, &b.label)));

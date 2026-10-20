@@ -1,4 +1,4 @@
-use codescape_format::{ArchivedGraph, NodeId, NodeKind, SCOPE_MAIN, Visibility};
+use codescape_format::{ArchivedGraph, NodeFlags, NodeId, NodeKind, SCOPE_MAIN, Visibility};
 use similar::{ChangeTag, DiffOp, TextDiff};
 use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
@@ -42,6 +42,7 @@ pub struct Removed {
     pub path: String,
     pub kind: NodeKind,
     pub parent: Option<NodeId>,
+    pub flags: NodeFlags,
 }
 
 #[derive(Clone, Debug, Default)]
@@ -209,7 +210,7 @@ pub fn compare(base: &ArchivedGraph, base_root: &Path, target: &ArchivedGraph, t
         if parent_key.as_ref().is_some_and(|pk| !target_keys.contains_key(pk)) {
             continue;
         }
-        removed.push(Removed { path: k.clone(), kind: base.kind(b), parent: parent_key.and_then(|pk| target_keys.get(&pk).copied()) });
+        removed.push(Removed { path: k.clone(), kind: base.kind(b), parent: parent_key.and_then(|pk| target_keys.get(&pk).copied()), flags: base.flags(b) });
     }
     removed.sort_by(|a, b| a.path.cmp(&b.path));
     let mut order: Vec<NodeId> = (0..target.node_count() as NodeId).collect();
