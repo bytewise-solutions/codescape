@@ -132,9 +132,11 @@ enough to read.
   panel lists every change, riskiest first, then new and removed dependencies (upward ones flagged); click one to fly
   to it, or step through them with `N` / `P`. The current change (the selected one, else the last one stepped to) is
   highlighted, and the list scrolls to it when you select it elsewhere (on the map, with `N` / `P`, by Ctrl+click
-  in the code); the target button above the list scrolls back to it after you scrolled away. Each change says why it may deserve a look: `complexity 8 to 14`,
-  `used by 12` (many callers), `signature` (a public block's first line changed), `made public`, `unused` (a new
-  block nothing uses) and `untested` (no test reaches it). **By package** groups the list instead.
+  in the code); the target button above the list scrolls back to it after you scrolled away. Each change says why it
+  may deserve a look: `complexity 8 to 14`, `used by 12` (many callers), `signature` (a public block's first line changed), `made public`, `unused` (a new
+  block nothing uses) and `untested` (no test reaches it). **By package** groups the list instead; click a package
+  to fold it, or fold and unfold them all with `-` `+` next to the progress. While reviewing, the left panel shows only
+  the review: Insights, Entry points and Modules come back when the review ends.
   Zoom into a changed file to see its added lines in green and red marks where lines were removed; hover a mark to
   read them. Renamed or moved blocks show as removed plus new.
 - **Sequence diagrams.** Right-click a method (or select it and press `S`, or use the button in the right panel) to
@@ -157,9 +159,9 @@ enough to read.
   supertype's or marked as overrides (Java `@Override`, TS `override`), and the methods the runtime calls itself (Java `equals(Object)`, `hashCode()`, `toString()`, `clone()`,
   `finalize()`; Go `String()` and `Error()`; TS/JS `toString()`, `valueOf()`, `toJSON()`) are never listed. Code reached by reflection or a framework can still show up, so read it as a hint.
   `codescape-index <dir> --unused` prints the same list.
-- **Insights.** At the top of the left panel, collapsible sections list areas of interest, each row a name and a short reason (hover for
+- **Insights.** At the top of the left panel (outside Review), collapsible sections list areas of interest, each row a name and a short reason (hover for
   the full explanation, click to fly there; a method opens its code): most complex, hotspots (complex code changed
-  in at least 3 commits within the hotspot period; `needs git` outside a repository, `not in review` in Review mode),
+  in at least 3 commits within the hotspot period; `needs git` outside a repository),
   most depended on, upward dependencies, unused code, untested public code and duplicates. **Whole project / Selection**
   limits them to the selected block (Selection is available once something is selected). Unused code (every
   block, unused ones first) and the unused flags follow **View ▸ Unused code**; with it off, the section says so. Thresholds are in the map panel's HINTS section.

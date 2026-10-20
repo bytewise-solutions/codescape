@@ -387,6 +387,7 @@ struct ReviewState {
     by_package: bool,
     followed: Option<String>,
     list_view: (f32, f32),
+    collapsed: std::collections::HashSet<String>,
 }
 
 impl ReviewState {
@@ -1221,6 +1222,7 @@ impl Project {
                     by_package,
                     followed: None,
                     list_view: (0.0, 0.0),
+                    collapsed: Default::default(),
                 };
                 rv.reorder();
                 rv.refresh();
@@ -1844,6 +1846,7 @@ impl Project {
         let mut review_toggle: Option<usize> = None;
         let mut review_switches: Option<(bool, bool)> = None;
         let mut review_list: Option<(Option<String>, (f32, f32))> = None;
+        let mut review_collapse: Option<(String, bool)> = None;
         let mut insights = None;
         let fold = self.left_fold.take();
         let mut fold_next = None;
@@ -1853,8 +1856,11 @@ impl Project {
         if let Some(rv) = &self.review {
             let visible = rv.visible();
             let all = rv.marks.progress(&rv.items, 0..rv.items.len());
-            ui.label(egui::RichText::new(format!("{} / {} reviewed", all.reviewed, all.total())).small().color(style::ACCENT))
-                .on_hover_text("N / P: next / previous change · R: mark the selection reviewed");
+            ui.horizontal(|ui| {
+                ui.label(egui::RichText::new(format!("{} / {} reviewed", all.reviewed, all.total())).small().color(style::ACCENT))
+                    .on_hover_text("N / P: next / previous change · R: mark the selection reviewed");
+                ui.add_enabled_ui(rv.by_package, |ui| fold_next = fold_buttons(ui)).response.on_disabled_hover_text("Turn on By package to fold the packages");
+            });
             progress_bar(ui, all, 6.0);
             if let Some(sel) = self.selected.filter(|&s| s != g.root()) {
                 let inside = within(g, &rv.items, sel);
@@ -1872,13 +1878,25 @@ impl Project {
             let cur = current(&rv.items, rv.cursor, self.selected);
             let cur_key = cur.map(|i| rv.items[i].key.clone());
             let moved = cur_key.is_some() && cur_key != rv.followed;
+            let opened = cur.filter(|_| moved && rv.by_package).map(|c| rv.items[c].group.as_str()).filter(|g| rv.collapsed.contains(*g));
+            let folded = |group: &str| match fold {
+                Some(open) => !open,
+                None => rv.collapsed.contains(group) && opened != Some(group),
+            };
             let mut rows: Vec<Result<usize, (&str, usize)>> = Vec::new();
+            let mut last_group = None;
             for &i in &visible {
                 let group = rv.items[i].group.as_str();
-                if rv.by_package && !matches!(rows.last(), Some(Ok(j)) if rv.items[*j].group == group) {
+                if rv.by_package && last_group != Some(group) {
                     rows.push(Err((group, per_group[group])));
+                    last_group = Some(group);
                 }
-                rows.push(Ok(i));
+                if !rv.by_package || !folded(group) {
+                    rows.push(Ok(i));
+                }
+            }
+            if let Some(group) = opened {
+                review_collapse = Some((group.to_string(), false));
             }
             let cur_row = cur.and_then(|c| rows.iter().position(|r| *r == Ok(c)));
             let (mut hide, mut grouped) = (rv.hide_reviewed, rv.by_package);
@@ -1902,7 +1920,8 @@ impl Project {
             }
             let out = area.show_rows(ui, row_h, rows.len(), |ui, range| {
                 for row in &rows[range] {
-                    let (rect, _) = ui.allocate_exact_size(egui::vec2(ui.available_width(), row_h), Sense::hover());
+                    let sense = if row.is_err() { Sense::click() } else { Sense::hover() };
+                    let (rect, response) = ui.allocate_exact_size(egui::vec2(ui.available_width(), row_h), sense);
                     if *row == Ok(cur.unwrap_or(usize::MAX)) {
                         ui.painter().rect_filled(rect.expand2(egui::vec2(2.0, 1.0)), 3.0, style::tint(style::PANEL, style::ACCENT, 0.14));
                     }
@@ -1910,8 +1929,16 @@ impl Project {
                     ui.style_mut().wrap_mode = Some(egui::TextWrapMode::Truncate);
                     let i = match *row {
                         Err((group, n)) => {
+                            let open = !folded(group);
                             ui.add_space(14.0);
-                            ui.label(egui::RichText::new(format!("{group} ({n})")).small().strong().color(style::TEXT));
+                            ui.horizontal(|ui| {
+                                let (_, icon) = ui.allocate_exact_size(egui::vec2(12.0, 12.0), Sense::hover());
+                                egui::collapsing_header::paint_default_icon(ui, if open { 1.0 } else { 0.0 }, &icon);
+                                ui.add(egui::Label::new(egui::RichText::new(format!("{group} ({n})")).small().strong().color(style::TEXT)).selectable(false));
+                            });
+                            if response.clicked() {
+                                review_collapse = Some((group.to_string(), open));
+                            }
                             continue;
                         }
                         Ok(i) => i,
@@ -1986,7 +2013,7 @@ impl Project {
                         .on_hover_text(format!("{a} uses {b}"));
                     }
                 }
-                ui.add_space(12.0);
+                return;
             }
             ui.horizontal(|ui| {
                 ui.label(egui::RichText::new("INSIGHTS").small().color(style::MUTED));
@@ -2073,6 +2100,19 @@ impl Project {
         if let (Some((followed, view)), Some(rv)) = (review_list, self.review.as_mut()) {
             rv.followed = review_pick.map(|i| rv.items[i].key.clone()).or(followed);
             rv.list_view = view;
+        }
+        if let Some(rv) = self.review.as_mut() {
+            match (fold, review_collapse) {
+                (Some(true), _) => rv.collapsed.clear(),
+                (Some(false), _) => rv.collapsed = rv.items.iter().map(|i| i.group.clone()).collect(),
+                (None, Some((group, true))) => {
+                    rv.collapsed.insert(group);
+                }
+                (None, Some((group, false))) => {
+                    rv.collapsed.remove(&group);
+                }
+                (None, None) => {}
+            }
         }
         if let Some(i) = review_pick {
             self.goto_review_item(i);
