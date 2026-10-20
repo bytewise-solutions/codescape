@@ -1252,11 +1252,14 @@ impl Project {
         match rx.try_recv() {
             Ok(Ok(done)) => {
                 self.review_job = None;
-                if (done.rebuilt || (done.dir.as_path(), done.index.as_path()) != (self.dir.as_path(), self.index_path.as_path()))
-                    && let Err(e) = self.show_version(done.dir, done.index)
-                {
-                    self.review_error = Some(e);
-                    return;
+                let kept = self.review.as_ref().map(|r| (r.hide_reviewed, r.by_package, r.collapsed.clone(), r.list_view, r.scope));
+                let (hide_reviewed, by_package, collapsed, list_view, mut scope) = kept.unwrap_or_default();
+                if done.rebuilt || (done.dir.as_path(), done.index.as_path()) != (self.dir.as_path(), self.index_path.as_path()) {
+                    if let Err(e) = self.show_version(done.dir, done.index) {
+                        self.review_error = Some(e);
+                        return;
+                    }
+                    scope = ReviewScope::default();
                 }
                 self.version = done.version;
                 let g = self.file.graph();
@@ -1274,7 +1277,6 @@ impl Project {
                 flag_upward(g, &mut items, &upward);
                 let marks_path = codescape_index::cache_path(&self.origin().0).with_extension("marks");
                 let marks = ReviewMarks::load(&marks_path);
-                let (hide_reviewed, by_package) = self.review.as_ref().map_or((false, false), |r| (r.hide_reviewed, r.by_package));
                 let mut rv = ReviewState {
                     label: done.label,
                     review: done.review,
@@ -1289,9 +1291,9 @@ impl Project {
                     hide_reviewed,
                     by_package,
                     followed: None,
-                    list_view: (0.0, 0.0),
-                    collapsed: Default::default(),
-                    scope: ReviewScope::default(),
+                    list_view,
+                    collapsed,
+                    scope,
                 };
                 rv.refilter(g, self.cache.options());
                 self.analysis = Some(Arc::new(done.analysis));
