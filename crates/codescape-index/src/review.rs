@@ -266,10 +266,7 @@ pub struct RevisionIndex {
 const USED_MARK: &str = ".codescape-used";
 
 fn export(root: &Path, sha: &str, rel: &Path, dest: &Path) -> anyhow::Result<()> {
-    let partial = dest.with_extension("partial");
-    if partial.exists() {
-        std::fs::remove_dir_all(&partial)?;
-    }
+    let partial = dest.with_extension(format!("partial{}", crate::unique_suffix()));
     std::fs::create_dir_all(&partial)?;
     let mut args = vec!["archive".to_string(), "--format=tar".into(), sha.into()];
     if !rel.as_os_str().is_empty() {
@@ -281,7 +278,12 @@ fn export(root: &Path, sha: &str, rel: &Path, dest: &Path) -> anyhow::Result<()>
     if !archived.success() || !tar.status.success() {
         anyhow::bail!("exporting {sha}: {}", String::from_utf8_lossy(&tar.stderr).trim());
     }
-    std::fs::rename(&partial, dest)?;
+    if let Err(e) = std::fs::rename(&partial, dest) {
+        std::fs::remove_dir_all(&partial)?;
+        if !dest.exists() {
+            return Err(e.into());
+        }
+    }
     Ok(())
 }
 
@@ -317,7 +319,7 @@ pub fn clean_versions(project_dir: &Path, cache_root: &Path, unused_for: std::ti
             continue;
         }
         std::fs::remove_dir_all(&version)?;
-        if let Some(name) = version.file_name().filter(|n| !n.to_string_lossy().ends_with(".partial")) {
+        if let Some(name) = version.file_name().filter(|n| !n.to_string_lossy().contains(".partial")) {
             let _ = std::fs::remove_file(cache_root.join(format!("{}.codescape", name.to_string_lossy())));
         }
         removed += 1;

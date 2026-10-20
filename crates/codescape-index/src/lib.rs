@@ -13,3 +13,8 @@ pub use config::{BUILTIN_EXCLUDES, CONFIG_FILE, CategoryOverride, Filter, Projec
 pub use pipeline::{IndexOutcome, Progress, excludes, index_project, project_packs};
 pub use settings::{Key, Layer, Settings, SettingsPaths, SettingsStore, Sourced, Threshold, View, config_root};
 pub use summary::{EntryLine, ModuleLine, Summary};
+
+pub(crate) fn unique_suffix() -> String {
+    static NEXT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+    format!("{}-{}", std::process::id(), NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed))
+}

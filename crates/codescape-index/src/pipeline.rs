@@ -111,7 +111,7 @@ pub fn index_project(dir: &Path, cfg: &ProjectConfig, progress: &dyn Fn(Progress
     if let Some(parent) = path.parent() {
         std::fs::create_dir_all(parent)?;
     }
-    let tmp = path.with_extension(format!("codescape.tmp{}", std::process::id()));
+    let tmp = path.with_extension(format!("codescape.tmp{}", crate::unique_suffix()));
     write_graph(&graph, &tmp)?;
     std::fs::rename(&tmp, &path)?;
     let file = IndexFile::open(&path)?;

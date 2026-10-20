@@ -236,3 +236,29 @@ fn git_out(dir: &Path, args: &[&str]) -> String {
     let out = std::process::Command::new("git").args(args).current_dir(dir).output().unwrap();
     String::from_utf8_lossy(&out.stdout).trim().to_string()
 }
+
+#[test]
+fn reviews_exporting_the_same_commit_at_once_all_succeed() {
+    let tmp = tempfile::tempdir().unwrap();
+    let repo = tmp.path().join("repo");
+    std::fs::create_dir_all(repo.join("cart")).unwrap();
+    std::fs::write(repo.join("go.mod"), "module example.com/svc\n\ngo 1.22\n").unwrap();
+    std::fs::write(repo.join("cart/cart.go"), BASE_CART).unwrap();
+    git(&repo, &["init", "-q", "-b", "main"]);
+    git(&repo, &["add", "."]);
+    git(&repo, &["commit", "-q", "-m", "base"]);
+    let cache = tmp.path().join("cache");
+    let start = std::sync::Barrier::new(8);
+    let results: Vec<String> = std::thread::scope(|s| {
+        let jobs: Vec<_> = (0..8)
+            .map(|_| {
+                s.spawn(|| {
+                    start.wait();
+                    index_revision(&repo, "main", &ProjectConfig::default(), &cache, &|_| {}).map(|_| ()).map_err(|e| format!("{e:#}"))
+                })
+            })
+            .collect();
+        jobs.into_iter().filter_map(|j| j.join().unwrap().err()).collect()
+    });
+    assert!(results.is_empty(), "{results:?}");
+}
