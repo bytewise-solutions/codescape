@@ -505,7 +505,6 @@ struct Project {
     insights_selection: bool,
     left_fold: Option<bool>,
     right_fold: Option<bool>,
-    unused_rows: Option<(usize, Vec<(Usage, String, NodeId)>)>,
     sequence: Option<sequence_ui::SequenceView>,
     calls: Option<std::rc::Rc<crate::sequence::CallIndex>>,
     context_node: Option<NodeId>,
@@ -741,7 +740,6 @@ impl Project {
             insights_selection: false,
             left_fold: None,
             right_fold: None,
-            unused_rows: None,
             sequence: None,
             calls: None,
             context_node: None,
@@ -1767,15 +1765,6 @@ impl Project {
         let mut insights = None;
         let fold = self.left_fold.take();
         let mut fold_next = None;
-        if self.unused_rows.as_ref().map(|(at, _)| *at) != self.analysis.as_ref().map(|a| Arc::as_ptr(a) as usize) {
-            self.unused_rows = self.analysis.as_ref().map(|a| {
-                let g = self.file.graph();
-                let mut rows: Vec<(Usage, String, NodeId)> =
-                    (0..g.node_count() as NodeId).filter(|&n| a.usage[n as usize] != Usage::Used).map(|n| (a.usage[n as usize], full_path(g, n), n)).collect();
-                rows.sort_by(|x, y| (x.0 != Usage::Unused, &x.1).cmp(&(y.0 != Usage::Unused, &y.1)));
-                (Arc::as_ptr(a) as usize, rows)
-            });
-        }
         self.refresh_insights();
         let g = self.file.graph();
         let list_h = ui.available_height() * 0.6;
@@ -1854,20 +1843,6 @@ impl Project {
                 }
             });
             ui.separator();
-        } else if let Some((_, unused)) = self.unused_rows.as_ref().filter(|_| self.settings.settings().view(View::Unused).value) {
-            ui.label(egui::RichText::new(format!("UNUSED CODE ({})", unused.len())).small().color(style::EDGE_UP));
-            egui::ScrollArea::vertical().id_salt("unused").max_height(list_h).auto_shrink([false, true]).show_rows(ui, 20.0, unused.len(), |ui, range| {
-                for (u, path, n) in &unused[range] {
-                    let (rect, _) = ui.allocate_exact_size(egui::vec2(ui.available_width(), 20.0), Sense::hover());
-                    let mut ui = ui.new_child(egui::UiBuilder::new().max_rect(rect).layout(egui::Layout::left_to_right(egui::Align::Center)));
-                    ui.spacing_mut().item_spacing.x = 4.0;
-                    if ui.selectable_label(self.selected == Some(*n), g.name(*n)).on_hover_text(path).clicked() {
-                        fly = Some(*n);
-                    }
-                    ui.label(egui::RichText::new(u.label().unwrap_or("")).small().color(if *u == Usage::Unused { style::EDGE_UP } else { style::MUTED }));
-                }
-            });
-            ui.separator();
         }
         egui::ScrollArea::vertical().id_salt("entries").show(ui, |ui| {
             if let Some(rv) = &self.review {
@@ -1901,9 +1876,12 @@ impl Project {
                 ui.add_space(12.0);
             }
             ui.horizontal(|ui| {
-                ui.label(egui::RichText::new("ENTRY POINTS").small().color(style::MUTED));
+                ui.label(egui::RichText::new("INSIGHTS").small().color(style::MUTED));
                 fold_next = fold_buttons(ui);
             });
+            insights = Some(self.insights_ui(ui, fold));
+            ui.add_space(12.0);
+            ui.label(egui::RichText::new("ENTRY POINTS").small().color(style::MUTED));
             for (gi, group) in self.groups.iter().enumerate() {
                 egui::CollapsingHeader::new(format!("{} ({})", group.label, group.items.len()))
                     .id_salt(("group", gi))
@@ -1961,7 +1939,6 @@ impl Project {
                     }
                 });
             }
-            insights = Some(self.insights_ui(ui, fold));
         });
         if fold_next.is_some() {
             self.left_fold = fold_next;

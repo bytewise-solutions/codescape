@@ -145,17 +145,17 @@ enough to read.
   **Hide reviewed** leaves the rest. A mark remembers the block's text: when the agent changes it again, the change
   comes back as `changed since review`. Marks are kept per project in the cache folder.
 - **Unused code.** **View ▸ Unused code** marks blocks nothing in main code calls, creates or names outside their
-  own lines, and lists them on the left: `unused`, `no caller in the project` (public, so possibly API used by
+  own lines, and lists them under Insights ▸ Unused code: `unused`, `no caller in the project` (public, so possibly API used by
   others) or `only tests use it`. Entry points, tests, generated code, constructors, methods implementing a
   supertype's or marked as overrides (Java `@Override`, TS `override`), and the methods the runtime calls itself (Java `equals(Object)`, `hashCode()`, `toString()`, `clone()`,
   `finalize()`; Go `String()` and `Error()`; TS/JS `toString()`, `valueOf()`, `toJSON(key)`) are never listed. Code reached by reflection or a framework can still show up, so read it as a hint.
   `codescape-index <dir> --unused` prints the same list.
-- **Insights.** Below MODULES the left panel lists areas of interest, each row a name and a short reason (hover for
+- **Insights.** At the top of the left panel, collapsible sections list areas of interest, each row a name and a short reason (hover for
   the full explanation, click to fly there; a method opens its code): most complex, hotspots (complex code changed
   in at least 3 commits within the hotspot period; `needs git` outside a repository, `not in review` in Review mode),
-  most depended on, upward dependencies, dead code, untested public code and duplicates. **Whole project / Selection**
-  limits them to the selected block (Selection is available once something is selected). Dead code and the unused
-  flags follow **View ▸ Unused code**; with it off, Dead code says so. Thresholds are in the map panel's HINTS section.
+  most depended on, upward dependencies, unused code, untested public code and duplicates. **Whole project / Selection**
+  limits them to the selected block (Selection is available once something is selected). Unused code (every
+  block, unused ones first) and the unused flags follow **View ▸ Unused code**; with it off, the section says so. Thresholds are in the map panel's HINTS section.
 - **Flags in the inspector.** A selected block with flags gets a FLAGS section at the top of the right panel: each
   flag's short name coloured by kind, its full explanation below (complexity breakdown, the commits behind a
   hotspot, unused wording, duplicate places, an upward arrow's target), and the other duplicate places or the upward

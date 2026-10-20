@@ -145,8 +145,10 @@ pub fn compute(g: &ArchivedGraph, analysis: &Analysis, churn: &HashMap<String, u
         if matches!(g.kind(n), NodeKind::Type | NodeKind::Member) && callers >= limits.many_callers {
             out.depended.push(row(n, format!("used by {callers} from outside"), callers));
         }
-        if let Some(l) = cx.usage(n).label() {
-            out.dead.push(row(n, l.to_string(), cx.lines(n)));
+        let usage = cx.usage(n);
+        if let Some(l) = usage.label() {
+            let first = if usage == Usage::Unused { 1 << 24 } else { 0 };
+            out.dead.push(row(n, l.to_string(), first + cx.lines(n)));
         }
         if cx.untested(n) {
             out.untested.push(row(n, "untested".into(), g.complexity(n).unwrap_or(1).into()));
@@ -176,7 +178,11 @@ pub fn compute(g: &ArchivedGraph, analysis: &Analysis, churn: &HashMap<String, u
         hotspots: ranked(out.hotspots),
         depended: ranked(out.depended),
         upward: ranked(out.upward),
-        dead: ranked(out.dead),
+        dead: {
+            let mut dead = out.dead;
+            dead.sort_by_key(|r| std::cmp::Reverse(r.score));
+            dead
+        },
         untested: ranked(out.untested),
         duplicates: ranked(out.duplicates),
     }

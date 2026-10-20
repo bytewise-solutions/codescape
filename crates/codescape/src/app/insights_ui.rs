@@ -33,7 +33,7 @@ const SECTIONS: [Section; 7] = [
     Section { title: "Hotspots", kinds: &[FlagKind::Hotspot], rows: |i| &i.hotspots },
     Section { title: "Most depended on", kinds: &[], rows: |i| &i.depended },
     Section { title: "Upward dependencies", kinds: &[FlagKind::Upward], rows: |i| &i.upward },
-    Section { title: "Dead code", kinds: &[FlagKind::Unused, FlagKind::NoCaller, FlagKind::OnlyTests], rows: |i| &i.dead },
+    Section { title: "Unused code", kinds: &[FlagKind::Unused, FlagKind::NoCaller, FlagKind::OnlyTests], rows: |i| &i.dead },
     Section { title: "Untested public code", kinds: &[FlagKind::Untested], rows: |i| &i.untested },
     Section { title: "Duplicates", kinds: &[FlagKind::Duplicate], rows: |i| &i.duplicates },
 ];
@@ -178,7 +178,6 @@ impl Project {
     pub(super) fn insights_ui(&self, ui: &mut egui::Ui, fold: Option<bool>) -> Picked {
         let mut picked = Picked { node: None, selection: None };
         ui.add_space(12.0);
-        ui.label(RichText::new("INSIGHTS").small().color(style::MUTED));
         let effective = self.insights_selection && self.selected.is_some();
         let mut selection = effective;
         ui.horizontal(|ui| {

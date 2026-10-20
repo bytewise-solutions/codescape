@@ -107,7 +107,7 @@ fn each_list_is_ranked_by_its_score() {
     assert_eq!(names(g, &i.depended), ["Svc", "Svc.simple", "Repo"]);
     assert_eq!(names(g, &i.upward), ["Repo"]);
     assert!(i.upward[0].reason.contains("Svc"), "{}", i.upward[0].reason);
-    assert_eq!(names(g, &i.dead), ["Cart.sum", "Svc.helper", "Svc.simple"], "larger dead code first");
+    assert_eq!(names(g, &i.dead), ["Svc.helper", "Cart.sum", "Svc.simple"], "unused before public code nothing calls, then larger first");
     assert_eq!(names(g, &i.untested), ["Repo.load", "Svc.total", "Cart.sum"], "riskier public code first");
     assert_eq!(names(g, &i.duplicates), ["Cart.sum", "Svc.total", "Other.copy"]);
     assert_eq!(i.duplicates[0].score, 61);
