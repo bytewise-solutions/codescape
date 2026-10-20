@@ -127,7 +127,7 @@ enough to read.
   `git archive` into the cache folder and indexed once; neither your checkout nor the repository is touched (no
   worktree, nothing in `.git`). Versions unused for 14 days are deleted when a review starts, and **Review ▸ Clear
   cached versions** deletes them all. Blocks are matched by their
-  names: new ones are outlined green, changed ones amber, the rest dimmed. Each box counts the changes of the list
+  names (same-named blocks in one package also by their file; a method's overloads count as one block): new ones are outlined green, changed ones amber, the rest dimmed. Each box counts the changes of the list
   inside it still to review (`3 to review`, green when one of them is new, amber otherwise, just the number on a narrow
   card); once all are reviewed it says `reviewed` (nothing with **Hide reviewed** on). Hover the count for
   `1 new · 1 changed · 1 removed · 2 reviewed`. Card rows are tinted with their line counts and any complexity increase, and arrows the change introduced are drawn green. The left panel lists every

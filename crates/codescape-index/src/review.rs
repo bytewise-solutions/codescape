@@ -1,4 +1,4 @@
-use codescape_format::{ArchivedGraph, NodeFlags, NodeId, NodeKind, SCOPE_MAIN, Visibility};
+use codescape_format::{ArchivedGraph, Lang, NodeFlags, NodeId, NodeKind, SCOPE_MAIN, SubKind, Visibility};
 use similar::{ChangeTag, DiffOp, TextDiff};
 use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
@@ -52,9 +52,14 @@ pub struct Review {
     pub new_arrows: Vec<(NodeId, NodeId)>,
     pub removed_arrows: Vec<(String, String)>,
     files: HashMap<String, FileDiff>,
+    keys: Vec<String>,
 }
 
 impl Review {
+    pub fn key(&self, n: NodeId) -> &str {
+        self.keys.get(n as usize).map_or("", String::as_str)
+    }
+
     pub fn change(&self, n: NodeId) -> &Change {
         &self.changes[n as usize]
     }
@@ -77,10 +82,43 @@ fn key(g: &ArchivedGraph, n: NodeId) -> String {
     g.path(n).iter().skip(1).map(|&p| g.name(p)).collect::<Vec<_>>().join("/")
 }
 
+fn plain_dups(g: &ArchivedGraph) -> HashSet<String> {
+    let mut seen = HashSet::new();
+    (0..g.node_count() as NodeId).filter(|&n| compared(g, n)).map(|n| key(g, n)).filter(|k| !seen.insert(k.clone())).collect()
+}
+
+fn keys(g: &ArchivedGraph, ambiguous: &HashSet<String>) -> Vec<String> {
+    let mut out = vec![String::new(); g.node_count()];
+    let mut order: Vec<NodeId> = (0..g.node_count() as NodeId).filter(|&n| n != g.root()).collect();
+    order.sort_by_key(|&n| (g.path(n).len(), g.file(n).map(str::to_string), g.span(n).0, n));
+    let mut taken: HashMap<String, u32> = HashMap::new();
+    for n in order {
+        let parent = g.parent(n).filter(|&p| p != g.root()).map_or("", |p| out[p as usize].as_str());
+        let mut k = if parent.is_empty() { g.name(n).to_string() } else { format!("{parent}/{}", g.name(n)) };
+        if compared(g, n) && ambiguous.contains(&key(g, n)) {
+            if let Some(file) = g.file(n).and_then(|f| f.rsplit('/').next()) {
+                k = format!("{k} [{file}]");
+            }
+            let seen = taken.entry(k.clone()).or_default();
+            *seen += 1;
+            if *seen > 1 {
+                k = format!("{k} #{seen}");
+            }
+        }
+        out[n as usize] = k;
+    }
+    out
+}
+
 struct Source<'a> {
     g: &'a ArchivedGraph,
     root: &'a Path,
     files: HashMap<PathBuf, Vec<String>>,
+    java: HashMap<String, codescape_java::parse::JavaFile>,
+}
+
+fn java_type<'t>(types: &'t [codescape_java::parse::JType], name: &str, start: u32) -> Option<&'t codescape_java::parse::JType> {
+    types.iter().find_map(|t| if t.name == name && t.start_line == start { Some(t) } else { java_type(&t.nested, name, start) })
 }
 
 impl Source<'_> {
@@ -108,7 +146,30 @@ impl Source<'_> {
         out
     }
 
+    fn overloads(&mut self, n: NodeId) -> Option<Vec<(u32, u32)>> {
+        let g = self.g;
+        let owner = g.parent(n).filter(|_| g.lang(n) == Lang::Java && g.sub_kind(n) == SubKind::Method)?;
+        let file = g.file(n)?;
+        if !self.java.contains_key(file) {
+            let text = self.file(file).join("\n");
+            self.java.insert(file.to_string(), codescape_java::parse::parse_java(text.as_bytes()));
+        }
+        let t = java_type(&self.java[file].types, g.name(owner), g.span(owner).0)?;
+        let spans: Vec<(u32, u32)> = t.methods.iter().filter(|m| m.name == g.name(n)).map(|m| (m.start_line, m.end_line)).collect();
+        (spans.len() > 1).then_some(spans)
+    }
+
     fn lines(&mut self, n: NodeId) -> Vec<String> {
+        if let Some(spans) = self.overloads(n) {
+            let file = self.g.file(n).unwrap_or_default();
+            let all = self.file(file);
+            return spans
+                .iter()
+                .flat_map(|&(s, e)| all.get(s.max(1) as usize - 1..(e as usize).min(all.len())).unwrap_or_default())
+                .map(|l| l.trim().to_string())
+                .filter(|l| !l.is_empty())
+                .collect();
+        }
         let (start, end) = self.g.span(n);
         let Some(file) = self.g.file(n).filter(|_| start >= 1 && end >= start) else { return Vec::new() };
         let all = self.file(file);
@@ -159,14 +220,14 @@ fn file_diff(before: &[String], after: &[String]) -> Option<FileDiff> {
     (d != FileDiff::default()).then_some(d)
 }
 
-fn arrows(g: &ArchivedGraph) -> HashSet<(String, String)> {
+fn arrows(g: &ArchivedGraph, keys: &[String]) -> HashSet<(String, String)> {
     let mut out = HashSet::new();
     for n in (0..g.node_count() as NodeId).filter(|&n| n == g.root() || compared(g, n)) {
         for a in g.aggregates(n) {
             if a.calls.to_native() + a.deps.to_native() > 0 && a.scope_mask & SCOPE_MAIN != 0 {
                 let (x, y) = (a.a.to_native(), a.b.to_native());
                 if compared(g, x) && compared(g, y) {
-                    out.insert((key(g, x), key(g, y)));
+                    out.insert((keys[x as usize].clone(), keys[y as usize].clone()));
                 }
             }
         }
@@ -175,10 +236,14 @@ fn arrows(g: &ArchivedGraph) -> HashSet<(String, String)> {
 }
 
 pub fn compare(base: &ArchivedGraph, base_root: &Path, target: &ArchivedGraph, target_root: &Path) -> Review {
-    let base_keys: HashMap<String, NodeId> = (0..base.node_count() as NodeId).filter(|&n| compared(base, n)).map(|n| (key(base, n), n)).collect();
-    let target_keys: HashMap<String, NodeId> = (0..target.node_count() as NodeId).filter(|&n| compared(target, n)).map(|n| (key(target, n), n)).collect();
-    let mut before = Source { g: base, root: base_root, files: HashMap::new() };
-    let mut after = Source { g: target, root: target_root, files: HashMap::new() };
+    let ambiguous: HashSet<String> = plain_dups(base).union(&plain_dups(target)).cloned().collect();
+    let (base_key, target_key) = (keys(base, &ambiguous), keys(target, &ambiguous));
+    let base_keys: HashMap<String, NodeId> =
+        (0..base.node_count() as NodeId).filter(|&n| compared(base, n)).map(|n| (base_key[n as usize].clone(), n)).collect();
+    let target_keys: HashMap<String, NodeId> =
+        (0..target.node_count() as NodeId).filter(|&n| compared(target, n)).map(|n| (target_key[n as usize].clone(), n)).collect();
+    let mut before = Source { g: base, root: base_root, files: HashMap::new(), java: HashMap::new() };
+    let mut after = Source { g: target, root: target_root, files: HashMap::new(), java: HashMap::new() };
     let unchanged = Change {
         status: Status::Unchanged,
         added: 0,
@@ -192,7 +257,7 @@ pub fn compare(base: &ArchivedGraph, base_root: &Path, target: &ArchivedGraph, t
     let mut changes = vec![unchanged.clone(); target.node_count()];
     for n in (0..target.node_count() as NodeId).filter(|&n| compared(target, n)) {
         let c = &mut changes[n as usize];
-        match base_keys.get(&key(target, n)) {
+        match base_keys.get(&target_key[n as usize]) {
             None => {
                 let lines = if target.kind(n) == NodeKind::Type { after.extent(n) } else { after.lines(n) };
                 c.status = Status::New;
@@ -225,7 +290,7 @@ pub fn compare(base: &ArchivedGraph, base_root: &Path, target: &ArchivedGraph, t
         if target_keys.contains_key(k) {
             continue;
         }
-        let parent_key = base.parent(b).filter(|&p| compared(base, p)).map(|p| key(base, p));
+        let parent_key = base.parent(b).filter(|&p| compared(base, p)).map(|p| base_key[p as usize].clone());
         if parent_key.as_ref().is_some_and(|pk| !target_keys.contains_key(pk)) {
             continue;
         }
@@ -259,7 +324,7 @@ pub fn compare(base: &ArchivedGraph, base_root: &Path, target: &ArchivedGraph, t
             cur = target.parent(p);
         }
     }
-    let (old_arrows, new_arrows) = (arrows(base), arrows(target));
+    let (old_arrows, new_arrows) = (arrows(base, &base_key), arrows(target, &target_key));
     let mut added: Vec<(NodeId, NodeId)> = new_arrows.difference(&old_arrows).filter_map(|(a, b)| Some((*target_keys.get(a)?, *target_keys.get(b)?))).collect();
     added.sort();
     let mut gone: Vec<(String, String)> = old_arrows.difference(&new_arrows).cloned().collect();
@@ -272,7 +337,7 @@ pub fn compare(base: &ArchivedGraph, base_root: &Path, target: &ArchivedGraph, t
             files.insert(path.to_string(), d);
         }
     }
-    Review { changes, removed, new_arrows: added, removed_arrows: gone, files }
+    Review { changes, removed, new_arrows: added, removed_arrows: gone, files, keys: target_key }
 }
 
 #[derive(Clone, Debug, PartialEq)]

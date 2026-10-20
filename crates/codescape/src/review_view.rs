@@ -211,10 +211,6 @@ pub fn within(g: &ArchivedGraph, items: &[ReviewItem], selection: NodeId) -> Vec
     (0..items.len()).filter(|&i| items[i].node.or(items[i].parent).is_some_and(|n| g.is_ancestor(selection, n))).collect()
 }
 
-fn key_of(g: &ArchivedGraph, n: NodeId) -> String {
-    g.path(n).iter().skip(1).map(|&p| g.name(p)).collect::<Vec<_>>().join("/")
-}
-
 fn group_of(g: &ArchivedGraph, n: NodeId) -> String {
     g.path(n).into_iter().filter(|&p| matches!(g.kind(p), NodeKind::Module | NodeKind::Package)).map(|p| g.name(p)).collect::<Vec<_>>().join(" / ")
 }
@@ -245,7 +241,7 @@ pub fn items_with(g: &ArchivedGraph, r: &Review, a: &Analysis, limits: Limits) -
             label: label_of(g, n),
             kind,
             detail,
-            key: key_of(g, n),
+            key: r.key(n).to_string(),
             fingerprint: c.fingerprint,
             risks: risks(g, n, c, a, limits),
             base_flags: NodeFlags::NONE,

@@ -14,7 +14,9 @@ fn side(files: &[(&str, &str)]) -> Side {
     let tmp = tempfile::tempdir().unwrap();
     let dir = tmp.path().join("proj");
     std::fs::create_dir_all(&dir).unwrap();
-    std::fs::write(dir.join("go.mod"), "module example.com/shop\n\ngo 1.22\n").unwrap();
+    if !files.iter().any(|(rel, _)| *rel == "package.json") {
+        std::fs::write(dir.join("go.mod"), "module example.com/shop\n\ngo 1.22\n").unwrap();
+    }
     for (rel, body) in files {
         let p = dir.join(rel);
         std::fs::create_dir_all(p.parent().unwrap()).unwrap();
@@ -334,4 +336,19 @@ fn a_new_go_type_covers_the_methods_declared_after_it() {
     assert_eq!(before.detail, "+7 lines", "the struct line and both methods");
     let after = huge(&HUGE.replace("return 2", "return 3"));
     assert_ne!(before.fingerprint, after.fingerprint, "editing a method brings the type back");
+}
+
+#[test]
+fn same_named_functions_in_one_package_keep_their_own_marks() {
+    const A: &str = "export function initHook() {\n  return 1;\n}\n";
+    const B: &str = "export function initHook() {\n  return 2;\n}\n";
+    let pkg = ("package.json", "{\"name\":\"shop\"}");
+    let (b, t) = (side(&[pkg, ("src/x.ts", "export const x = 1;\n")]), side(&[pkg, ("src/x.ts", "export const x = 1;\n"), ("src/a.ts", A), ("src/b.ts", B)]));
+    let tg = t.file.graph();
+    let all = items(tg, &compare(b.file.graph(), &b.dir, tg, &t.dir), &analyse(tg, &t.dir));
+    let hooks: Vec<&ReviewItem> = all.iter().filter(|i| i.label == "initHook").collect();
+    assert_eq!(hooks.len(), 2);
+    let mut marks = ReviewMarks::default();
+    marks.toggle(hooks[0]);
+    assert_eq!((marks.state(hooks[0]), marks.state(hooks[1])), (MarkState::Reviewed, MarkState::Unseen));
 }

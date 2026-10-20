@@ -13,7 +13,7 @@ fn side(files: &[(&str, &str)]) -> Side {
     let tmp = tempfile::tempdir().unwrap();
     let dir = tmp.path().join("proj");
     std::fs::create_dir_all(&dir).unwrap();
-    if !files.iter().any(|(rel, _)| *rel == "package.json") {
+    if !files.iter().any(|(rel, _)| *rel == "package.json" || *rel == "settings.gradle") {
         std::fs::write(dir.join("go.mod"), "module example.com/shop\n\ngo 1.22\n").unwrap();
     }
     for (rel, body) in files {
@@ -345,4 +345,44 @@ fn an_export_cut_short_long_ago_is_removed_before_exporting_again() {
     index_revision(&repo, "main", &ProjectConfig::default(), &cache, &|_| {}).unwrap();
     assert!(!stale.exists(), "a crashed export is cleaned");
     assert!(running.exists(), "a recent one may still be running");
+}
+
+fn members_named(g: &ArchivedGraph, name: &str) -> Vec<NodeId> {
+    (0..g.node_count() as NodeId).filter(|&n| g.kind(n) == NodeKind::Member && g.name(n) == name).collect()
+}
+
+#[test]
+fn an_edit_to_any_java_overload_counts_as_a_change() {
+    let owner = |body: &str| {
+        format!(
+            "package shop;\n\npublic class Owner {{\n    public String getPet(String name) {{\n        return name;\n    }}\n\n    public String other() {{\n        return \"x\";\n    }}\n\n    public String getPet(Integer id) {{\n        {body}\n    }}\n}}\n"
+        )
+    };
+    let (before, after) = (owner("return null;"), owner("return \"pet\" + id;"));
+    let base = side(&[("settings.gradle", ""), ("src/main/java/shop/Owner.java", &before)]);
+    let target = side(&[("settings.gradle", ""), ("src/main/java/shop/Owner.java", &after)]);
+    let tg = target.file.graph();
+    let r = compare(base.file.graph(), Path::new(&base.dir), tg, Path::new(&target.dir));
+    let get = members_named(tg, "getPet");
+    assert_eq!(get.len(), 1, "overloads share one block");
+    assert_eq!(r.change(get[0]).status, Status::Changed);
+    assert_eq!(r.change(members_named(tg, "other")[0]).status, Status::Unchanged);
+}
+
+#[test]
+fn same_named_functions_in_two_files_of_a_folder_are_compared_file_by_file() {
+    const A: &str = "export function initHook() {\n  return 1;\n}\n";
+    const B0: &str = "export function initHook() {\n  return 2;\n}\n";
+    const B1: &str = "export function initHook() {\n  const x = 2;\n  return x;\n}\n";
+    let pkg = ("package.json", "{\"name\":\"shop\"}");
+    let base = side(&[pkg, ("src/a.ts", A), ("src/b.ts", B0)]);
+    let target = side(&[pkg, ("src/a.ts", A), ("src/b.ts", B1)]);
+    let tg = target.file.graph();
+    let r = compare(base.file.graph(), Path::new(&base.dir), tg, Path::new(&target.dir));
+    let hooks = members_named(tg, "initHook");
+    assert_eq!(hooks.len(), 2);
+    let status: Vec<(&str, Status)> = hooks.iter().map(|&n| (tg.file(n).unwrap(), r.change(n).status)).collect();
+    assert!(status.contains(&("src/a.ts", Status::Unchanged)) && status.contains(&("src/b.ts", Status::Changed)), "{status:?}");
+    assert!(r.removed.is_empty(), "{:?}", r.removed);
+    assert_ne!(r.key(hooks[0]), r.key(hooks[1]), "marks tell them apart");
 }
