@@ -132,7 +132,7 @@ enough to read.
   card); once all are reviewed it says `reviewed` (nothing with **Hide reviewed** on). Hover the count for
   `1 new · 1 changed · 1 removed · 2 reviewed`. Card rows are tinted with their line counts and any complexity increase, and arrows the change introduced are drawn green. The left panel lists every
   change, riskiest first. The list follows the selection: select a package, file or class on the map and it lists
-  only the changes inside (a selected method lists its whole class or file, so its neighbours stay), and `N` / `P`
+  only the changes inside (a selected method lists its class, or what holds it such as its file or Go package, so its neighbours stay), and `N` / `P`
   step through those; `Esc` brings back the full list. **show all** next to `In <name>` lists everything while
   keeping the selection, until you select something else. Click anywhere on a change to go to it (a method, or any change while a
   file is open, opens the code at it), or step through them with `N` / `P`; either way the

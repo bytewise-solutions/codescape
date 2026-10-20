@@ -89,3 +89,10 @@ fn lists_open_by_default_only_up_to_the_chosen_size() {
     assert_eq!(Prefs::parse("open_lists_up_to = 100000").open_lists_up_to, 500);
     assert_eq!(Prefs::parse(&p.to_toml()).open_lists_up_to, 12);
 }
+
+#[test]
+fn a_status_item_cut_at_the_edge_has_one_tooltip_only() {
+    use codescape::app::status_cut;
+    assert_eq!(status_cut(&[(0.0, 50.0), (60.0, 120.0), (130.0, 200.0)], 100.0), Some(1), "from the partly shown item on");
+    assert_eq!(status_cut(&[(0.0, 50.0), (60.0, 90.0)], 100.0), None);
+}

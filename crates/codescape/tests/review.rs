@@ -306,3 +306,16 @@ fn removed_tests_follow_the_tests_switch() {
     let tests_on = codescape_layout::LayoutOptions { show_tests: true, ..Default::default() };
     assert_eq!(shown_items(tg, &all, &tests_on).len(), 1);
 }
+
+#[test]
+fn only_a_review_chip_explains_its_counts_on_hover() {
+    use codescape::app::box_chip;
+    use codescape_index::analysis::Usage;
+    let none = BoxCounts::default();
+    let (text, _, tip) = box_chip(Some((none, false)), Some(Usage::Unused)).unwrap();
+    assert_eq!((text.as_str(), tip), ("unused", None));
+    let some = BoxCounts { changed: 2, ..Default::default() };
+    let (text, _, tip) = box_chip(Some((some, false)), Some(Usage::Unused)).unwrap();
+    assert_eq!((text.as_str(), tip), ("2 to review", Some(some)));
+    assert!(box_chip(None, None).is_none());
+}

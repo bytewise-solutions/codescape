@@ -85,15 +85,16 @@ struct RecentFile {
     recent: Vec<PathBuf>,
 }
 
+pub fn parse_recent(text: &str) -> Vec<PathBuf> {
+    toml::from_str::<RecentFile>(text).map(|r| r.recent).unwrap_or_default()
+}
+
+pub fn shown_recent(list: &[PathBuf]) -> impl Iterator<Item = &PathBuf> {
+    list.iter().filter(|p| p.is_dir())
+}
+
 fn load_recent() -> Vec<PathBuf> {
-    recent_file()
-        .and_then(|p| std::fs::read_to_string(p).ok())
-        .and_then(|s| toml::from_str::<RecentFile>(&s).ok())
-        .map(|r| r.recent)
-        .unwrap_or_default()
-        .into_iter()
-        .filter(|p| p.is_dir())
-        .collect()
+    recent_file().and_then(|p| std::fs::read_to_string(p).ok()).map(|s| parse_recent(&s)).unwrap_or_default()
 }
 
 fn save_recent(list: &[PathBuf]) {
@@ -182,9 +183,9 @@ impl CodescapeApp {
             if ui.add(egui::Button::new("Open Folder…").shortcut_text(open)).clicked() {
                 action = Some(Action::OpenFolder);
             }
-            ui.add_enabled_ui(!self.recent.is_empty(), |ui| {
+            ui.add_enabled_ui(shown_recent(&self.recent).next().is_some(), |ui| {
                 ui.menu_button("Open Recent", |ui| {
-                    for r in &self.recent {
+                    for r in shown_recent(&self.recent) {
                         if ui.button(r.display().to_string()).clicked() {
                             action = Some(Action::OpenRecent(r.clone()));
                         }
@@ -265,10 +266,10 @@ impl CodescapeApp {
                     ui.add_space(12.0);
                     ui.colored_label(style::EDGE_UP, e);
                 }
-                if !self.recent.is_empty() {
+                if shown_recent(&self.recent).next().is_some() {
                     ui.add_space(24.0);
                     ui.label(egui::RichText::new("Recent").color(style::MUTED));
-                    for r in &self.recent {
+                    for r in shown_recent(&self.recent) {
                         if ui.link(r.display().to_string()).clicked() {
                             chosen = Some(r.clone());
                         }
@@ -633,6 +634,18 @@ fn review_badge(c: BoxCounts, hide_reviewed: bool) -> Option<(String, Color32)> 
         0 if c.reviewed > 0 && !hide_reviewed => Some(("reviewed".into(), style::MUTED)),
         0 => None,
         n => Some((format!("{n} to review"), if c.new > 0 { style::ADDED } else { style::EDGE_SIDEWAYS })),
+    }
+}
+
+pub fn status_cut(spans: &[(f32, f32)], right: f32) -> Option<usize> {
+    spans.iter().position(|&(_, r)| r > right)
+}
+
+pub fn box_chip(counts: Option<(BoxCounts, bool)>, unused: Option<Usage>) -> Option<(String, Color32, Option<BoxCounts>)> {
+    let review = counts.and_then(|(c, hide)| Some((review_badge(c, hide)?, c)));
+    match review {
+        Some(((text, color), c)) => Some((text, color, Some(c))),
+        None => unused.map(|u| (unused_short(u).to_string(), style::EDGE_UP, None)),
     }
 }
 
@@ -1888,24 +1901,24 @@ impl Project {
                 }
                 items.push((format!("{:.1} ms · {} boxes", self.scene_ms, self.scene.stats.drawn), style::MUTED, None));
                 let visible = ui.clip_rect();
-                let mut cut: Vec<&str> = Vec::new();
-                let mut cut_from = visible.right();
-                for (k, (text, color, hover)) in items.iter().enumerate() {
+                let mut shown = Vec::new();
+                for (k, (text, color, _)) in items.iter().enumerate() {
                     if k > 0 {
                         ui.separator();
                     }
-                    let r = ui.label(egui::RichText::new(text).color(*color));
-                    if !visible.contains_rect(r.rect) {
-                        cut.push(text);
-                        cut_from = cut_from.min(r.rect.left().max(visible.left()));
-                    }
-                    if let Some(h) = hover {
+                    shown.push(ui.label(egui::RichText::new(text).color(*color)));
+                }
+                let spans: Vec<(f32, f32)> = shown.iter().map(|r| (r.rect.left(), r.rect.right())).collect();
+                let cut = status_cut(&spans, visible.right());
+                for (k, (r, (_, _, hover))) in shown.into_iter().zip(&items).enumerate() {
+                    if let Some(h) = hover.as_ref().filter(|_| cut.is_none_or(|c| k < c)) {
                         r.on_hover_text(h);
                     }
                 }
-                if !cut.is_empty() {
-                    let rest = egui::Rect::from_min_max(Pos2::new(cut_from, visible.top()), visible.right_bottom());
-                    ui.interact(rest, ui.scope_id().with("status-cut"), Sense::hover()).on_hover_text(cut.join("\n"));
+                if let Some(c) = cut {
+                    let rest = egui::Rect::from_min_max(Pos2::new(spans[c].0.max(visible.left()), visible.top()), visible.right_bottom());
+                    let text: Vec<&str> = items[c..].iter().flat_map(|(t, _, h)| std::iter::once(t.as_str()).chain(h.as_deref())).collect();
+                    ui.interact(rest, ui.scope_id().with("status-cut"), Sense::hover()).on_hover_text(text.join("\n"));
                 }
             });
         });
@@ -2850,9 +2863,7 @@ impl Project {
         if self.app_counts.contains_key(&b.node) && b.rect.w > 24.0 {
             painter.circle_filled(Pos2::new(b.rect.right() - 9.0, b.rect.y + 9.0), 4.0, style::ENTRY);
         }
-        let badge = counts.and_then(|(c, hide)| review_badge(c, hide));
-        let badge = badge.or_else(|| unused.map(|u| (unused_short(u).to_string(), style::EDGE_UP)));
-        if let Some((mut text, color)) = badge.filter(|_| b.rect.w > 60.0 && b.rect.h > 22.0) {
+        if let Some((mut text, color, tip)) = box_chip(counts, unused).filter(|_| b.rect.w > 60.0 && b.rect.h > 22.0) {
             let card = !(b.rows.is_empty() && b.field_rows.is_empty());
             if card && let Some(n) = text.strip_suffix(" to review").filter(|_| text.len() as f32 * 6.0 > b.rect.w * 0.25) {
                 text = n.to_string();
@@ -2867,7 +2878,7 @@ impl Project {
             if chip.left() > r.left() {
                 painter.rect_filled(chip, 7.0, color);
                 painter.galley(chip.center() - galley.size() / 2.0, galley, style::BG);
-                if let Some((c, _)) = counts.filter(|_| self.pointer_in(chip)) {
+                if let Some(c) = tip.filter(|_| self.pointer_in(chip)) {
                     *self.badge_tip.borrow_mut() = Some((chip.left_bottom(), c.summary()));
                 }
             }

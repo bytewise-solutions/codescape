@@ -10,6 +10,7 @@ mod links;
 mod panels;
 mod reach;
 mod reading;
+mod recent;
 mod refs;
 mod review;
 mod scene;
